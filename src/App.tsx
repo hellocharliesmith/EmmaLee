@@ -11,12 +11,17 @@ export default function App() {
   const { steps, bpm, isPlaying, currentStep, start, stop, toggleStep, setStepNote, updateBpm } = useSequencer();
 
   async function handlePlayStop() {
+    console.log('[emma] play tapped, audioStarted:', audioStarted);
     if (!audioStarted) {
-      // AudioContext must be created synchronously inside the tap handler
-      // before any await — iOS Safari closes the gesture window otherwise
       const ctx = new AudioContext();
-      await initAudio(ctx);
-      setAudioStarted(true);
+      console.log('[emma] AudioContext created, state:', ctx.state);
+      try {
+        await initAudio(ctx);
+        setAudioStarted(true);
+      } catch (err) {
+        console.error('[emma] initAudio failed:', err);
+        return;
+      }
     }
     if (isPlaying) {
       stop();
