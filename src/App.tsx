@@ -12,7 +12,10 @@ export default function App() {
 
   async function handlePlayStop() {
     if (!audioStarted) {
-      await initAudio();
+      // AudioContext must be created synchronously inside the tap handler
+      // before any await — iOS Safari closes the gesture window otherwise
+      const ctx = new AudioContext();
+      await initAudio(ctx);
       setAudioStarted(true);
     }
     if (isPlaying) {

@@ -18,12 +18,13 @@ function buildReverbIR(ctx: AudioContext, decaySeconds = 3): AudioBuffer {
   return ir;
 }
 
-export async function initAudio(): Promise<void> {
-  audioCtx = new AudioContext();
+export async function initAudio(ctx: AudioContext): Promise<void> {
+  audioCtx = ctx;
   await audioCtx.resume();
 
   // Give Tone.js our AudioContext so the Transport clock runs in the same graph
   Tone.setContext(audioCtx);
+  await Tone.start();
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
 
