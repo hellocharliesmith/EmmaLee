@@ -11,17 +11,10 @@ export default function App() {
   const { steps, bpm, isPlaying, currentStep, start, stop, toggleStep, setStepNote, updateBpm } = useSequencer();
 
   async function handlePlayStop() {
-    console.log('[emma] play tapped, audioStarted:', audioStarted);
     if (!audioStarted) {
       const ctx = new AudioContext();
-      console.log('[emma] AudioContext created, state:', ctx.state);
-      try {
-        await initAudio(ctx);
-        setAudioStarted(true);
-      } catch (err) {
-        console.error('[emma] initAudio failed:', err);
-        return;
-      }
+      await initAudio(ctx);
+      setAudioStarted(true);
     }
     if (isPlaying) {
       stop();

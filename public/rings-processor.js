@@ -26,7 +26,6 @@ class RingsProcessor extends AudioWorkletProcessor {
   }
 
   async _init(wasmModule) {
-    console.log('[worklet] _init start');
     try {
       let memRef = null;
 
@@ -46,9 +45,7 @@ class RingsProcessor extends AudioWorkletProcessor {
         },
       };
 
-      console.log('[worklet] instantiating wasm...');
       const instance = await WebAssembly.instantiate(wasmModule, imports);
-      console.log('[worklet] wasm instantiated');
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory exported by the WASM
 
@@ -61,10 +58,8 @@ class RingsProcessor extends AudioWorkletProcessor {
       // Allocate output buffer: 128 samples × 2 channels × 4 bytes/float
       this.outputPtr = instance.exports.i(128 * 2 * 4); // malloc
 
-      console.log('[worklet] ready, outputPtr:', this.outputPtr);
       this.port.postMessage({ type: 'ready' });
     } catch (err) {
-      console.log('[worklet] error:', err.message);
       this.port.postMessage({ type: 'error', message: err.message });
     }
   }

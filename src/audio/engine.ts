@@ -19,41 +19,31 @@ function buildReverbIR(ctx: AudioContext, decaySeconds = 3): AudioBuffer {
 }
 
 export async function initAudio(ctx: AudioContext): Promise<void> {
-  console.log('[emma] initAudio start, ctx.state:', ctx.state);
   audioCtx = ctx;
   await audioCtx.resume();
-  console.log('[emma] ctx resumed, state:', audioCtx.state);
 
   Tone.setContext(audioCtx);
   await Tone.start();
-  console.log('[emma] Tone.start done');
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
-  console.log('[emma] worklet module loaded');
 
   workletNode = new AudioWorkletNode(audioCtx, 'rings-processor', {
     numberOfInputs: 0,
     numberOfOutputs: 1,
     outputChannelCount: [2],
   });
-  console.log('[emma] worklet node created');
 
   const wasmBytes = await fetch('/rings.wasm').then(r => r.arrayBuffer());
-  console.log('[emma] wasm fetched, bytes:', wasmBytes.byteLength);
   const wasmModule = await WebAssembly.compile(wasmBytes);
-  console.log('[emma] wasm compiled');
 
   workletNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
-  console.log('[emma] wasm sent to worklet');
 
   await new Promise<void>((resolve, reject) => {
     workletNode!.port.onmessage = (e) => {
-      console.log('[emma] worklet message:', e.data.type, e.data.message || '');
       if (e.data.type === 'ready') resolve();
       if (e.data.type === 'error') reject(new Error(e.data.message));
     };
   });
-  console.log('[emma] worklet ready');
 
   const convolver = audioCtx.createConvolver();
   convolver.buffer = buildReverbIR(audioCtx, 3);
@@ -71,7 +61,6 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   wetGain.connect(audioCtx.destination);
 
   isReady = true;
-  console.log('[emma] audio graph connected, ready');
 }
 
 export function triggerNote(midiNote: number): void {
