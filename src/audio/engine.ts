@@ -4,18 +4,14 @@ let audioCtx: AudioContext | null = null;
 let workletNode: AudioWorkletNode | null = null;
 let wetGain: GainNode | null = null;
 let dryGain: GainNode | null = null;
+let convolver: ConvolverNode | null = null;
 let isReady = false;
 
-function buildReverbIR(ctx: AudioContext, decaySeconds = 3): AudioBuffer {
-  const len = Math.floor(ctx.sampleRate * decaySeconds);
-  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = ir.getChannelData(c);
-    for (let i = 0; i < len; i++) {
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
-    }
-  }
-  return ir;
+async function loadIR(ctx: AudioContext, name: string): Promise<AudioBuffer> {
+  const arrayBuffer = await fetch(`/ir/${name}.wav`).then(r => r.arrayBuffer());
+  return new Promise((resolve, reject) => {
+    ctx.decodeAudioData(arrayBuffer, resolve, reject);
+  });
 }
 
 export async function initAudio(ctx: AudioContext): Promise<void> {
@@ -35,7 +31,6 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   const wasmBytes = await fetch('/rings.wasm').then(r => r.arrayBuffer());
   const wasmModule = await WebAssembly.compile(wasmBytes);
-
   workletNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
 
   await new Promise<void>((resolve, reject) => {
@@ -45,8 +40,10 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
     };
   });
 
-  const convolver = audioCtx.createConvolver();
-  convolver.buffer = buildReverbIR(audioCtx, 3);
+  // Load default IR (plate)
+  const irBuffer = await loadIR(audioCtx, 'plate');
+  convolver = audioCtx.createConvolver();
+  convolver.buffer = irBuffer;
 
   wetGain = audioCtx.createGain();
   wetGain.gain.value = 0.45;
@@ -61,6 +58,22 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   wetGain.connect(audioCtx.destination);
 
   isReady = true;
+}
+
+export async function setReverbType(name: string): Promise<void> {
+  if (!audioCtx || !workletNode || !convolver || !wetGain) return;
+
+  const irBuffer = await loadIR(audioCtx, name);
+  const newConvolver = audioCtx.createConvolver();
+  newConvolver.buffer = irBuffer;
+
+  // Swap convolvers seamlessly
+  workletNode.disconnect(convolver);
+  convolver.disconnect();
+  workletNode.connect(newConvolver);
+  newConvolver.connect(wetGain);
+
+  convolver = newConvolver;
 }
 
 export function triggerNote(midiNote: number): void {

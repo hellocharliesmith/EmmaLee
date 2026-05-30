@@ -133,6 +133,39 @@
 }
 .step-cell.current .note-label { color: #d0d3de; }
 
+.reverb-type-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.reverb-type-btn {
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  color: #6b7280;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+  touch-action: manipulation;
+}
+.reverb-type-btn:hover:not(:disabled) {
+  border-color: #4b5060;
+  color: #9ca3af;
+}
+.reverb-type-btn.active {
+  background: rgba(196, 132, 154, 0.12);
+  border-color: #c4849a;
+  color: #c4849a;
+}
+.reverb-type-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .section-divider {
   height: 1px;
   background: #2a2c36;

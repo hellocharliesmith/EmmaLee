@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { initAudio, setReverbWet } from './audio/engine';
+import { initAudio } from './audio/engine';
 import { useSequencer } from './hooks/useSequencer';
 import { Sequencer } from './components/Sequencer';
 import { RingsControls } from './components/RingsControls';
+import { ReverbControls } from './components/ReverbControls';
 import './App.css';
 
 export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
-  const [reverbWet, setReverbWetState] = useState(0.45);
   const { steps, bpm, isPlaying, currentStep, start, stop, toggleStep, setStepNote, updateBpm } = useSequencer();
 
   async function handlePlayStop() {
@@ -21,11 +21,6 @@ export default function App() {
     } else {
       start();
     }
-  }
-
-  function handleReverbChange(value: number) {
-    setReverbWetState(value);
-    setReverbWet(value);
   }
 
   return (
@@ -46,16 +41,7 @@ export default function App() {
       </div>
       <Sequencer steps={steps} currentStep={currentStep} onToggle={toggleStep} onNoteChange={setStepNote} />
       <RingsControls />
-      <div className="rings-controls">
-        <div className="section-divider" />
-        <div className="knob-row">
-          <label>Reverb</label>
-          <input
-            type="range" min={0} max={1} step={0.01} value={reverbWet}
-            onChange={e => handleReverbChange(parseFloat(e.target.value))}
-          />
-        </div>
-      </div>
+      <ReverbControls />
     </div>
   );
 }
