@@ -1,0 +1,163 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px 64px;
+  gap: 28px;
+}
+
+.app h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 400;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  color: #e8eaf0;
+}
+
+/* Transport row */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.play-btn {
+  background: #c4849a;
+  color: #fff;
+  border: none;
+  padding: 9px 28px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.play-btn:hover { background: #a8687c; }
+.play-btn.playing { background: #ef4444; }
+.play-btn.playing:hover { background: #dc2626; }
+
+.bpm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.bpm-row input[type='range'] {
+  width: 100px;
+  accent-color: #c4849a;
+  cursor: pointer;
+}
+.bpm-row .bpm-val {
+  color: #c8cad0;
+  width: 30px;
+}
+
+/* ── Sequencer ── */
+.sequencer {
+  display: flex;
+  gap: 5px;
+}
+
+.step-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.step-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 5px;
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  cursor: pointer;
+  transition: background 0.07s, box-shadow 0.07s;
+  padding: 0;
+}
+.step-btn:hover { border-color: #4b5060; }
+
+.step-btn.active {
+  background: #c4849a;
+  border-color: #a8687c;
+  box-shadow: 0 0 10px rgba(196, 132, 154, 0.45);
+}
+.step-btn.active:hover { background: #a8687c; }
+
+/* Playhead: bright outline on the current step */
+.step-cell.current .step-btn {
+  outline: 2px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 2px;
+}
+
+/* Note controls below each step */
+.note-ctrl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.note-arrow {
+  background: none;
+  border: none;
+  color: #606472;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.note-arrow:hover { color: #c4849a; }
+
+.note-label {
+  font-size: 11px;
+  color: #8a8fa0;
+  letter-spacing: 0.04em;
+  min-width: 26px;
+  text-align: center;
+}
+.step-cell.current .note-label { color: #d0d3de; }
+
+.section-divider {
+  height: 1px;
+  background: #2a2c36;
+  margin: 4px 0;
+}
+
+/* ── Rings parameter controls ── */
+.rings-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 320px;
+}
+
+.knob-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.knob-row label {
+  width: 82px;
+  text-align: right;
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.knob-row input[type='range'] {
+  flex: 1;
+  accent-color: #c4849a;
+  cursor: pointer;
+}
