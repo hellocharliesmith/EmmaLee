@@ -34,11 +34,13 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
     outputChannelCount: [2],
   });
 
+  // Compile WASM on the main thread — iOS Safari restricts WebAssembly operations
+  // inside AudioWorklet threads, so we compile here and send the Module object
   const wasmBytes = await fetch('/rings.wasm').then(r => r.arrayBuffer());
-  workletNode.port.postMessage(
-    { type: 'load-wasm', payload: { wasmBytes } },
-    [wasmBytes]
-  );
+  const wasmModule = await WebAssembly.compile(wasmBytes);
+
+  // WebAssembly.Module is structured-cloneable (not transferable — no transfers array)
+  workletNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
 
   await new Promise<void>((resolve, reject) => {
     workletNode!.port.onmessage = (e) => {

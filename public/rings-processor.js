@@ -11,7 +11,7 @@ class RingsProcessor extends AudioWorkletProcessor {
     this.port.onmessage = async (e) => {
       const { type, payload } = e.data;
       if (type === 'load-wasm') {
-        await this._init(payload.wasmBytes);
+        await this._init(payload.wasmModule);
       } else if (type === 'trigger') {
         if (payload.note !== undefined && this.instance) {
           this.instance.exports.f(payload.note); // rings_set_note
@@ -25,7 +25,7 @@ class RingsProcessor extends AudioWorkletProcessor {
     };
   }
 
-  async _init(wasmBytes) {
+  async _init(wasmModule) {
     try {
       let memRef = null;
 
@@ -45,7 +45,8 @@ class RingsProcessor extends AudioWorkletProcessor {
         },
       };
 
-      const { instance } = await WebAssembly.instantiate(wasmBytes, imports);
+      // wasmModule is already compiled — instantiate only (no compile step in worklet)
+      const instance = await WebAssembly.instantiate(wasmModule, imports);
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory exported by the WASM
 
