@@ -14,12 +14,16 @@ class RingsProcessor extends AudioWorkletProcessor {
         await this._init(payload.wasmModule);
       } else if (type === 'trigger') {
         if (payload.note !== undefined && this.instance) {
-          this.instance.exports.f(payload.note); // rings_set_note
+          this.instance.exports.g(payload.note); // rings_set_note
         }
         this.pendingTrigger = true;
       } else if (type === 'set-param') {
         if (this.instance) {
           this.instance.exports.e(payload.param, payload.value); // rings_set_param
+        }
+      } else if (type === 'set-model') {
+        if (this.instance) {
+          this.instance.exports.f(payload.model); // rings_set_model
         }
       }
     };
@@ -45,18 +49,18 @@ class RingsProcessor extends AudioWorkletProcessor {
         },
       };
 
+      // wasmModule is already compiled — instantiate only (no compile step in worklet)
       const instance = await WebAssembly.instantiate(wasmModule, imports);
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory exported by the WASM
 
-      // Export names from Emscripten compilation:
-      // d = rings_init, e = rings_set_param, f = rings_set_note,
-      // g = rings_trigger, h = rings_process, i = malloc, j = free
+      // Export names (d=init, e=set_param, f=set_model, g=set_note,
+      //               h=trigger, i=process, j=malloc, k=free)
 
       instance.exports.d(sampleRate); // rings_init(float sample_rate)
 
       // Allocate output buffer: 128 samples × 2 channels × 4 bytes/float
-      this.outputPtr = instance.exports.i(128 * 2 * 4); // malloc
+      this.outputPtr = instance.exports.j(128 * 2 * 4); // malloc
 
       this.port.postMessage({ type: 'ready' });
     } catch (err) {
@@ -72,14 +76,14 @@ class RingsProcessor extends AudioWorkletProcessor {
     const right = output[1] || output[0];
 
     if (this.pendingTrigger) {
-      this.instance.exports.g(); // rings_trigger
+      this.instance.exports.h(); // rings_trigger
       this.pendingTrigger = false;
     }
 
-    this.instance.exports.h(this.outputPtr, left.length); // rings_process
+    this.instance.exports.i(this.outputPtr, left.length); // rings_process
 
     const heap = new Float32Array(this.instance.exports.b.buffer);
-    const base = this.outputPtr >> 2; // byte offset → float32 index
+    const base = this.outputPtr >> 2;
 
     for (let i = 0; i < left.length; i++) {
       left[i] = heap[base + i * 2];

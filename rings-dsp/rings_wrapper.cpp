@@ -18,7 +18,7 @@ extern "C" {
 EMSCRIPTEN_KEEPALIVE
 void rings_init(float sample_rate) {
   part.Init(reverb_buffer);
-  part.set_polyphony(1);
+  part.set_polyphony(4);
   part.set_model(rings::RESONATOR_MODEL_MODAL);
 
   patch.structure = 0.5f;
@@ -40,8 +40,12 @@ void rings_set_param(int param, float value) {
     case 1: patch.brightness = value; break;
     case 2: patch.damping = value; break;
     case 3: patch.position = value; break;
-    case 4: part.set_model(static_cast<rings::ResonatorModel>((int)(value * 2))); break;
   }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void rings_set_model(int model) {
+  part.set_model(static_cast<rings::ResonatorModel>(model));
 }
 
 EMSCRIPTEN_KEEPALIVE

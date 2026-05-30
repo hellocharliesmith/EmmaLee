@@ -163,6 +163,11 @@ export function setRingsParam(param: number, value: number): void {
   workletNode.port.postMessage({ type: 'set-param', payload: { param, value } });
 }
 
+export function setRingsModel(model: number): void {
+  if (!workletNode || !isReady) return;
+  workletNode.port.postMessage({ type: 'set-model', payload: { model } });
+}
+
 export function isAudioReady(): boolean {
   return isReady;
 }
