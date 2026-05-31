@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { initAudio } from './audio/engine';
 import { useSequencer } from './hooks/useSequencer';
-import { Sequencer } from './components/Sequencer';
+import { PianoRoll } from './components/PianoRoll';
 import { RingsControls } from './components/RingsControls';
 import { LFOControls } from './components/LFOControls';
-import { ReverbControls } from './components/ReverbControls';
 import { DelayControls } from './components/DelayControls';
+import { ReverbControls } from './components/ReverbControls';
 import './App.css';
 
 export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
-  const { steps, bpm, isPlaying, currentStep, start, stop, toggleStep, setStepNote, updateBpm } = useSequencer();
+  const {
+    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
+    bpm, isPlaying, currentStep,
+    setStep, setScale, setRootNote, scrollUp, scrollDown,
+    start, stop, updateBpm,
+  } = useSequencer();
 
   async function handlePlayStop() {
     if (!audioStarted) {
@@ -18,30 +23,40 @@ export default function App() {
       await initAudio(ctx);
       setAudioStarted(true);
     }
-    if (isPlaying) {
-      stop();
-    } else {
-      start();
-    }
+    if (isPlaying) stop(); else start();
   }
 
   return (
     <div className="app">
       <h1>Emma Lee</h1>
+
       <div className="transport">
         <button className={`play-btn${isPlaying ? ' playing' : ''}`} onClick={handlePlayStop}>
           {isPlaying ? '■ Stop' : '▶ Play'}
         </button>
         <div className="bpm-row">
           <label>BPM</label>
-          <input
-            type="range" min={40} max={200} value={bpm}
-            onChange={e => updateBpm(parseInt(e.target.value))}
-          />
+          <input type="range" min={40} max={200} value={bpm}
+            onChange={e => updateBpm(parseInt(e.target.value))} />
           <span className="bpm-val">{bpm}</span>
         </div>
       </div>
-      <Sequencer steps={steps} currentStep={currentStep} onToggle={toggleStep} onNoteChange={setStepNote} />
+
+      <PianoRoll
+        steps={steps}
+        visibleNotes={visibleNotes}
+        scale={scale}
+        rootNote={rootNote}
+        scroll={scroll}
+        maxScroll={maxScroll}
+        currentStep={currentStep}
+        onSetStep={setStep}
+        onSetScale={setScale}
+        onSetRootNote={setRootNote}
+        onScrollUp={scrollUp}
+        onScrollDown={scrollDown}
+      />
+
       <RingsControls />
       <LFOControls />
       <DelayControls bpm={bpm} />

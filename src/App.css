@@ -59,7 +59,138 @@
   width: 30px;
 }
 
-/* ── Sequencer ── */
+/* ── Piano Roll ── */
+.piano-roll-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.pr-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.pr-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pr-ctrl-label {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.pr-root-btns {
+  flex-wrap: wrap;
+}
+
+.pr-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.pr-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  float: left;
+  padding-right: 6px;
+}
+
+.pr-scroll-btn {
+  background: none;
+  border: none;
+  color: #4b5060;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: color 0.12s;
+  line-height: 1;
+  touch-action: manipulation;
+}
+.pr-scroll-btn:hover:not(:disabled) { color: #c4849a; }
+.pr-scroll-btn:disabled { opacity: 0.2; cursor: default; }
+
+.pr-label {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  color: #4b5060;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.pr-label.root { color: #c4849a; }
+
+.pr-grid {
+  display: grid;
+  gap: 2px;
+  margin-left: 48px;
+}
+
+.pr-cell {
+  background: #1e2028;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.06s;
+  min-width: 26px;
+  min-height: 30px;
+}
+.pr-cell:hover { background: #2a2c38; }
+
+.pr-cell.beat-start { border-left-color: #2e3040; }
+.pr-cell.bar-start  { border-left-color: #404258; }
+
+.pr-cell.active {
+  background: #c4849a;
+  border-color: #a8687c;
+}
+.pr-cell.active:hover { background: #b3748a; }
+
+.pr-cell.playhead {
+  outline: 2px solid rgba(255,255,255,0.5);
+  outline-offset: 1px;
+}
+.pr-cell.active.playhead {
+  box-shadow: 0 0 8px rgba(196,132,154,0.6);
+}
+
+/* Step number bar below grid */
+.pr-step-nums {
+  display: flex;
+  margin-left: 48px;
+  margin-top: 4px;
+}
+.pr-step-nums-spacer { width: 6px; }
+.pr-step-nums-row {
+  display: flex;
+  gap: 2px;
+}
+.pr-step-num {
+  width: 26px;
+  font-size: 9px;
+  color: #3a3d4a;
+  text-align: center;
+}
+.pr-step-num.bar { color: #6b7280; }
+
+/* ── Sequencer (old, kept for reference) ── */
 .sequencer {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
