@@ -20,8 +20,8 @@ export function getDSPLoad(): number { return dspLoad; }
 // ── Reverb unit abstraction ───────────────────────────────────────────────
 interface ReverbUnit { input: AudioNode; output: AudioNode; }
 let reverbUnit: ReverbUnit | null = null;
-let currentIRName = 'plate';
-let currentDecay  = 1.0;
+let currentIRName = 'algo';
+let currentDecay  = 0.72;
 
 const irCache = new Map<string, AudioBuffer>();
 
@@ -146,10 +146,10 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   toneFilter.frequency.value = 6000;
 
   wetGain = audioCtx.createGain();
-  wetGain.gain.value = 0.45;
+  wetGain.gain.value = 0.5;
 
   dryGain = audioCtx.createGain();
-  dryGain.gain.value = 0.7;
+  dryGain.gain.value = 0.75;
 
   workletNode.connect(preDelay);
   preDelay.connect(toneFilter);
@@ -157,23 +157,22 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   dryGain.connect(audioCtx.destination);
   wetGain.connect(audioCtx.destination);
 
-  // Default reverb — plate IR
-  const irBuffer = await loadIR(audioCtx, 'plate');
-  swapReverb(makeConvolverUnit(audioCtx, applyDecay(irBuffer, audioCtx, currentDecay)));
+  // Default reverb — algo (no IR loading on init, faster startup)
+  swapReverb(getAlgoUnit(audioCtx, currentDecay));
 
   // Delay chain
   delayNode = audioCtx.createDelay(2.0);
-  delayNode.delayTime.value = 60 / 72 / 2;
+  delayNode.delayTime.value = (60 / 72) * 0.75; // D1/8 at 72 BPM
 
   delayFeedbackGain = audioCtx.createGain();
-  delayFeedbackGain.gain.value = 0.35;
+  delayFeedbackGain.gain.value = 0.23;
 
   delayFeedbackFilter = audioCtx.createBiquadFilter();
   delayFeedbackFilter.type = 'lowpass';
-  delayFeedbackFilter.frequency.value = 3500;
+  delayFeedbackFilter.frequency.value = 2800;
 
   delayMixGain = audioCtx.createGain();
-  delayMixGain.gain.value = 0.0;
+  delayMixGain.gain.value = 0.2;
 
   delayNode.connect(delayFeedbackGain);
   delayFeedbackGain.connect(delayFeedbackFilter);
@@ -192,8 +191,14 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   isReady = true;
 
-  // Default model: Strings (1) — matches UI default
+  // Default model: Strings (1)
   workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });
+
+  // Default LFO: Brightness — smooth random, rate 1.6 Hz, depth 0.1, enabled
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'wave',    value: 'random' } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'rate',    value: 1.6 } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'depth',   value: 0.1 } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'enabled', value: true } });
 }
 
 // ── Rings params — forward to worklet, worklet manages LFO centre values ──

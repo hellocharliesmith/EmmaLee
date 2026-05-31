@@ -8,20 +8,22 @@ const MODELS = [
   { id: 2, label: 'String',  description: 'Karplus-Strong — plucked/bowed string' },
 ];
 
-interface ParamDef { id: number; label: string; default: number; lfo: number; }
+interface LFODefault { on: boolean; wave: 'sine' | 'random'; rate: number; depth: number; }
+interface ParamDef { id: number; label: string; default: number; lfo: number; lfoDefault?: LFODefault; }
 
 const PARAMS: ParamDef[] = [
   { id: 0, label: 'Structure',  default: 0.30, lfo: -1 },
-  { id: 1, label: 'Brightness', default: 0.50, lfo:  0 },
+  { id: 1, label: 'Brightness', default: 0.50, lfo:  0,
+    lfoDefault: { on: true, wave: 'random', rate: 1.6, depth: 0.1 } },
   { id: 2, label: 'Damping',    default: 0.50, lfo:  1 },
   { id: 3, label: 'Position',   default: 0.25, lfo:  2 },
 ];
 
 function ParamRow({ p }: { p: ParamDef }) {
-  const [lfoOn,  setLfoOn]   = useState(false);
-  const [wave,   setWaveSt]  = useState<'sine' | 'random'>('sine');
-  const [rate,   setRateSt]  = useState(0.5);
-  const [depth,  setDepthSt] = useState(0.15);
+  const [lfoOn,  setLfoOn]  = useState(p.lfoDefault?.on    ?? false);
+  const [wave,   setWaveSt] = useState<'sine'|'random'>(p.lfoDefault?.wave  ?? 'sine');
+  const [rate,   setRateSt] = useState(p.lfoDefault?.rate  ?? 0.5);
+  const [depth,  setDepthSt]= useState(p.lfoDefault?.depth ?? 0.15);
 
   function toggleWave() {
     const v = wave === 'sine' ? 'random' : 'sine';

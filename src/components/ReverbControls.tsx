@@ -9,9 +9,9 @@ const TYPES = [
 ];
 
 export function ReverbControls() {
-  const [activeType, setActiveType] = useState('plate');
-  const [wet, setWet] = useState(0.45);
-  const [decay, setDecay] = useState(1.0);
+  const [activeType, setActiveType] = useState('algo');
+  const [wet, setWet] = useState(0.5);
+  const [decay, setDecay] = useState(0.72);
   const [preDelay, setPreDelay] = useState(0.02);
   const [tone, setTone] = useState(6000);
   const [loading, setLoading] = useState(false);

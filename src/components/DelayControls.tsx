@@ -22,10 +22,10 @@ function divisionSeconds(div: string, bpm: number): number {
 interface Props { bpm: number; }
 
 export function DelayControls({ bpm }: Props) {
-  const [division, setDivision] = useState('1/8');
-  const [feedback, setFeedback] = useState(0.35);
-  const [mix, setMix] = useState(0.0);
-  const [filter, setFilter] = useState(3500);
+  const [division, setDivision] = useState('d1/8');
+  const [feedback, setFeedback] = useState(0.23);
+  const [mix, setMix] = useState(0.2);
+  const [filter, setFilter] = useState(2800);
 
   useEffect(() => {
     setDelayTime(divisionSeconds(division, bpm));
