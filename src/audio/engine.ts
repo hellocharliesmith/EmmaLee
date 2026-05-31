@@ -7,6 +7,10 @@ let dryGain: GainNode | null = null;
 let convolver: ConvolverNode | null = null;
 let preDelay: DelayNode | null = null;
 let toneFilter: BiquadFilterNode | null = null;
+let delayNode: DelayNode | null = null;
+let delayFeedbackGain: GainNode | null = null;
+let delayFeedbackFilter: BiquadFilterNode | null = null;
+let delayMixGain: GainNode | null = null;
 let isReady = false;
 
 // Cache original full-length IR buffers so decay can re-trim without re-fetching
@@ -89,7 +93,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   dryGain = audioCtx.createGain();
   dryGain.gain.value = 0.7;
 
-  // Wet chain
+  // Reverb chain: workletNode → preDelay → toneFilter → convolver → wetGain → destination
   workletNode.connect(preDelay);
   preDelay.connect(toneFilter);
   toneFilter.connect(convolver);
@@ -99,6 +103,34 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   // Dry chain
   workletNode.connect(dryGain);
   dryGain.connect(audioCtx.destination);
+
+  // Delay chain (parallel to reverb):
+  // workletNode → delayNode → delayMixGain → destination
+  //               delayNode → feedbackGain → feedbackFilter → delayNode (loop)
+  delayNode = audioCtx.createDelay(2.0);
+  delayNode.delayTime.value = 60 / 72 / 2; // 1/8 note at 72 BPM default
+
+  delayFeedbackGain = audioCtx.createGain();
+  delayFeedbackGain.gain.value = 0.35;
+
+  delayFeedbackFilter = audioCtx.createBiquadFilter();
+  delayFeedbackFilter.type = 'lowpass';
+  delayFeedbackFilter.frequency.value = 3500; // tape warmth
+
+  delayMixGain = audioCtx.createGain();
+  delayMixGain.gain.value = 0.0; // off by default
+
+  // Feedback loop
+  delayNode.connect(delayFeedbackGain);
+  delayFeedbackGain.connect(delayFeedbackFilter);
+  delayFeedbackFilter.connect(delayNode);
+
+  // Delay output → mix → destination
+  delayNode.connect(delayMixGain);
+  delayMixGain.connect(audioCtx.destination);
+
+  // Worklet → delay input
+  workletNode.connect(delayNode);
 
   isReady = true;
 }
@@ -166,6 +198,26 @@ export function setRingsParam(param: number, value: number): void {
 export function setRingsModel(model: number): void {
   if (!workletNode || !isReady) return;
   workletNode.port.postMessage({ type: 'set-model', payload: { model } });
+}
+
+export function setDelayTime(seconds: number): void {
+  if (!delayNode) return;
+  delayNode.delayTime.value = Math.min(Math.max(seconds, 0.01), 2.0);
+}
+
+export function setDelayFeedback(value: number): void {
+  if (!delayFeedbackGain) return;
+  delayFeedbackGain.gain.value = Math.min(value, 0.92);
+}
+
+export function setDelayMix(value: number): void {
+  if (!delayMixGain) return;
+  delayMixGain.gain.value = value;
+}
+
+export function setDelayFilter(hz: number): void {
+  if (!delayFeedbackFilter) return;
+  delayFeedbackFilter.frequency.value = hz;
 }
 
 export function isAudioReady(): boolean {
