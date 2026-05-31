@@ -36,9 +36,9 @@ function makePinkNoise(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
-function makeSoftClipCurve(): Float32Array {
+function makeSoftClipCurve(): Float32Array<ArrayBuffer> {
   const n = 512;
-  const curve = new Float32Array(n);
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
   const k = Math.tanh(3);
   for (let i = 0; i < n; i++) {
     const x = (i * 2) / n - 1;
@@ -47,9 +47,9 @@ function makeSoftClipCurve(): Float32Array {
   return curve;
 }
 
-function makeLinearCurve(): Float32Array {
+function makeLinearCurve(): Float32Array<ArrayBuffer> {
   const n = 512;
-  const curve = new Float32Array(n);
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
   for (let i = 0; i < n; i++) curve[i] = (i * 2) / n - 1;
   return curve;
 }
