@@ -81,7 +81,9 @@ function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
 }
 
 function getAlgoUnit(ctx: AudioContext, decay: number): ReverbUnit {
-  const ir = buildAlgoIR(ctx, 1.0 + decay * 3.0); // decay 0→1 maps to 1→4s tail
+  // Flip so slider right = longer tail (matches other reverb types)
+  // decay 0 → rate 4 (tight), decay 1 → rate 1 (lush 4s tail)
+  const ir = buildAlgoIR(ctx, 4.0 - decay * 3.0);
   return makeConvolverUnit(ctx, ir);
 }
 

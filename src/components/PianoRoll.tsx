@@ -91,17 +91,19 @@ export function PianoRoll({
                 const midi = visibleNotes[row];
                 const active = steps[col] === midi;
                 const playing = col === currentStep;
-                const barStart = col % 8 === 0;
+                const barStart  = col % 8 === 0;
                 const beatStart = col % 4 === 0 && !barStart;
+                const oddGroup  = Math.floor(col / 4) % 2 === 1;
                 return (
                   <div
                     key={`${row}-${col}`}
                     className={[
                       'pr-cell',
-                      active   ? 'active'     : '',
-                      playing  ? 'playhead'   : '',
-                      barStart ? 'bar-start'  : '',
+                      active    ? 'active'     : '',
+                      playing   ? 'playhead'   : '',
+                      barStart  ? 'bar-start'  : '',
                       beatStart ? 'beat-start' : '',
+                      oddGroup  ? 'group-odd'  : '',
                     ].filter(Boolean).join(' ')}
                     onClick={() => handleCell(col, midi)}
                   />

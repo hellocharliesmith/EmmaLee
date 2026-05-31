@@ -161,6 +161,8 @@
   min-height: 30px;
 }
 .pr-cell:hover { background: #2a2c38; }
+.pr-cell.group-odd { background: #16181f; }
+.pr-cell.group-odd:hover { background: #22242e; }
 .pr-cell.beat-start { border-left-color: #2e3040; }
 .pr-cell.bar-start  { border-left-color: #404258; }
 .pr-cell.active { background: #c4849a; border-color: #a8687c; }
