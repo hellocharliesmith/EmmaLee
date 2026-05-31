@@ -71,7 +71,7 @@ function ParamRow({ p }: { p: ParamDef }) {
 }
 
 export function RingsControls() {
-  const [activeModel, setActiveModel] = useState(0);
+  const [activeModel, setActiveModel] = useState(1); // Default: Strings
 
   return (
     <div className="rings-controls">

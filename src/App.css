@@ -37,8 +37,16 @@
   transition: background 0.12s;
 }
 .play-btn:hover { background: #a8687c; }
-.play-btn.playing { background: #ef4444; }
-.play-btn.playing:hover { background: #dc2626; }
+.play-btn.playing {
+  background: #1a1c24;
+  border: 1px solid #4b5060;
+  color: #6b7280;
+}
+.play-btn.playing:hover {
+  background: #22242e;
+  border-color: #6b7280;
+  color: #9ca3af;
+}
 
 .bpm-row {
   display: flex;

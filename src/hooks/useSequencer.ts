@@ -31,11 +31,21 @@ export function buildNotes(root: number, scale: ScaleType): number[] {
 export const STEP_COUNT = 32;
 export const VISIBLE_ROWS = 8;
 
+function makeDefaultSteps(): Array<number | null> {
+  const s: Array<number | null> = Array(STEP_COUNT).fill(null);
+  s[0]  = 65; // F4
+  s[5]  = 72; // C5
+  s[9]  = 71; // B4
+  s[25] = 83; // B5
+  s[26] = 81; // A5
+  return s;
+}
+
 export function useSequencer() {
-  const [steps, setSteps] = useState<Array<number | null>>(Array(STEP_COUNT).fill(null));
+  const [steps, setSteps] = useState<Array<number | null>>(makeDefaultSteps);
   const [scale, setScaleState] = useState<ScaleType>('major');
   const [rootNote, setRootNoteState] = useState(0); // C
-  const [scrollRow, setScrollRow] = useState(0);
+  const [scrollRow, setScrollRow] = useState(6);   // show C4–C5 range by default
   const [bpm, setBpm] = useState(72);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);

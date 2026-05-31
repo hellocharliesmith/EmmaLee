@@ -191,6 +191,9 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayMixGain.connect(analyser);
 
   isReady = true;
+
+  // Default model: Strings (1) — matches UI default
+  workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });
 }
 
 // ── Rings params — forward to worklet, worklet manages LFO centre values ──
