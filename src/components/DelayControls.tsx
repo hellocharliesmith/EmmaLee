@@ -54,13 +54,17 @@ export function DelayControls({ bpm }: Props) {
               {d.label}
             </button>
           ))}
-          <button
-            className={`reverb-type-btn tape-btn${tape ? ' active' : ''}`}
-            onClick={() => { const v = !tape; setTape(v); setTapeMode(v); }}
-          >
-            Tape
-          </button>
         </div>
+      </div>
+
+      <div className="knob-row">
+        <label>Tape</label>
+        <button
+          className={`reverb-type-btn tape-btn${tape ? ' active' : ''}`}
+          onClick={() => { const v = !tape; setTape(v); setTapeMode(v); }}
+        >
+          {tape ? 'On' : 'Off'}
+        </button>
       </div>
 
       <div className="knob-row">
