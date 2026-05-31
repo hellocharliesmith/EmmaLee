@@ -2,9 +2,10 @@ import { useState, useRef } from 'react';
 import { setReverbType, setReverbDecay, setReverbPreDelay, setReverbTone, setReverbWet } from '../audio/engine';
 
 const TYPES = [
-  { id: 'plate', label: 'Plate' },
-  { id: 'hall', label: 'Hall' },
+  { id: 'plate',   label: 'Plate' },
+  { id: 'hall',    label: 'Hall' },
   { id: 'digital', label: 'Digital' },
+  { id: 'algo',    label: 'Algo' },  // algorithmic plate — no IR, low CPU
 ];
 
 export function ReverbControls() {
