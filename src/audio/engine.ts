@@ -296,12 +296,10 @@ export function setDelayMix(value: number): void {
   delayMixGain.gain.value = value;
 }
 
-export function setTapeMode(enabled: boolean): void {
+export function setTapeMode(enabled: boolean, intensity = 0.3): void {
   if (!tapeSaturation || !wowGain || !flutterGain || !tapeNoiseGain) return;
   if (enabled) {
-    wowGain.gain.value = 0.0018;      // 1.8ms wow depth — subtle pitch drift
-    flutterGain.gain.value = 0.0003;  // 0.3ms flutter depth — faster, lighter
-    tapeNoiseGain.gain.value = 0.007; // soft hiss
+    setTapeIntensity(intensity);
     tapeSaturation.curve = makeSoftClipCurve();
   } else {
     wowGain.gain.value = 0;
@@ -309,6 +307,13 @@ export function setTapeMode(enabled: boolean): void {
     tapeNoiseGain.gain.value = 0;
     tapeSaturation.curve = makeLinearCurve();
   }
+}
+
+export function setTapeIntensity(value: number): void {
+  if (!wowGain || !flutterGain || !tapeNoiseGain) return;
+  wowGain.gain.value    = 0.0018 * value;  // max 1.8ms wow
+  flutterGain.gain.value = 0.0003 * value; // max 0.3ms flutter
+  tapeNoiseGain.gain.value = 0.007 * value; // max subtle hiss
 }
 
 export function setDelayFilter(hz: number): void {
