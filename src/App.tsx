@@ -3,6 +3,7 @@ import { initAudio } from './audio/engine';
 import { useSequencer } from './hooks/useSequencer';
 import { Sequencer } from './components/Sequencer';
 import { RingsControls } from './components/RingsControls';
+import { LFOControls } from './components/LFOControls';
 import { ReverbControls } from './components/ReverbControls';
 import { DelayControls } from './components/DelayControls';
 import './App.css';
@@ -42,6 +43,7 @@ export default function App() {
       </div>
       <Sequencer steps={steps} currentStep={currentStep} onToggle={toggleStep} onNoteChange={setStepNote} />
       <RingsControls />
+      <LFOControls />
       <DelayControls bpm={bpm} />
       <ReverbControls />
     </div>

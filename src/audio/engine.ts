@@ -18,6 +18,78 @@ let flutterGain: GainNode | null = null;
 let tapeNoiseGain: GainNode | null = null;
 let isReady = false;
 
+// ── LFO ───────────────────────────────────────────────────────────────────
+
+// Base param values (set by sliders, used as LFO centre)
+// Indices: 0=structure, 1=brightness, 2=damping, 3=position
+const baseParams = [0.3, 0.5, 0.5, 0.25];
+
+type LFOWave = 'sine' | 'random';
+interface LFO {
+  enabled: boolean; wave: LFOWave; rate: number; depth: number;
+  phase: number;                        // sine: 0–1
+  cur: number; tgt: number; prog: number; // smooth random
+}
+
+// Three LFOs: index 0→brightness(1), 1→damping(2), 2→position(3)
+const LFO_PARAM = [1, 2, 3] as const;
+const lfos: LFO[] = [0, 1, 2].map(() => ({
+  enabled: false, wave: 'sine', rate: 0.5, depth: 0.15,
+  phase: 0, cur: 0, tgt: Math.random() * 2 - 1, prog: 0,
+}));
+
+let rafId: number | null = null;
+let rafLast: number | null = null;
+
+function lfoTick(ts: number) {
+  if (rafLast === null) rafLast = ts;
+  const dt = Math.min((ts - rafLast) / 1000, 0.1); // cap at 100ms
+  rafLast = ts;
+
+  for (let i = 0; i < 3; i++) {
+    const lfo = lfos[i];
+    if (!lfo.enabled) continue;
+
+    let sig: number;
+    if (lfo.wave === 'sine') {
+      lfo.phase = (lfo.phase + lfo.rate * dt) % 1;
+      sig = Math.sin(lfo.phase * Math.PI * 2);
+    } else {
+      lfo.prog += lfo.rate * dt;
+      if (lfo.prog >= 1) {
+        lfo.cur = lfo.tgt;
+        lfo.tgt = Math.random() * 2 - 1;
+        lfo.prog = 0;
+      }
+      const t = (1 - Math.cos(lfo.prog * Math.PI)) / 2;
+      sig = lfo.cur + (lfo.tgt - lfo.cur) * t;
+    }
+
+    const param = LFO_PARAM[i];
+    const val = Math.max(0, Math.min(1, baseParams[param] + lfo.depth * sig));
+    sendParam(param, val);
+  }
+
+  rafId = requestAnimationFrame(lfoTick);
+}
+
+function startRAF() {
+  if (rafId !== null) return;
+  rafLast = null;
+  rafId = requestAnimationFrame(lfoTick);
+}
+
+function stopRAF() {
+  if (lfos.some(l => l.enabled)) return;
+  if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+// Internal raw sender
+function sendParam(param: number, value: number) {
+  if (!workletNode || !isReady) return;
+  workletNode.port.postMessage({ type: 'set-param', payload: { param, value } });
+}
+
 // ── Tape helper functions ──────────────────────────────────────────────────
 
 function makePinkNoise(ctx: AudioContext): AudioBuffer {
@@ -272,9 +344,20 @@ export function triggerNote(midiNote: number): void {
 }
 
 export function setRingsParam(param: number, value: number): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-param', payload: { param, value } });
+  baseParams[param] = value;
+  // Only send directly if no LFO is modulating this param
+  const lfoIdx = LFO_PARAM.indexOf(param as typeof LFO_PARAM[number]);
+  if (lfoIdx === -1 || !lfos[lfoIdx].enabled) sendParam(param, value);
 }
+
+export function setLFOEnabled(i: number, enabled: boolean): void {
+  lfos[i].enabled = enabled;
+  if (enabled) { startRAF(); }
+  else { sendParam(LFO_PARAM[i], baseParams[LFO_PARAM[i]]); stopRAF(); }
+}
+export function setLFOWave(i: number, wave: LFOWave): void { lfos[i].wave = wave; }
+export function setLFORate(i: number, rate: number): void  { lfos[i].rate = rate; }
+export function setLFODepth(i: number, depth: number): void { lfos[i].depth = depth; }
 
 export function setRingsModel(model: number): void {
   if (!workletNode || !isReady) return;
