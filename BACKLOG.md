@@ -4,92 +4,87 @@ Ideas and improvements to work through. Roughly ordered by priority within each 
 
 ---
 
-## Immediate / Next session
+## Visual & Performance
 
-### Mobile-friendly sequencer — DONE (4x4 grid, bigger touch points)
+### Scrolling waveform display
+- **What:** Stylish master output visualization — scrolling waveform history à la FabFilter Pro-C3.
+- **How:** `AnalyserNode` taps the final output (zero audio impact). On every `requestAnimationFrame`, read `getFloatTimeDomainData()`, compute peak, push to circular buffer of ~500 values, draw scrolling history to `<canvas>`. Pink/white glow on waveform, dark background, subtle dB grid lines.
+- **Performance:** Very low. Canvas is GPU-accelerated. AnalyserNode is read-only.
+- **Effort:** ~2–3 hours. Good next visual feature.
 
-### Better reverb
-- **Option A — Rings' built-in reverb:** Expose Rings' internal FDN reverb parameters directly from the WASM wrapper. Already running inside `Part::Process`, just needs to be surfaced. Best tonal fit.
-- **Option B — Real IR file:** Swap the generated white noise IR with a free professionally-recorded IR (plate, chamber, etc). Low effort, instant improvement.
-- **Option C — Beads reverb algo:** Research the reverb algorithm in MI Beads source (successor to Clouds). Beads likely has an improved version of the reverb in `clouds/dsp/fx/reverb.h`. Check if Beads is in our cloned eurorack repo. May require a separate clone from `github.com/pichenettes/eurorack` (beads/ directory).
-
-### Simple delay
-- BPM-synced (1/4, 1/8, dotted 1/8, etc — tied to Tone.js Transport)
-- Tape-style: filtered feedback (BiquadFilterNode low-pass in feedback loop to simulate tape rolloff)
-- Stereo/ping-pong option nice-to-have
-- Native Web Audio only — no new WASM compilation needed
-- Controls: time (note division), feedback amount, filter cutoff, wet/dry
-
-### LFO modulation
-- Simple JS LFO (sine wave, runs on main thread, sends setRingsParam messages at ~30fps)
-- Targets: brightness, damping, position (not structure — too dramatic)
-- Controls per LFO: rate (Hz or BPM-sync), depth, target selector
-- Defaults should be subtle — small depth, slow rate
-- Start with one LFO, can add more later
+### CPU / performance monitor
+- **What:** Real-time DSP CPU meter — shows what % of the audio thread budget `process()` is using. Useful during development, potentially user-facing as effects accumulate.
+- **How:** `performance.now()` at start/end of AudioWorklet `process()`. Each 128-sample block has ~2.9ms of budget. Average over ~100 blocks, send to main thread every 100ms via postMessage. Small badge in the UI (e.g. "CPU 34%") that goes amber/red under load.
+- **Dev mode:** Initially behind a URL param (`?perf=1`) or always visible — TBD.
+- **Effort:** ~1 hour.
 
 ---
 
-## UI
+## Reverb
 
-### Style guide — Klevgrand-inspired
-- Reference: Klevgrand (Daw Cassette, Drumlane, Plonk) — minimal, modern, warm, uncluttered
-- Hardware-inspired but not skeuomorphic — no fake wood or screws
-- Direction: move away from dark/Eurorack aesthetic toward lighter, warmer palette
-- Clean readable sans-serif typography
-- Good use of white space
-- Keep current dusty pink as accent? Or revisit whole palette
-- **This should be a full design pass before doing major new UI features**
+### Rings' built-in reverb
+- Expose Rings' internal FDN reverb parameters directly from the WASM wrapper. Already running inside `Part::Process`, just needs to be surfaced. Best tonal fit — designed specifically for Rings' sound.
+- Requires WASM recompile + new wrapper functions.
+
+### Real IR options / improvements
+- The current Algo reverb is functional but the comb filter network could be improved. Consider implementing Freeverb properly (8 combs + 4 allpass per channel) for better diffusion.
+- OR: try the Beads/Clouds reverb from eurorack repo (`clouds/dsp/fx/reverb.h`) — same algorithm as the hardware module, already in our cloned repo. Would require compiling as WASM.
+
+### Tape delay (revisit)
+- The tape effect was removed due to a feedback loop bug. Root cause: the WaveShaperNode in the delay feedback path was incorrectly wired. Worth revisiting with a cleaner implementation: saturation → noise → wow/flutter as separate toggles rather than a single "Tape" button.
 
 ---
 
-## Sequencer improvements
+## Sequencer
 
-### V2 — Piano roll style
-- Rows = pitches (C major scale), columns = steps
-- Visual grid with filled cells = active
-- Much more intuitive for non-musicians
-- Key labels on left edge
+### Randomise button
+- Generate a random pattern in the current scale. Hold for variations.
 
-### V2.5 — Sub-steps (strumming)
-- Each step can contain multiple sub-steps (e.g. 4 sub-steps per step = 64th notes)
-- Enables strumming Rings — rapid sequential triggers across different pitches
-- Natural fit for Rings' resonant character
+### Save/load patterns
+- Serialize grid state to URL hash or localStorage. Share a pattern via link.
 
-### V3 — Decouple rhythm and note sequencers
-- Separate rhythm lane (on/off per step) from pitch lane (note per step)
-- Different lengths possible per lane (polyrhythm)
-- Like a real modular — clock goes to both, they run independently
-- Scale lock: constrain all notes to a selected key/mode — helpful for beginners
+### Step probability
+- Each cell has a % chance of firing. Creates generative variation.
 
-### Other sequencer ideas
-- Randomise button (generate new pattern)
-- Save/load patterns (localStorage or URL hash)
-- Step probability (each step has % chance of firing)
-- Swing/groove control
+### Swing/groove
+- Push every other step slightly late. Classic groove control.
+
+### Sub-steps / strumming (V2.5)
+- Divide each step into sub-steps (64th notes). Rapid sequential triggers create a strumming/plucking texture — natural fit for Rings' resonant character.
+
+### Decouple rhythm from pitch (V3)
+- Separate rhythm lane (on/off) from pitch lane (what note). Different lane lengths = polyrhythm. Like a real modular patch.
 
 ---
 
 ## New audio modules
 
 ### Noise source for Rings IN port
-- Currently: Rings uses internal_exciter = true (its own internal noise burst on strum)
-- Goal: feed external audio into the IN port for richer excitation textures
-- Requires WASM recompile: set internal_exciter = false, expose in_buffer API
-- **White noise burst** — sharp attack, percussive. Good for modal/struck sounds.
-- **Bowed noise** — continuous filtered noise with envelope. Good for sustained/bowed sounds.
-- Simple ADSR envelope on the noise source
-- Lots of sound design to figure out — plan carefully before implementing
+- Currently Rings uses `internal_exciter = true` (its own noise burst on each trigger).
+- Feeding external audio into the IN port gives much richer excitation textures.
+- Requires WASM recompile: set `internal_exciter = false`, expose `in_buffer` API.
+- Design options: white noise burst (percussive), bowed noise (sustained), mic input.
+- Needs a simple ADSR envelope. Lots of sound design to work out — plan before building.
 
-### Clouds granular processor (longer term)
-- MI Clouds/Beads compiled to WASM as a second AudioWorklet
-- Very complex — 6 parameters, 4 modes, grain cloud processing
-- Source in eurorack repo (clouds/ directory)
-- Post-MVP — do delay and LFO first
+### Clouds granular processor
+- MI Clouds/Beads compiled to WASM as a second AudioWorklet — feeds into or alongside Rings.
+- Very complex. Source in eurorack repo (`clouds/` directory).
+- Long-term project. Do noise source first.
+
+---
+
+## UI
+
+### Full design pass — Klevgrand-inspired
+- Move away from the dark Eurorack aesthetic toward something lighter, warmer, more consumer-friendly.
+- Reference: Klevgrand (Daw Cassette, Drumlane, Plonk) — minimal, modern, uncluttered, hardware-inspired without being skeuomorphic.
+- Do this before adding major new UI features — sets the design system everything else builds on.
 
 ---
 
 ## Notes
 
 - When starting a new session, read this file first
-- Add new ideas here rather than implementing immediately
-- Git push after every feature — Cloudflare auto-deploys
+- Add new ideas here rather than implementing immediately  
+- `npx wrangler deploy` to push to live after `npm run build`
+- Git push after every deploy — GitHub keeps history
