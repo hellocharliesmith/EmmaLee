@@ -18,7 +18,7 @@ function makeDefaultSteps(): Step[] {
 
 export function useSequencer() {
   const [steps, setSteps] = useState<Step[]>(makeDefaultSteps);
-  const [bpm, setBpm] = useState(120);
+  const [bpm, setBpm] = useState(72);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const sequenceRef = useRef<Tone.Sequence | null>(null);

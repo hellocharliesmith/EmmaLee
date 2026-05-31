@@ -46,7 +46,7 @@ export function RingsControls() {
           <input
             type="range"
             min={0} max={1} step={0.01}
-            defaultValue={p.id === 3 ? 0.25 : 0.5}
+            defaultValue={p.id === 0 ? 0.3 : p.id === 3 ? 0.25 : 0.5}
             onChange={e => setRingsParam(p.id, parseFloat(e.target.value))}
           />
         </div>
