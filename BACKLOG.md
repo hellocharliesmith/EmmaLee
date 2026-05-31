@@ -12,11 +12,14 @@ Ideas and improvements to work through. Roughly ordered by priority within each 
 - **Performance:** Very low. Canvas is GPU-accelerated. AnalyserNode is read-only.
 - **Effort:** ~2–3 hours. Good next visual feature.
 
-### CPU / performance monitor
-- **What:** Real-time DSP CPU meter — shows what % of the audio thread budget `process()` is using. Useful during development, potentially user-facing as effects accumulate.
-- **How:** `performance.now()` at start/end of AudioWorklet `process()`. Each 128-sample block has ~2.9ms of budget. Average over ~100 blocks, send to main thread every 100ms via postMessage. Small badge in the UI (e.g. "CPU 34%") that goes amber/red under load.
-- **Dev mode:** Initially behind a URL param (`?perf=1`) or always visible — TBD.
-- **Effort:** ~1 hour.
+### CPU / performance monitor (needs rethinking)
+- **Current state:** Basic meter is implemented and deployed — shows "< 1%" on Apple Silicon because the DSP is genuinely that efficient. Will show meaningful values on mobile/slower hardware.
+- **Problem:** `performance.now()` in AudioWorklet without COEP headers has limited precision (~100µs), and Rings DSP on fast hardware runs in < 50µs per block — below measurable threshold.
+- **Better approach options:**
+  - Re-enable COEP headers on Cloudflare (restores high-res timing, but may break embedding)
+  - Switch to measuring something else: active node count, audio graph complexity score
+  - Only show the meter on mobile where values are meaningful
+  - Show a stylized "complexity" indicator (what's enabled) rather than measured CPU
 
 ---
 
