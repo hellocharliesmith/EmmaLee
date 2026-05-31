@@ -65,7 +65,6 @@
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  max-width: 900px;
 }
 
 .pr-controls {
@@ -89,47 +88,44 @@
   white-space: nowrap;
 }
 
-.pr-root-btns {
-  flex-wrap: wrap;
-}
+.pr-root-btns { flex-wrap: wrap; }
 
-.pr-grid-wrap {
+/* Row: labels + scrollable grid */
+.pr-row {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  overflow-x: auto;
+  align-items: stretch;
+  gap: 6px;
 }
 
-.pr-labels {
+.pr-labels-col {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  float: left;
-  padding-right: 6px;
+  gap: 0;
+  flex-shrink: 0;
+  width: 44px;
 }
 
 .pr-scroll-btn {
   background: none;
-  border: none;
-  color: #4b5060;
-  font-size: 11px;
+  border: 1px solid #2e3040;
+  border-radius: 3px;
+  color: #6b7280;
+  font-size: 13px;
   cursor: pointer;
-  padding: 2px 6px;
-  transition: color 0.12s;
-  line-height: 1;
+  padding: 4px 8px;
+  width: 100%;
+  transition: color 0.12s, border-color 0.12s;
   touch-action: manipulation;
 }
-.pr-scroll-btn:hover:not(:disabled) { color: #c4849a; }
+.pr-scroll-btn:hover:not(:disabled) { color: #c4849a; border-color: #c4849a; }
 .pr-scroll-btn:disabled { opacity: 0.2; cursor: default; }
 
 .pr-label {
   height: 30px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   font-size: 9px;
   color: #4b5060;
   letter-spacing: 0.03em;
@@ -137,10 +133,16 @@
 }
 .pr-label.root { color: #c4849a; }
 
+/* Grid column — scrolls horizontally if needed */
+.pr-grid-col {
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 .pr-grid {
   display: grid;
   gap: 2px;
-  margin-left: 48px;
 }
 
 .pr-cell {
@@ -153,42 +155,51 @@
   min-height: 30px;
 }
 .pr-cell:hover { background: #2a2c38; }
-
 .pr-cell.beat-start { border-left-color: #2e3040; }
 .pr-cell.bar-start  { border-left-color: #404258; }
-
-.pr-cell.active {
-  background: #c4849a;
-  border-color: #a8687c;
-}
+.pr-cell.active { background: #c4849a; border-color: #a8687c; }
 .pr-cell.active:hover { background: #b3748a; }
+.pr-cell.playhead { outline: 2px solid rgba(255,255,255,0.5); outline-offset: 1px; }
+.pr-cell.active.playhead { box-shadow: 0 0 8px rgba(196,132,154,0.6); }
 
-.pr-cell.playhead {
-  outline: 2px solid rgba(255,255,255,0.5);
-  outline-offset: 1px;
-}
-.pr-cell.active.playhead {
-  box-shadow: 0 0 8px rgba(196,132,154,0.6);
-}
-
-/* Step number bar below grid */
+/* Bar numbers */
 .pr-step-nums {
   display: flex;
-  margin-left: 48px;
-  margin-top: 4px;
-}
-.pr-step-nums-spacer { width: 6px; }
-.pr-step-nums-row {
-  display: flex;
   gap: 2px;
+  margin-top: 4px;
 }
 .pr-step-num {
   width: 26px;
   font-size: 9px;
   color: #3a3d4a;
   text-align: center;
+  flex-shrink: 0;
 }
 .pr-step-num.bar { color: #6b7280; }
+
+/* ── LFO inline with params ── */
+.lfo-inline {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.lfo-wave-btn { min-width: 28px; }
+
+.lfo-sub {
+  padding-left: 82px; /* align with sliders */
+  padding-bottom: 4px;
+}
+
+/* ── FX row (delay + reverb side by side) ── */
+.fx-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 680px;
+}
+.fx-row > * { flex: 1; min-width: 0; }
 
 /* ── Sequencer (old, kept for reference) ── */
 .sequencer {

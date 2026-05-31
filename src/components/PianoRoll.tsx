@@ -41,8 +41,7 @@ export function PianoRoll({
           <span className="pr-ctrl-label">Root</span>
           <div className="reverb-type-btns pr-root-btns">
             {ROOT_LABELS.map((n, i) => (
-              <button
-                key={i}
+              <button key={i}
                 className={`reverb-type-btn${rootNote === i ? ' active' : ''}`}
                 onClick={() => onSetRootNote(i)}
               >{n}</button>
@@ -53,8 +52,7 @@ export function PianoRoll({
           <span className="pr-ctrl-label">Scale</span>
           <div className="reverb-type-btns">
             {SCALE_OPTIONS.map(s => (
-              <button
-                key={s.id}
+              <button key={s.id}
                 className={`reverb-type-btn${scale === s.id ? ' active' : ''}`}
                 onClick={() => onSetScale(s.id)}
               >{s.label}</button>
@@ -63,52 +61,55 @@ export function PianoRoll({
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="pr-grid-wrap">
+      {/* Labels + grid in a flex row */}
+      <div className="pr-row">
 
-        {/* Note labels + scroll */}
-        <div className="pr-labels">
+        {/* Note labels column */}
+        <div className="pr-labels-col">
           <button className="pr-scroll-btn" onClick={onScrollUp} disabled={scroll === 0}>▲</button>
           {visibleNotes.map((midi, row) => (
-            <div
-              key={row}
-              className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}
-            >
+            <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
               {noteName(midi)}
             </div>
           ))}
           <button className="pr-scroll-btn" onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
         </div>
 
-        {/* Cells */}
-        <div className="pr-grid" style={{ gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`, gridTemplateRows: `repeat(${VISIBLE_ROWS}, 30px)` }}>
-          {Array.from({ length: VISIBLE_ROWS }, (_, row) =>
-            Array.from({ length: STEP_COUNT }, (_, col) => {
-              const midi = visibleNotes[row];
-              const active = steps[col] === midi;
-              const playing = col === currentStep;
-              const beatStart = col % 4 === 0;
-              const barStart = col % 8 === 0;
-              return (
-                <div
-                  key={`${row}-${col}`}
-                  className={[
-                    'pr-cell',
-                    active ? 'active' : '',
-                    playing ? 'playhead' : '',
-                    barStart ? 'bar-start' : beatStart ? 'beat-start' : '',
-                  ].filter(Boolean).join(' ')}
-                  onClick={() => handleCell(col, midi)}
-                />
-              );
-            })
-          )}
-        </div>
+        {/* Scrollable grid column */}
+        <div className="pr-grid-col">
+          <div
+            className="pr-grid"
+            style={{
+              gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
+              gridTemplateRows: `repeat(${VISIBLE_ROWS}, 30px)`,
+            }}
+          >
+            {Array.from({ length: VISIBLE_ROWS }, (_, row) =>
+              Array.from({ length: STEP_COUNT }, (_, col) => {
+                const midi = visibleNotes[row];
+                const active = steps[col] === midi;
+                const playing = col === currentStep;
+                const barStart = col % 8 === 0;
+                const beatStart = col % 4 === 0 && !barStart;
+                return (
+                  <div
+                    key={`${row}-${col}`}
+                    className={[
+                      'pr-cell',
+                      active   ? 'active'     : '',
+                      playing  ? 'playhead'   : '',
+                      barStart ? 'bar-start'  : '',
+                      beatStart ? 'beat-start' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => handleCell(col, midi)}
+                  />
+                );
+              })
+            )}
+          </div>
 
-        {/* Step numbers */}
-        <div className="pr-step-nums">
-          <div className="pr-step-nums-spacer" />
-          <div className="pr-step-nums-row">
+          {/* Bar numbers */}
+          <div className="pr-step-nums">
             {Array.from({ length: STEP_COUNT }, (_, i) => (
               <div key={i} className={`pr-step-num${i % 8 === 0 ? ' bar' : ''}`}>
                 {i % 8 === 0 ? i / 8 + 1 : ''}

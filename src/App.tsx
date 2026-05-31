@@ -3,7 +3,6 @@ import { initAudio } from './audio/engine';
 import { useSequencer } from './hooks/useSequencer';
 import { PianoRoll } from './components/PianoRoll';
 import { RingsControls } from './components/RingsControls';
-import { LFOControls } from './components/LFOControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import './App.css';
@@ -58,9 +57,11 @@ export default function App() {
       />
 
       <RingsControls />
-      <LFOControls />
-      <DelayControls bpm={bpm} />
-      <ReverbControls />
+
+      <div className="fx-row">
+        <DelayControls bpm={bpm} />
+        <ReverbControls />
+      </div>
     </div>
   );
 }
