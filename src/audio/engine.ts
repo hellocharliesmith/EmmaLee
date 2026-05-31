@@ -11,9 +11,11 @@ let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
 let delayMixGain: GainNode | null = null;
 let analyser: AnalyserNode | null = null;
+let dspLoad = 0;
 let isReady = false;
 
 export function getAnalyser(): AnalyserNode | null { return analyser; }
+export function getDSPLoad(): number { return dspLoad; }
 
 // ── Reverb unit abstraction ───────────────────────────────────────────────
 interface ReverbUnit { input: AudioNode; output: AudioNode; }
@@ -129,6 +131,11 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
       if (e.data.type === 'error') reject(new Error(e.data.message));
     };
   });
+
+  // Persistent handler for ongoing messages (perf reports, etc.)
+  workletNode.port.onmessage = (e) => {
+    if (e.data.type === 'perf') dspLoad = e.data.load;
+  };
 
   // Reverb chain: workletNode → preDelay → toneFilter → [reverb unit] → wetGain → destination
   preDelay = audioCtx.createDelay(0.15);

@@ -213,12 +213,53 @@
 
 /* ── Waveform meter ── */
 .waveform-wrap {
+  position: relative;
   width: 100%;
   max-width: 960px;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #1e2028;
   box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.dsp-overlay {
+  position: absolute;
+  top: 7px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.dsp-label {
+  font-size: 8px;
+  color: #4b5060;
+  font-family: ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dsp-bar {
+  width: 48px;
+  height: 3px;
+  background: #1e2028;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dsp-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+.dsp-pct {
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  min-width: 28px;
+  text-align: right;
+  transition: color 0.4s ease;
 }
 
 .waveform-canvas {

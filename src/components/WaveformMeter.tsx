@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { getAnalyser } from '../audio/engine';
+import { useRef, useEffect, useState } from 'react';
+import { getAnalyser, getDSPLoad } from '../audio/engine';
 
 const H = 80; // display height in CSS px
 
@@ -13,11 +13,18 @@ const DB_LINES: { db: number; label: string; alpha: number }[] = [
 
 function dbToAmp(db: number) { return Math.pow(10, db / 20); }
 
+function dspColor(load: number) {
+  if (load > 0.75) return '#ef4444';
+  if (load > 0.5)  return '#d2a050';
+  return '#6b7280';
+}
+
 export function WaveformMeter() {
   const wrapRef   = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number | null>(null);
   const dataRef   = useRef<Float32Array<ArrayBuffer> | null>(null);
+  const [dsp, setDsp] = useState(0);
 
   // Scrolling history: one {min, max} entry per CSS-pixel column
   const historyRef = useRef<{ min: number; max: number }[]>([]);
@@ -47,6 +54,9 @@ export function WaveformMeter() {
     function draw() {
       rafRef.current = requestAnimationFrame(draw);
       if (document.hidden) return; // pause when tab not visible
+
+      // Update DSP load display (sampled every frame, updated in React state)
+      setDsp(getDSPLoad());
 
       const analyser = getAnalyser();
       const ctx = canvas!.getContext('2d');
@@ -162,9 +172,19 @@ export function WaveformMeter() {
     };
   }, []);
 
+  const pct   = Math.round(dsp * 100);
+  const color = dspColor(dsp);
+
   return (
     <div ref={wrapRef} className="waveform-wrap">
       <canvas ref={canvasRef} className="waveform-canvas" />
+      <div className="dsp-overlay">
+        <span className="dsp-label">DSP</span>
+        <div className="dsp-bar">
+          <div className="dsp-fill" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+        </div>
+        <span className="dsp-pct" style={{ color }}>{pct}%</span>
+      </div>
     </div>
   );
 }

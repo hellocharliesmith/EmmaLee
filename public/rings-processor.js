@@ -20,6 +20,12 @@ class RingsProcessor extends AudioWorkletProcessor {
 
     this.pendingTrigger = false;
 
+    // DSP load metering
+    this._perfOk    = typeof performance !== 'undefined' && typeof performance.now === 'function';
+    this._perfSum   = 0;
+    this._perfCount = 0;
+    this._budget    = 0; // ms per block — set after init
+
     // Base param values (set by sliders, used as LFO centre)
     // Indices: 0=structure, 1=brightness, 2=damping, 3=position
     this.baseParams = [0.3, 0.5, 0.5, 0.25];
@@ -108,6 +114,7 @@ class RingsProcessor extends AudioWorkletProcessor {
       // Cache heap view — safe to hold since memory doesn't grow after init
       this.heapF32 = new Float32Array(instance.exports.b.buffer);
 
+      this._budget = (128 / sampleRate) * 1000; // ms of audio time per block
       this.port.postMessage({ type: 'ready' });
     } catch (err) {
       this.port.postMessage({ type: 'error', message: err.message });
@@ -116,6 +123,8 @@ class RingsProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs) {
     if (!this.instance || this.outputPtr === null) return true;
+
+    const t0 = this._perfOk ? performance.now() : 0;
 
     const output = outputs[0];
     const left  = output[0];
@@ -158,6 +167,18 @@ class RingsProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < left.length; i++) {
       left[i]  = heap[base + i * 2];
       right[i] = heap[base + i * 2 + 1];
+    }
+
+    // DSP load reporting — every 100 blocks (~290ms at 44.1kHz)
+    if (this._perfOk) {
+      this._perfSum += performance.now() - t0;
+      this._perfCount++;
+      if (this._perfCount >= 100) {
+        const load = this._perfSum / (this._perfCount * this._budget);
+        this.port.postMessage({ type: 'perf', load });
+        this._perfSum = 0;
+        this._perfCount = 0;
+      }
     }
 
     return true;
