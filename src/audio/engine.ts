@@ -11,7 +11,48 @@ let delayNode: DelayNode | null = null;
 let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
 let delayMixGain: GainNode | null = null;
+// Tape effect nodes
+let tapeSaturation: WaveShaperNode | null = null;
+let wowGain: GainNode | null = null;
+let flutterGain: GainNode | null = null;
+let tapeNoiseGain: GainNode | null = null;
 let isReady = false;
+
+// ── Tape helper functions ──────────────────────────────────────────────────
+
+function makePinkNoise(ctx: AudioContext): AudioBuffer {
+  const len = ctx.sampleRate * 3;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+    b2 = 0.96900 * b2 + w * 0.1538520; b3 = 0.86650 * b3 + w * 0.3104856;
+    b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+    b6 = w * 0.115926;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+  }
+  return buf;
+}
+
+function makeSoftClipCurve(): Float32Array {
+  const n = 512;
+  const curve = new Float32Array(n);
+  const k = Math.tanh(3);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = Math.tanh(x * 3) / k;
+  }
+  return curve;
+}
+
+function makeLinearCurve(): Float32Array {
+  const n = 512;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) curve[i] = (i * 2) / n - 1;
+  return curve;
+}
 
 // Cache original full-length IR buffers so decay can re-trim without re-fetching
 const irCache = new Map<string, AudioBuffer>();
@@ -120,10 +161,16 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayMixGain = audioCtx.createGain();
   delayMixGain.gain.value = 0.0; // off by default
 
-  // Feedback loop
+  // Tape saturation — always in feedback path, linear curve = bypass
+  tapeSaturation = audioCtx.createWaveShaper();
+  tapeSaturation.curve = makeLinearCurve();
+  tapeSaturation.oversample = '2x';
+
+  // Feedback loop: delay → gain → filter → saturation → delay
   delayNode.connect(delayFeedbackGain);
   delayFeedbackGain.connect(delayFeedbackFilter);
-  delayFeedbackFilter.connect(delayNode);
+  delayFeedbackFilter.connect(tapeSaturation);
+  tapeSaturation.connect(delayNode);
 
   // Delay output → mix → destination
   delayNode.connect(delayMixGain);
@@ -131,6 +178,40 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   // Worklet → delay input
   workletNode.connect(delayNode);
+
+  // ── Wow & flutter — LFOs modulating delay time (depth = 0 until tape on) ──
+  const wowOsc = audioCtx.createOscillator();
+  wowOsc.type = 'sine';
+  wowOsc.frequency.value = 0.4;
+  wowGain = audioCtx.createGain();
+  wowGain.gain.value = 0;
+  wowOsc.connect(wowGain);
+  wowGain.connect(delayNode.delayTime);
+  wowOsc.start();
+
+  const flutterOsc = audioCtx.createOscillator();
+  flutterOsc.type = 'sine';
+  flutterOsc.frequency.value = 9;
+  flutterGain = audioCtx.createGain();
+  flutterGain.gain.value = 0;
+  flutterOsc.connect(flutterGain);
+  flutterGain.connect(delayNode.delayTime);
+  flutterOsc.start();
+
+  // ── Tape noise — pink noise, bandpass filtered, off until tape on ──
+  const noiseSource = audioCtx.createBufferSource();
+  noiseSource.buffer = makePinkNoise(audioCtx);
+  noiseSource.loop = true;
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = 2800;
+  noiseFilter.Q.value = 0.7;
+  tapeNoiseGain = audioCtx.createGain();
+  tapeNoiseGain.gain.value = 0;
+  noiseSource.connect(noiseFilter);
+  noiseFilter.connect(tapeNoiseGain);
+  tapeNoiseGain.connect(audioCtx.destination);
+  noiseSource.start();
 
   isReady = true;
 }
@@ -213,6 +294,21 @@ export function setDelayFeedback(value: number): void {
 export function setDelayMix(value: number): void {
   if (!delayMixGain) return;
   delayMixGain.gain.value = value;
+}
+
+export function setTapeMode(enabled: boolean): void {
+  if (!tapeSaturation || !wowGain || !flutterGain || !tapeNoiseGain) return;
+  if (enabled) {
+    wowGain.gain.value = 0.0018;      // 1.8ms wow depth — subtle pitch drift
+    flutterGain.gain.value = 0.0003;  // 0.3ms flutter depth — faster, lighter
+    tapeNoiseGain.gain.value = 0.007; // soft hiss
+    tapeSaturation.curve = makeSoftClipCurve();
+  } else {
+    wowGain.gain.value = 0;
+    flutterGain.gain.value = 0;
+    tapeNoiseGain.gain.value = 0;
+    tapeSaturation.curve = makeLinearCurve();
+  }
 }
 
 export function setDelayFilter(hz: number): void {

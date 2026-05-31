@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { setDelayTime, setDelayFeedback, setDelayMix, setDelayFilter } from '../audio/engine';
+import { setDelayTime, setDelayFeedback, setDelayMix, setDelayFilter, setTapeMode } from '../audio/engine';
 
 const DIVISIONS = [
   { id: '1/16', label: '1/16' },
@@ -26,6 +26,7 @@ export function DelayControls({ bpm }: Props) {
   const [feedback, setFeedback] = useState(0.35);
   const [mix, setMix] = useState(0.0);
   const [filter, setFilter] = useState(3500);
+  const [tape, setTape] = useState(false);
 
   // Re-sync delay time whenever BPM or division changes
   useEffect(() => {
@@ -53,6 +54,12 @@ export function DelayControls({ bpm }: Props) {
               {d.label}
             </button>
           ))}
+          <button
+            className={`reverb-type-btn tape-btn${tape ? ' active' : ''}`}
+            onClick={() => { const v = !tape; setTape(v); setTapeMode(v); }}
+          >
+            Tape
+          </button>
         </div>
       </div>
 
