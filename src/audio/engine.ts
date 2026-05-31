@@ -106,7 +106,7 @@ function swapReverb(newUnit: ReverbUnit) {
 
 // ── LFO — now lives in AudioWorklet, main thread just sends config ────────
 // baseParams kept here so initAudio can set defaults before worklet is ready
-const baseParams = [0.3, 0.5, 0.5, 0.25];
+const baseParams = [0.11, 0.24, 0.44, 0.25];
 
 // ── initAudio ─────────────────────────────────────────────────────────────
 export async function initAudio(ctx: AudioContext): Promise<void> {
@@ -162,10 +162,10 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   // Delay chain
   delayNode = audioCtx.createDelay(2.0);
-  delayNode.delayTime.value = (60 / 72) * 0.75; // D1/8 at 72 BPM
+  delayNode.delayTime.value = (60 / 72) / 2; // 1/8 at 72 BPM
 
   delayFeedbackGain = audioCtx.createGain();
-  delayFeedbackGain.gain.value = 0.23;
+  delayFeedbackGain.gain.value = 0.16;
 
   delayFeedbackFilter = audioCtx.createBiquadFilter();
   delayFeedbackFilter.type = 'lowpass';
@@ -191,8 +191,12 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   isReady = true;
 
-  // Default model: Strings (1)
-  workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });
+  // Default Rings params
+  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.11 } }); // Structure
+  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.24 } }); // Brightness
+  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.44 } }); // Damping
+  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.25 } }); // Position
+  workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });               // Strings
 
   // Default LFO: Brightness — smooth random, rate 1.6 Hz, depth 0.1, enabled
   workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'wave',    value: 'random' } });

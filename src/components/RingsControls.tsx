@@ -12,10 +12,10 @@ interface LFODefault { on: boolean; wave: 'sine' | 'random'; rate: number; depth
 interface ParamDef { id: number; label: string; default: number; lfo: number; lfoDefault?: LFODefault; }
 
 const PARAMS: ParamDef[] = [
-  { id: 0, label: 'Structure',  default: 0.30, lfo: -1 },
-  { id: 1, label: 'Brightness', default: 0.50, lfo:  0,
+  { id: 0, label: 'Structure',  default: 0.11, lfo: -1 },
+  { id: 1, label: 'Brightness', default: 0.24, lfo:  0,
     lfoDefault: { on: true, wave: 'random', rate: 1.6, depth: 0.1 } },
-  { id: 2, label: 'Damping',    default: 0.50, lfo:  1 },
+  { id: 2, label: 'Damping',    default: 0.44, lfo:  1 },
   { id: 3, label: 'Position',   default: 0.25, lfo:  2 },
 ];
 

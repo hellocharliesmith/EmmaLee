@@ -22,8 +22,8 @@ function divisionSeconds(div: string, bpm: number): number {
 interface Props { bpm: number; }
 
 export function DelayControls({ bpm }: Props) {
-  const [division, setDivision] = useState('d1/8');
-  const [feedback, setFeedback] = useState(0.23);
+  const [division, setDivision] = useState('1/8');
+  const [feedback, setFeedback] = useState(0.16);
   const [mix, setMix] = useState(0.2);
   const [filter, setFilter] = useState(2800);
 
