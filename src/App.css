@@ -51,8 +51,6 @@
 }
 .bpm-row input[type='range'] {
   width: 100px;
-  accent-color: #c4849a;
-  cursor: pointer;
 }
 .bpm-row .bpm-val {
   color: #c8cad0;
@@ -341,7 +339,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 320px;
 }
 
 .knob-row {
@@ -360,8 +357,35 @@
   flex-shrink: 0;
 }
 
+/* Fixed width — all sliders match Structure, LFO controls flow right */
 .knob-row input[type='range'] {
-  flex: 1;
-  accent-color: #c4849a;
+  width: 220px;
+  flex-shrink: 0;
+  flex-grow: 0;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  outline: none;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #d8b8c4;
+  border: 1.5px solid #c4849a;
+  cursor: pointer;
+}
+input[type='range']::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #d8b8c4;
+  border: 1.5px solid #c4849a;
+  cursor: pointer;
+  box-shadow: none;
 }
