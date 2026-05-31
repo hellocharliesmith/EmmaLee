@@ -20,11 +20,11 @@ class RingsProcessor extends AudioWorkletProcessor {
 
     this.pendingTrigger = false;
 
-    // DSP load metering
-    this._perfOk    = typeof performance !== 'undefined' && typeof performance.now === 'function';
-    this._perfSum   = 0;
-    this._perfCount = 0;
-    this._budget    = 0; // ms per block — set after init
+    // DSP load metering — no guard, performance.now() is always available in modern AudioWorklet
+    this._perfSum    = 0;
+    this._perfCount  = 0;
+    this._budget     = 0; // ms per block, set after init
+    this._windowStart = 0; // wall time at start of current measurement window
 
     // Base param values (set by sliders, used as LFO centre)
     // Indices: 0=structure, 1=brightness, 2=damping, 3=position
@@ -124,7 +124,8 @@ class RingsProcessor extends AudioWorkletProcessor {
   process(inputs, outputs) {
     if (!this.instance || this.outputPtr === null) return true;
 
-    const t0 = this._perfOk ? performance.now() : 0;
+    const t0 = performance.now();
+    if (this._perfCount === 0) this._windowStart = t0; // start of new window
 
     const output = outputs[0];
     const left  = output[0];
@@ -169,16 +170,24 @@ class RingsProcessor extends AudioWorkletProcessor {
       right[i] = heap[base + i * 2 + 1];
     }
 
-    // DSP load reporting — every 100 blocks (~290ms at 44.1kHz)
-    if (this._perfOk) {
-      this._perfSum += performance.now() - t0;
-      this._perfCount++;
-      if (this._perfCount >= 100) {
-        const load = this._perfSum / (this._perfCount * this._budget);
-        this.port.postMessage({ type: 'perf', load });
-        this._perfSum = 0;
-        this._perfCount = 0;
-      }
+    // DSP load — accumulate over 500 blocks for precision on fast hardware.
+    // Also measure total wall time for the window so we catch any scheduling overhead.
+    const elapsed = performance.now() - t0;
+    this._perfSum += elapsed;
+    this._perfCount++;
+
+    if (this._perfCount >= 500) {
+      const windowWall  = performance.now() - this._windowStart; // total elapsed (ms)
+      const audioBudget = 500 * this._budget;                    // expected audio time (ms)
+      // Primary: fraction of audio budget spent in DSP
+      const dspLoad  = this._perfSum / audioBudget;
+      // Secondary: wall / audio ratio (>1 = can't keep up, <1 = healthy headroom)
+      const wallLoad = windowWall / audioBudget;
+      // Use whichever is higher — catches both CPU-bound and scheduling issues
+      const load = Math.max(dspLoad, Math.min(wallLoad, 1));
+      this.port.postMessage({ type: 'perf', load });
+      this._perfSum   = 0;
+      this._perfCount = 0;
     }
 
     return true;

@@ -172,8 +172,11 @@ export function WaveformMeter() {
     };
   }, []);
 
-  const pct   = Math.round(dsp * 100);
+  const pct   = dsp * 100;
   const color = dspColor(dsp);
+  const label = dsp === 0 ? '—'
+              : pct < 1   ? '< 1%'
+              : `${pct.toFixed(1)}%`;
 
   return (
     <div ref={wrapRef} className="waveform-wrap">
@@ -183,7 +186,7 @@ export function WaveformMeter() {
         <div className="dsp-bar">
           <div className="dsp-fill" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
         </div>
-        <span className="dsp-pct" style={{ color }}>{pct}%</span>
+        <span className="dsp-pct" style={{ color }}>{label}</span>
       </div>
     </div>
   );
