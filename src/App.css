@@ -211,6 +211,20 @@
   text-align: center;
 }
 
+/* ── Waveform meter ── */
+.waveform-wrap {
+  width: 100%;
+  max-width: 960px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #1e2028;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+.waveform-canvas {
+  display: block;
+}
+
 /* ── FX row (delay + reverb side by side) ── */
 .fx-row {
   display: flex;

@@ -10,7 +10,10 @@ let delayNode: DelayNode | null = null;
 let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
 let delayMixGain: GainNode | null = null;
+let analyser: AnalyserNode | null = null;
 let isReady = false;
+
+export function getAnalyser(): AnalyserNode | null { return analyser; }
 
 // ── Reverb unit abstraction ───────────────────────────────────────────────
 interface ReverbUnit { input: AudioNode; output: AudioNode; }
@@ -171,6 +174,14 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayNode.connect(delayMixGain);
   delayMixGain.connect(audioCtx.destination);
   workletNode.connect(delayNode);
+
+  // Metering — AnalyserNode taps all output buses (zero audio impact)
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0; // raw per-frame data for scrolling history
+  wetGain.connect(analyser);
+  dryGain.connect(analyser);
+  delayMixGain.connect(analyser);
 
   isReady = true;
 }

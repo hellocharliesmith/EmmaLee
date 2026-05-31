@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { initAudio } from './audio/engine';
 import { useSequencer } from './hooks/useSequencer';
 import { PianoRoll } from './components/PianoRoll';
+import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
@@ -56,6 +57,7 @@ export default function App() {
         onScrollDown={scrollDown}
       />
 
+      <WaveformMeter />
       <RingsControls />
 
       <div className="fx-row">
