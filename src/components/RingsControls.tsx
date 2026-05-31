@@ -53,18 +53,17 @@ function ParamRow({ p }: { p: ParamDef }) {
           >
             {lfoOn ? 'On' : 'Off'}
           </button>
-          {lfoOn && (
-            <>
-              <Knob
-                value={rate} min={0.05} max={8} label="Rate"
-                onChange={v => { setRateSt(v); setLFORate(p.lfo, v); }}
-              />
-              <Knob
-                value={depth} min={0} max={0.5} label="Depth"
-                onChange={v => { setDepthSt(v); setLFODepth(p.lfo, v); }}
-              />
-            </>
-          )}
+          {/* Always rendered — visibility preserves fixed row height */}
+          <div style={{ visibility: lfoOn ? 'visible' : 'hidden', display: 'flex', gap: 4 }}>
+            <Knob
+              value={rate} min={0.05} max={8} label="Rate"
+              onChange={v => { setRateSt(v); setLFORate(p.lfo, v); }}
+            />
+            <Knob
+              value={depth} min={0} max={0.5} label="Depth"
+              onChange={v => { setDepthSt(v); setLFODepth(p.lfo, v); }}
+            />
+          </div>
         </div>
       )}
     </div>
