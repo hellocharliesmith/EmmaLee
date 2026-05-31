@@ -67,11 +67,13 @@ export function PianoRoll({
         {/* Note labels column */}
         <div className="pr-labels-col">
           <button className="pr-scroll-btn" onClick={onScrollUp} disabled={scroll === 0}>▲</button>
-          {visibleNotes.map((midi, row) => (
-            <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
-              {noteName(midi)}
-            </div>
-          ))}
+          <div className="pr-labels-list">
+            {visibleNotes.map((midi, row) => (
+              <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
+                {noteName(midi)}
+              </div>
+            ))}
+          </div>
           <button className="pr-scroll-btn" onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
         </div>
 

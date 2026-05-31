@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth } from '../audio/engine';
+import { Knob } from './Knob';
 
 const MODELS = [
   { id: 0, label: 'Modal',   description: 'Struck metal, glass, wood — 60 resonant modes' },
@@ -17,51 +18,53 @@ const PARAMS: ParamDef[] = [
 ];
 
 function ParamRow({ p }: { p: ParamDef }) {
-  const [lfoOn, setLfoOn]     = useState(false);
-  const [wave, setWaveState]  = useState<'sine' | 'random'>('sine');
-  const [rate, setRateState]  = useState(0.5);
-  const [depth, setDepthState] = useState(0.15);
+  const [lfoOn,  setLfoOn]   = useState(false);
+  const [wave,   setWaveSt]  = useState<'sine' | 'random'>('sine');
+  const [rate,   setRateSt]  = useState(0.5);
+  const [depth,  setDepthSt] = useState(0.15);
 
   function toggleWave() {
     const v = wave === 'sine' ? 'random' : 'sine';
-    setWaveState(v); setLFOWave(p.lfo, v);
+    setWaveSt(v); setLFOWave(p.lfo, v);
   }
   function toggleLfo() {
     const v = !lfoOn; setLfoOn(v); setLFOEnabled(p.lfo, v);
   }
 
   return (
-    <div>
-      <div className="knob-row">
-        <label title={p.label}>{p.label}</label>
-        <input type="range" min={0} max={1} step={0.01} defaultValue={p.default}
-          onChange={e => setRingsParam(p.id, parseFloat(e.target.value))} />
-        {p.lfo >= 0 && (
-          <div className="lfo-inline">
-            <button
-              className={`reverb-type-btn lfo-wave-btn${wave === 'random' ? ' active' : ''}`}
-              onClick={toggleWave}
-              title={wave === 'sine' ? 'Sine' : 'Smooth Random'}
-            >{wave === 'sine' ? '∿' : 'rnd'}</button>
-            <button
-              className={`reverb-type-btn${lfoOn ? ' active' : ''}`}
-              onClick={toggleLfo}
-            >{lfoOn ? 'On' : 'Off'}</button>
-          </div>
-        )}
-      </div>
-      {lfoOn && p.lfo >= 0 && (
-        <div className="lfo-sub">
-          <div className="knob-row">
-            <label>Rate</label>
-            <input type="range" min={0.05} max={8} step={0.05} value={rate}
-              onChange={e => { const v = parseFloat(e.target.value); setRateState(v); setLFORate(p.lfo, v); }} />
-          </div>
-          <div className="knob-row">
-            <label>Depth</label>
-            <input type="range" min={0} max={0.5} step={0.01} value={depth}
-              onChange={e => { const v = parseFloat(e.target.value); setDepthState(v); setLFODepth(p.lfo, v); }} />
-          </div>
+    <div className="knob-row param-row">
+      <label>{p.label}</label>
+      <input
+        type="range" min={0} max={1} step={0.01} defaultValue={p.default}
+        onChange={e => setRingsParam(p.id, parseFloat(e.target.value))}
+      />
+      {p.lfo >= 0 && (
+        <div className="lfo-inline">
+          <button
+            className={`reverb-type-btn${wave === 'random' ? ' active' : ''}`}
+            onClick={toggleWave}
+            title={wave === 'sine' ? 'Sine — click for Smooth Random' : 'Smooth Random — click for Sine'}
+          >
+            {wave === 'sine' ? 'Sine' : 'Rnd'}
+          </button>
+          <button
+            className={`reverb-type-btn${lfoOn ? ' active' : ''}`}
+            onClick={toggleLfo}
+          >
+            {lfoOn ? 'On' : 'Off'}
+          </button>
+          {lfoOn && (
+            <>
+              <Knob
+                value={rate} min={0.05} max={8} label="Rate"
+                onChange={v => { setRateSt(v); setLFORate(p.lfo, v); }}
+              />
+              <Knob
+                value={depth} min={0} max={0.5} label="Depth"
+                onChange={v => { setDepthSt(v); setLFODepth(p.lfo, v); }}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
