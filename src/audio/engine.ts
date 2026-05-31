@@ -22,7 +22,6 @@ interface ReverbUnit { input: AudioNode; output: AudioNode; }
 let reverbUnit: ReverbUnit | null = null;
 let currentIRName = 'plate';
 let currentDecay  = 1.0;
-let synthPlateFeedbacks: GainNode[] = []; // for live decay control on algo
 
 const irCache = new Map<string, AudioBuffer>();
 
@@ -52,39 +51,38 @@ function applyDecay(buffer: AudioBuffer, ctx: AudioContext, decay: number): Audi
 }
 
 // ── Algorithmic plate reverb ──────────────────────────────────────────────
-// Schroeder comb filter network, plate-tuned delay times.
-// No IR file — very low CPU vs ConvolverNode.
-function buildSynthPlate(ctx: AudioContext): ReverbUnit {
-  synthPlateFeedbacks = [];
-  const input  = ctx.createGain();
-  const output = ctx.createGain();
+// Algorithmic reverb: ConvolverNode with a generated pink noise IR.
+// ConvolverNode is inherently stable — no feedback possible.
+// Pink noise spectrum is more natural than white noise for reverb.
+function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
+  const duration = 2.0; // seconds
+  const len = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(2, len, ctx.sampleRate);
+  const predelaySamples = Math.floor(ctx.sampleRate * 0.01); // 10ms pre-delay
 
-  // Plate delay times (seconds) — short, dense, characteristic metallic plate
-  const delays = [0.0253, 0.0269, 0.0290, 0.0307, 0.0322, 0.0347, 0.0366, 0.0386];
-  const fbAmt  = 0.80;
-  const dampHz = 3500;
+  for (let c = 0; c < 2; c++) {
+    const d = buffer.getChannelData(c);
+    // Pink noise generator (Voss-McCartney algorithm)
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    // Slightly different coefficients per channel for stereo width
+    const spread = c === 0 ? 1.0 : 0.97;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520; b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      b6 = w * 0.115926;
+      const pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11 * spread;
+      const n = Math.max(0, i - predelaySamples);
+      d[i] = pink * Math.exp(-decayRate * n / len);
+    }
+  }
+  return buffer;
+}
 
-  delays.forEach((t, i) => {
-    const delay = ctx.createDelay(t + 0.005);
-    delay.delayTime.value = t + (i % 2 === 0 ? 0 : 0.00052); // slight stereo spread
-
-    const fb = ctx.createGain();
-    fb.gain.value = fbAmt;
-    synthPlateFeedbacks.push(fb);
-
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = dampHz;
-
-    delay.connect(lp);
-    lp.connect(fb);
-    fb.connect(delay); // feedback loop
-
-    input.connect(delay);
-    delay.connect(output);
-  });
-
-  return { input, output };
+function getAlgoUnit(ctx: AudioContext, decay: number): ReverbUnit {
+  const ir = buildAlgoIR(ctx, 1.0 + decay * 3.0); // decay 0→1 maps to 1→4s tail
+  return makeConvolverUnit(ctx, ir);
 }
 
 function makeConvolverUnit(ctx: AudioContext, buffer: AudioBuffer): ReverbUnit {
@@ -159,7 +157,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   // Default reverb — plate IR
   const irBuffer = await loadIR(audioCtx, 'plate');
-  swapReverb(makeConvolverUnit(audioCtx, irBuffer));
+  swapReverb(makeConvolverUnit(audioCtx, applyDecay(irBuffer, audioCtx, currentDecay)));
 
   // Delay chain
   delayNode = audioCtx.createDelay(2.0);
@@ -234,7 +232,7 @@ export async function setReverbType(name: string): Promise<void> {
   currentIRName = name;
   let newUnit: ReverbUnit;
   if (name === 'algo') {
-    newUnit = buildSynthPlate(audioCtx);
+    newUnit = getAlgoUnit(audioCtx, currentDecay);
   } else {
     const full    = await loadIR(audioCtx, name);
     const trimmed = applyDecay(full, audioCtx, currentDecay);
@@ -245,13 +243,12 @@ export async function setReverbType(name: string): Promise<void> {
 
 export async function setReverbDecay(value: number): Promise<void> {
   currentDecay = value;
+  if (!audioCtx) return;
   if (currentIRName === 'algo') {
-    // Map decay (0.05–1) → plate feedback (0.55–0.91)
-    const fb = 0.55 + value * 0.36;
-    synthPlateFeedbacks.forEach(g => { g.gain.value = fb; });
+    // Regenerate the algo IR with new decay — swap in smoothly
+    swapReverb(getAlgoUnit(audioCtx, value));
     return;
   }
-  if (!audioCtx) return;
   const full = irCache.get(currentIRName);
   if (!full) return;
   swapReverb(makeConvolverUnit(audioCtx, applyDecay(full, audioCtx, value)));
