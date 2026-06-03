@@ -10,23 +10,15 @@ const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]); // C# D# F# G# A#
 
-// Does this note have a black key BELOW it in chromatic scale?
-// (used to draw the gap indicator at the bottom of the key)
-function hasGapBelow(midi: number): boolean {
-  return BLACK_KEYS.has((midi - 1 + 12) % 12);
-}
-
 function PianoKey({ midi, rootNote }: { midi: number; rootNote: number }) {
-  const pitch = midi % 12;
+  const pitch   = midi % 12;
   const isBlack = BLACK_KEYS.has(pitch);
   const isRoot  = pitch === rootNote;
-  const showGap = !isBlack && hasGapBelow(midi);
   return (
     <div className={[
       'pk',
-      isBlack  ? 'pk--black' : 'pk--white',
-      isRoot   ? 'pk--root'  : '',
-      showGap  ? 'pk--gap'   : '',
+      isBlack ? 'pk--black' : 'pk--white',
+      isRoot  ? 'pk--root'  : '',
     ].filter(Boolean).join(' ')} />
   );
 }

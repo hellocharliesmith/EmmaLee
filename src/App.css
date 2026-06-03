@@ -159,34 +159,23 @@
   height: 30px;
   flex-shrink: 0;
   border-radius: 0 2px 2px 0;
-  position: relative;
 }
 .pk--white {
+  width: 22px;
   background: #252836;
   border-right: 1px solid #0d0f12;
-  border-bottom: 1px solid #0d0f12;
-  width: 22px;
+  border-bottom: 1px solid #141618;
 }
 .pk--black {
-  background: #111318;
   width: 14px;
   margin-left: 4px;
+  background: #0f1115;
   border-radius: 0 2px 2px 2px;
-  border-bottom: 1px solid #0a0c0f;
+  border-bottom: 1px solid #0a0c0e;
 }
 .pk--root {
-  background: rgba(196, 132, 154, 0.22) !important;
-}
-/* Gap indicator: thin dark line at bottom-right of key where a black key falls below */
-.pk--gap::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 42%;
-  height: 38%;
-  background: #0e1014;
-  border-radius: 0 0 2px 0;
+  background: rgba(196, 132, 154, 0.28) !important;
+  border-right-color: rgba(196, 132, 154, 0.2) !important;
 }
 
 /* Note label list — exactly aligned, no scroll buttons inside */
