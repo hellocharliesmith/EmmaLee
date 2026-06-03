@@ -10,12 +10,19 @@ let delayNode: DelayNode | null = null;
 let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
 let delayMixGain: GainNode | null = null;
-let analyser: AnalyserNode | null = null;
+let masterGain: GainNode | null = null;
+let analyserL: AnalyserNode | null = null;
+let analyserR: AnalyserNode | null = null;
 let dspLoad = 0;
 let isReady = false;
 
-export function getAnalyser(): AnalyserNode | null { return analyser; }
+export function getAnalysers(): [AnalyserNode | null, AnalyserNode | null] { return [analyserL, analyserR]; }
 export function getDSPLoad(): number { return dspLoad; }
+
+export function setMasterVolume(v: number): void {
+  if (!masterGain) return;
+  masterGain.gain.value = Math.max(0, Math.min(2, v));
+}
 
 // ── Reverb unit abstraction ───────────────────────────────────────────────
 interface ReverbUnit { input: AudioNode; output: AudioNode; }
@@ -151,11 +158,16 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   dryGain = audioCtx.createGain();
   dryGain.gain.value = 0.75;
 
+  // Master bus — all audio flows through here
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 1.0;
+  masterGain.connect(audioCtx.destination);
+
   workletNode.connect(preDelay);
   preDelay.connect(toneFilter);
   workletNode.connect(dryGain);
-  dryGain.connect(audioCtx.destination);
-  wetGain.connect(audioCtx.destination);
+  dryGain.connect(masterGain);
+  wetGain.connect(masterGain);
 
   // Default reverb — algo (no IR loading on init, faster startup)
   swapReverb(getAlgoUnit(audioCtx, currentDecay));
@@ -178,16 +190,20 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayFeedbackGain.connect(delayFeedbackFilter);
   delayFeedbackFilter.connect(delayNode);
   delayNode.connect(delayMixGain);
-  delayMixGain.connect(audioCtx.destination);
+  delayMixGain.connect(masterGain);
   workletNode.connect(delayNode);
 
-  // Metering — AnalyserNode taps all output buses (zero audio impact)
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0; // raw per-frame data for scrolling history
-  wetGain.connect(analyser);
-  dryGain.connect(analyser);
-  delayMixGain.connect(analyser);
+  // Stereo metering — split master bus into L/R analysers
+  const splitter = audioCtx.createChannelSplitter(2);
+  masterGain.connect(splitter);
+  analyserL = audioCtx.createAnalyser();
+  analyserR = audioCtx.createAnalyser();
+  analyserL.fftSize = 1024;
+  analyserR.fftSize = 1024;
+  analyserL.smoothingTimeConstant = 0;
+  analyserR.smoothingTimeConstant = 0;
+  splitter.connect(analyserL, 0);
+  splitter.connect(analyserR, 1);
 
   isReady = true;
 
@@ -198,11 +214,11 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   workletNode!.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.25 } }); // Position
   workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });               // Strings
 
-  // Default LFO: Brightness — smooth random, rate 1.6 Hz, depth 0.1, enabled
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'wave',    value: 'random' } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'rate',    value: 1.6 } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'depth',   value: 0.1 } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 0, field: 'enabled', value: true } });
+  // Default LFO: Brightness (index 1) — smooth random, on
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'wave',    value: 'random' } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'rate',    value: 1.6 } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'depth',   value: 0.1 } });
+  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'enabled', value: true } });
 }
 
 // ── Rings params — forward to worklet, worklet manages LFO centre values ──

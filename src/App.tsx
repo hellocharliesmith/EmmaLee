@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
+import { Knob } from './components/Knob';
 import { divisionSeconds } from './audio/utils';
 import { useSequencer } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
@@ -25,9 +26,10 @@ function checkSupport(): string | null {
 
 // ── Default synth state ───────────────────────────────────────────────────
 const DEFAULT_LFO: LfoState[] = [
-  { on: true,  wave: 'random', rate: 1.6,  depth: 0.1  },
-  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
-  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Structure
+  { on: true,  wave: 'random', rate: 1.6,  depth: 0.1  }, // Brightness
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Damping
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Position
 ];
 
 export default function App() {
@@ -56,6 +58,9 @@ export default function App() {
   const [delayMix,      setDelayMix]      = useState(0.2);
   const [delayFeedback, setDelayFeedback] = useState(0.16);
   const [delayFilter,   setDelayFilter]   = useState(2800);
+
+  // ── Master volume ───────────────────────────────────────────────────────
+  const [masterVolume, setMasterVolume] = useState(1.0);
 
   // ── Reverb state (lifted) ───────────────────────────────────────────────
   const [reverbType,     setReverbType]     = useState('algo');
@@ -192,7 +197,15 @@ export default function App() {
         onScrollUp={scrollUp} onScrollDown={scrollDown}
       />
 
-      <WaveformMeter />
+      <div className="waveform-section">
+        <div className="master-vol-wrap">
+          <Knob
+            value={masterVolume} min={0} max={1.5} label="Vol"
+            onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }}
+          />
+        </div>
+        <WaveformMeter />
+      </div>
 
       <RingsControls
         model={model} params={params} lfo={lfo}

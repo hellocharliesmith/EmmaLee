@@ -16,9 +16,8 @@ const PARAM_DESCS  = [
   'Excitation position along the string/plate',
 ];
 
-// LFO indices: 0=Brightness(param1), 1=Damping(param2), 2=Position(param3)
-// Structure (param0) has no LFO
-const PARAM_LFO_INDEX = [-1, 0, 1, 2];
+// LFO index matches param index: 0=Structure, 1=Brightness, 2=Damping, 3=Position
+const PARAM_LFO_INDEX = [0, 1, 2, 3];
 
 export interface RingsControlsProps {
   model: number;

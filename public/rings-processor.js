@@ -30,8 +30,8 @@ class RingsProcessor extends AudioWorkletProcessor {
     // Indices: 0=structure, 1=brightness, 2=damping, 3=position
     this.baseParams = [0.3, 0.5, 0.5, 0.25];
 
-    // Three LFOs: index 0→brightness(1), 1→damping(2), 2→position(3)
-    this.lfos = [1, 2, 3].map(paramIdx => ({
+    // Four LFOs: index 0→structure(0), 1→brightness(1), 2→damping(2), 3→position(3)
+    this.lfos = [0, 1, 2, 3].map(paramIdx => ({
       enabled: false, wave: 'sine', rate: 0.5, depth: 0.15,
       paramIdx,
       phase: 0,                              // sine accumulator
