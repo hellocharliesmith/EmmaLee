@@ -103,37 +103,35 @@ export function WaveformMeter() {
 
       const hist = historyRef.current;
 
+      const c = ctx; // non-null alias for use inside inner functions
       function drawChannel(
         getTop: (f: Frame) => number,
         getBot: (f: Frame) => number,
         yOffset: number
       ) {
-        // Glow
-        ctx.fillStyle = 'rgba(196, 132, 154, 0.1)';
+        c.fillStyle = 'rgba(196, 132, 154, 0.1)';
         for (let i = 0; i < hist.length; i++) {
           const t = getTop(hist[i]) * 1.05;
           const b = getBot(hist[i]) * 1.05;
-          ctx.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
+          c.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
         }
-        // Fill
-        const grad = ctx.createLinearGradient(0, yOffset, 0, yOffset + hh);
-        grad.addColorStop(0,   'rgba(196, 132, 154, 0.9)');
-        grad.addColorStop(1,   'rgba(196, 132, 154, 0.4)');
-        ctx.fillStyle = grad;
+        const grad = c.createLinearGradient(0, yOffset, 0, yOffset + hh);
+        grad.addColorStop(0, 'rgba(196, 132, 154, 0.9)');
+        grad.addColorStop(1, 'rgba(196, 132, 154, 0.4)');
+        c.fillStyle = grad;
         for (let i = 0; i < hist.length; i++) {
           const t = getTop(hist[i]);
           const b = getBot(hist[i]);
-          ctx.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
+          c.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
         }
-        // Edge
-        ctx.strokeStyle = 'rgba(228, 180, 196, 0.6)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
+        c.strokeStyle = 'rgba(228, 180, 196, 0.6)';
+        c.lineWidth = 1;
+        c.beginPath();
         for (let i = 0; i < hist.length; i++) {
           const y = yOffset + getTop(hist[i]);
-          i === 0 ? ctx.moveTo(i, y) : ctx.lineTo(i, y);
+          i === 0 ? c.moveTo(i, y) : c.lineTo(i, y);
         }
-        ctx.stroke();
+        c.stroke();
       }
 
       // L channel — top half (high amplitude = toward top = y small)
