@@ -64,6 +64,17 @@ export function useSequencer() {
     setSteps(prev => { const n = [...prev]; n[step] = midi; return n; });
   }, []);
 
+  // Load an entire steps array at once (for save/load)
+  const loadSteps = useCallback((newSteps: Array<number | null>) => {
+    setSteps(newSteps);
+    stepsRef.current = newSteps;
+  }, []);
+
+  // Direct scroll setter (for save/load)
+  const setScrollRowDirect = useCallback((row: number) => {
+    setScrollRow(row);
+  }, []);
+
   const setScale = useCallback((s: ScaleType) => {
     setScaleState(s);
     setSteps(Array(STEP_COUNT).fill(null));
@@ -118,7 +129,8 @@ export function useSequencer() {
   return {
     steps, visibleNotes, allNotes, scale, rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
-    setStep, setScale, setRootNote, scrollUp, scrollDown,
+    setStep, loadSteps, setScale, setRootNote,
+    scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   };
 }

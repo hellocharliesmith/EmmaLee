@@ -16,6 +16,171 @@
   color: #e8eaf0;
 }
 
+/* ── Save / Load ── */
+.sl-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sl-btn {
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.sl-btn:hover { border-color: #4b5060; color: #c8cad0; }
+
+.sl-songs-btn { color: #c4849a; border-color: rgba(196,132,154,0.3); }
+.sl-songs-btn:hover { border-color: #c4849a; }
+
+.sl-dropdown-wrap { position: relative; }
+.sl-backdrop { position: fixed; inset: 0; z-index: 10; }
+.sl-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  background: #1a1c24;
+  border: 1px solid #2e3040;
+  border-radius: 6px;
+  min-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.sl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #22242e;
+  transition: background 0.1s;
+}
+.sl-row:last-child { border-bottom: none; }
+.sl-row:hover { background: #22242e; }
+
+.sl-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sl-name { font-size: 0.8rem; color: #c8cad0; truncate: ellipsis; white-space: nowrap; overflow: hidden; }
+.sl-date { font-size: 0.68rem; color: #4b5060; }
+
+.sl-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.sl-load {
+  background: rgba(196,132,154,0.12);
+  border: 1px solid rgba(196,132,154,0.3);
+  color: #c4849a;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.sl-load:hover { background: rgba(196,132,154,0.2); border-color: #c4849a; }
+.sl-del {
+  background: none;
+  border: 1px solid #2e3040;
+  color: #4b5060;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.sl-del:hover { border-color: #ef4444; color: #ef4444; }
+
+/* ── Modals ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: #1a1c24;
+  border: 1px solid #2e3040;
+  border-radius: 10px;
+  padding: 24px 28px;
+  min-width: 300px;
+  max-width: 420px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+}
+.modal-title {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e8eaf0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.modal-body {
+  margin: 0 0 16px;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+.modal-input {
+  width: 100%;
+  background: #111318;
+  border: 1px solid #2e3040;
+  border-radius: 4px;
+  color: #c8cad0;
+  font-size: 0.9rem;
+  font-family: inherit;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.modal-input:focus { border-color: #c4849a; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-cancel {
+  background: none;
+  border: 1px solid #2e3040;
+  color: #6b7280;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.modal-cancel:hover { border-color: #4b5060; color: #9ca3af; }
+.modal-confirm {
+  background: #c4849a;
+  border: none;
+  color: #fff;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.modal-confirm:hover { background: #a8687c; }
+.modal-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.modal-danger { background: #ef4444; }
+.modal-danger:hover { background: #dc2626; }
+
 /* ── Browser support banner ── */
 .audio-banner {
   display: flex;
