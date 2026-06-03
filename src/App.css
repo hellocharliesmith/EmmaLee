@@ -132,27 +132,70 @@
 
 .pr-root-btns { flex-wrap: wrap; }
 
-/* Row: labels + scrollable grid */
+/* Scroll buttons above/below — offset to align with grid start */
+.pr-scroll-row {
+  display: flex;
+  padding-left: 70px;
+}
+
+/* Main row: piano | labels | grid */
 .pr-row {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 4px;
 }
 
-.pr-labels-col {
+/* Piano key column */
+.pr-piano-col {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
-  width: 44px;
+  width: 22px;
 }
 
-/* Separate label list matches grid gap exactly */
+/* ── Piano key shapes ── */
+.pk {
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 0 2px 2px 0;
+  position: relative;
+}
+.pk--white {
+  background: #252836;
+  border-right: 1px solid #0d0f12;
+  border-bottom: 1px solid #0d0f12;
+  width: 22px;
+}
+.pk--black {
+  background: #111318;
+  width: 14px;
+  margin-left: 4px;
+  border-radius: 0 2px 2px 2px;
+  border-bottom: 1px solid #0a0c0f;
+}
+.pk--root {
+  background: rgba(196, 132, 154, 0.22) !important;
+}
+/* Gap indicator: thin dark line at bottom-right of key where a black key falls below */
+.pk--gap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 42%;
+  height: 38%;
+  background: #0e1014;
+  border-radius: 0 0 2px 0;
+}
+
+/* Note label list — exactly aligned, no scroll buttons inside */
 .pr-labels-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex-shrink: 0;
+  width: 36px;
 }
 
 .pr-scroll-btn {

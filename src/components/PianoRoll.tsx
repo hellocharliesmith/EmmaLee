@@ -8,6 +8,29 @@ const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
   { id: 'chromatic',     label: 'Chromatic' },
 ];
 
+const BLACK_KEYS = new Set([1, 3, 6, 8, 10]); // C# D# F# G# A#
+
+// Does this note have a black key BELOW it in chromatic scale?
+// (used to draw the gap indicator at the bottom of the key)
+function hasGapBelow(midi: number): boolean {
+  return BLACK_KEYS.has((midi - 1 + 12) % 12);
+}
+
+function PianoKey({ midi, rootNote }: { midi: number; rootNote: number }) {
+  const pitch = midi % 12;
+  const isBlack = BLACK_KEYS.has(pitch);
+  const isRoot  = pitch === rootNote;
+  const showGap = !isBlack && hasGapBelow(midi);
+  return (
+    <div className={[
+      'pk',
+      isBlack  ? 'pk--black' : 'pk--white',
+      isRoot   ? 'pk--root'  : '',
+      showGap  ? 'pk--gap'   : '',
+    ].filter(Boolean).join(' ')} />
+  );
+}
+
 interface Props {
   steps: Array<number | null>;
   visibleNotes: number[];
@@ -31,6 +54,10 @@ export function PianoRoll({
   const handleCell = useCallback((col: number, midi: number) => {
     onSetStep(col, steps[col] === midi ? null : midi);
   }, [steps, onSetStep]);
+
+  const ROW_H = 30;
+  const GAP   = 2;
+  const gridH = VISIBLE_ROWS * ROW_H + (VISIBLE_ROWS - 1) * GAP;
 
   return (
     <div className="piano-roll-wrap">
@@ -61,36 +88,44 @@ export function PianoRoll({
         </div>
       </div>
 
-      {/* Labels + grid in a flex row */}
+      {/* Scroll up — sits above the grid, aligned to piano+label width */}
+      <div className="pr-scroll-row">
+        <button className="pr-scroll-btn" onClick={onScrollUp} disabled={scroll === 0}>▲</button>
+      </div>
+
+      {/* Piano keys | labels | grid — all aligned to same row height */}
       <div className="pr-row">
 
-        {/* Note labels column */}
-        <div className="pr-labels-col">
-          <button className="pr-scroll-btn" onClick={onScrollUp} disabled={scroll === 0}>▲</button>
-          <div className="pr-labels-list">
-            {visibleNotes.map((midi, row) => (
-              <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
-                {noteName(midi)}
-              </div>
-            ))}
-          </div>
-          <button className="pr-scroll-btn" onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
+        {/* Piano keys column */}
+        <div className="pr-piano-col" style={{ height: gridH }}>
+          {visibleNotes.map((midi, i) => (
+            <PianoKey key={i} midi={midi} rootNote={rootNote} />
+          ))}
         </div>
 
-        {/* Scrollable grid column */}
+        {/* Note label column — perfectly aligned, no scroll buttons inside */}
+        <div className="pr-labels-list" style={{ height: gridH }}>
+          {visibleNotes.map((midi, row) => (
+            <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
+              {noteName(midi)}
+            </div>
+          ))}
+        </div>
+
+        {/* Scrollable grid */}
         <div className="pr-grid-col">
           <div
             className="pr-grid"
             style={{
               gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
-              gridTemplateRows: `repeat(${VISIBLE_ROWS}, 30px)`,
+              gridTemplateRows: `repeat(${VISIBLE_ROWS}, ${ROW_H}px)`,
             }}
           >
             {Array.from({ length: VISIBLE_ROWS }, (_, row) =>
               Array.from({ length: STEP_COUNT }, (_, col) => {
                 const midi = visibleNotes[row];
-                const active = steps[col] === midi;
-                const playing = col === currentStep;
+                const active    = steps[col] === midi;
+                const playing   = col === currentStep;
                 const barStart  = col % 8 === 0;
                 const beatStart = col % 4 === 0 && !barStart;
                 const oddGroup  = Math.floor(col / 4) % 2 === 1;
@@ -123,6 +158,12 @@ export function PianoRoll({
         </div>
 
       </div>
+
+      {/* Scroll down */}
+      <div className="pr-scroll-row">
+        <button className="pr-scroll-btn" onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
+      </div>
+
     </div>
   );
 }
