@@ -43,7 +43,7 @@ export default function App() {
 
   // ── Sequencer state ─────────────────────────────────────────────────────
   const {
-    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
+    steps, visibleNotes, allNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
     setStep, loadSteps, setScale, setRootNote,
     scrollUp, scrollDown, setScrollRowDirect,
