@@ -1,4 +1,4 @@
-import type { ScaleType } from './hooks/useSequencer';
+import type { ScaleType, StepValue } from './hooks/useSequencer';
 
 export interface LfoState {
   on: boolean;
@@ -8,7 +8,7 @@ export interface LfoState {
 }
 
 export interface SongState {
-  steps: Array<number | null>;
+  steps: StepValue[];
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;

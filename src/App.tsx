@@ -5,6 +5,7 @@ import { divisionSeconds } from './audio/utils';
 import { useSequencer } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
+import { SubStepDrawer } from './components/SubStepDrawer';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { DelayControls } from './components/DelayControls';
@@ -36,6 +37,7 @@ export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
   const [audioError,   setAudioError]   = useState<string | null>(null);
   const [unsupported,  setUnsupported]  = useState<string | null>(null);
+  const [drawerStep,   setDrawerStep]   = useState<number | null>(null);
 
   useEffect(() => { setUnsupported(checkSupport()); }, []);
 
@@ -192,10 +194,20 @@ export default function App() {
       <PianoRoll
         steps={steps} visibleNotes={visibleNotes} scale={scale}
         rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-        currentStep={currentStep}
+        currentStep={currentStep} drawerStep={drawerStep}
         onSetStep={setStep} onSetScale={setScale} onSetRootNote={setRootNote}
         onScrollUp={scrollUp} onScrollDown={scrollDown}
+        onOpenDrawer={col => setDrawerStep(prev => prev === col ? null : col)}
       />
+      {drawerStep !== null && steps[drawerStep] !== null && (
+        <SubStepDrawer
+          stepIndex={drawerStep}
+          step={steps[drawerStep]}
+          allNotes={allNotes}
+          onClose={() => setDrawerStep(null)}
+          onUpdate={value => setStep(drawerStep, value)}
+        />
+      )}
 
       <div className="waveform-section">
         <div className="master-vol-wrap">

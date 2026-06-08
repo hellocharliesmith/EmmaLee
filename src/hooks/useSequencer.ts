@@ -4,6 +4,26 @@ import { triggerNote } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 
+// ── Sub-step types ────────────────────────────────────────────────────────
+export interface SubStep {
+  div: 2 | 3 | 4;
+  notes: Array<number | null>;
+}
+
+/** A step is a single MIDI note, silence, or a sub-step strum pattern */
+export type StepValue = number | null | SubStep;
+
+export function isSubStep(s: StepValue): s is SubStep {
+  return s !== null && typeof s === 'object';
+}
+
+/** The "primary" note for display/comparison purposes */
+export function stepMainNote(s: StepValue): number | null {
+  if (s === null || typeof s === 'number') return s as number | null;
+  return (s as SubStep).notes[0] ?? null;
+}
+
+// ── Scale / note helpers ──────────────────────────────────────────────────
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
   'melodic-minor': [0, 2, 3, 5, 7, 9, 11],
@@ -31,8 +51,8 @@ export function buildNotes(root: number, scale: ScaleType): number[] {
 export const STEP_COUNT = 32;
 export const VISIBLE_ROWS = 8;
 
-function makeDefaultSteps(): Array<number | null> {
-  const s: Array<number | null> = Array(STEP_COUNT).fill(null);
+function makeDefaultSteps(): StepValue[] {
+  const s: StepValue[] = Array(STEP_COUNT).fill(null);
   s[0]  = 64; // E4
   s[8]  = 71; // B4
   s[14] = 69; // A4
@@ -42,37 +62,31 @@ function makeDefaultSteps(): Array<number | null> {
 }
 
 export function useSequencer() {
-  const [steps, setSteps] = useState<Array<number | null>>(makeDefaultSteps);
+  const [steps, setSteps] = useState<StepValue[]>(makeDefaultSteps);
   const [scale, setScaleState] = useState<ScaleType>('major');
-  const [rootNote, setRootNoteState] = useState(0); // C
-  const [scrollRow, setScrollRow] = useState(5);   // show D5–D4 range by default
+  const [rootNote, setRootNoteState] = useState(0);
+  const [scrollRow, setScrollRow] = useState(5);
   const [bpm, setBpm] = useState(72);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const sequenceRef = useRef<Tone.Sequence | null>(null);
+
   const stepsRef = useRef(steps);
   useEffect(() => { stepsRef.current = steps; }, [steps]);
 
-  // Derived note list — highest at index 0 (for top-to-bottom display)
   const allNotes = buildNotes(rootNote, scale);
   const reversed = [...allNotes].reverse();
   const maxScroll = Math.max(0, reversed.length - VISIBLE_ROWS);
   const scroll = Math.min(scrollRow, maxScroll);
   const visibleNotes = reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
-  const setStep = useCallback((step: number, midi: number | null) => {
-    setSteps(prev => { const n = [...prev]; n[step] = midi; return n; });
+  const setStep = useCallback((index: number, value: StepValue) => {
+    setSteps(prev => { const n = [...prev]; n[index] = value; return n; });
   }, []);
 
-  // Load an entire steps array at once (for save/load)
-  const loadSteps = useCallback((newSteps: Array<number | null>) => {
+  const loadSteps = useCallback((newSteps: StepValue[]) => {
     setSteps(newSteps);
     stepsRef.current = newSteps;
-  }, []);
-
-  // Direct scroll setter (for save/load)
-  const setScrollRowDirect = useCallback((row: number) => {
-    setScrollRow(row);
   }, []);
 
   const setScale = useCallback((s: ScaleType) => {
@@ -95,19 +109,36 @@ export function useSequencer() {
     });
   }, [rootNote, scale]);
 
+  const setScrollRowDirect = useCallback((row: number) => setScrollRow(row), []);
+
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
+
     sequenceRef.current = new Tone.Sequence(
       (time, stepIdx) => {
-        const midi = stepsRef.current[stepIdx as number];
-        Tone.getDraw().schedule(() => {
-          setCurrentStep(stepIdx as number);
-          if (midi !== null) triggerNote(midi);
-        }, time);
+        const step = stepsRef.current[stepIdx as number];
+
+        if (isSubStep(step)) {
+          // Schedule each sub-step trigger within this step's 16th-note window
+          const stepSecs = Tone.Time('16n').toSeconds();
+          (step as SubStep).notes.forEach((note, i) => {
+            const noteTime = time + (i / (step as SubStep).div) * stepSecs;
+            Tone.getDraw().schedule(() => {
+              if (i === 0) setCurrentStep(stepIdx as number);
+              if (note !== null) triggerNote(note);
+            }, noteTime);
+          });
+        } else {
+          Tone.getDraw().schedule(() => {
+            setCurrentStep(stepIdx as number);
+            if (typeof step === 'number') triggerNote(step);
+          }, time);
+        }
       },
       Array.from({ length: STEP_COUNT }, (_, i) => i),
       '16n'
     );
+
     sequenceRef.current.start(0);
     Tone.getTransport().start();
     setIsPlaying(true);

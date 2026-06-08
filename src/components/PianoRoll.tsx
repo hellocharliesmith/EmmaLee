@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { noteName, STEP_COUNT, VISIBLE_ROWS, type ScaleType } from '../hooks/useSequencer';
+import { noteName, isSubStep, STEP_COUNT, VISIBLE_ROWS,
+         type ScaleType, type StepValue, type SubStep } from '../hooks/useSequencer';
 
 const ROOT_LABELS = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
 const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
@@ -24,28 +25,40 @@ function PianoKey({ midi, rootNote }: { midi: number; rootNote: number }) {
 }
 
 interface Props {
-  steps: Array<number | null>;
+  steps: StepValue[];
   visibleNotes: number[];
   scale: ScaleType;
   rootNote: number;
   scroll: number;
   maxScroll: number;
   currentStep: number;
-  onSetStep: (step: number, midi: number | null) => void;
+  drawerStep: number | null;
+  onSetStep: (step: number, value: StepValue) => void;
   onSetScale: (s: ScaleType) => void;
   onSetRootNote: (r: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
+  onOpenDrawer: (col: number) => void;
 }
 
 export function PianoRoll({
   steps, visibleNotes, scale, rootNote, scroll, maxScroll,
-  currentStep, onSetStep, onSetScale, onSetRootNote, onScrollUp, onScrollDown,
+  currentStep, drawerStep, onSetStep, onSetScale, onSetRootNote,
+  onScrollUp, onScrollDown, onOpenDrawer,
 }: Props) {
 
   const handleCell = useCallback((col: number, midi: number) => {
-    onSetStep(col, steps[col] === midi ? null : midi);
-  }, [steps, onSetStep]);
+    const step = steps[col];
+    if (isSubStep(step)) {
+      // Sub-step column — open drawer
+      onOpenDrawer(col);
+      return;
+    }
+    // Normal toggle
+    const next = step === midi ? null : midi;
+    onSetStep(col, next);
+    if (next !== null) onOpenDrawer(col); // open drawer on activate
+  }, [steps, onSetStep, onOpenDrawer]);
 
   const ROW_H = 30;
   const GAP   = 2;
@@ -118,19 +131,27 @@ export function PianoRoll({
                 const midi = visibleNotes[row];
                 const active    = steps[col] === midi;
                 const playing   = col === currentStep;
-                const barStart  = col % 8 === 0;
-                const beatStart = col % 4 === 0 && !barStart;
-                const oddGroup  = Math.floor(col / 4) % 2 === 1;
+                const barStart   = col % 8 === 0;
+                const beatStart  = col % 4 === 0 && !barStart;
+                const oddGroup   = Math.floor(col / 4) % 2 === 1;
+                const stepData   = steps[col];
+                const hasSub     = isSubStep(stepData);
+                const subNotes   = hasSub ? (stepData as SubStep).notes : [];
+                const isSubActive = hasSub && subNotes.includes(midi);
+                const isDrawerCol = col === drawerStep;
                 return (
                   <div
                     key={`${row}-${col}`}
                     className={[
                       'pr-cell',
-                      active    ? 'active'     : '',
-                      playing   ? 'playhead'   : '',
-                      barStart  ? 'bar-start'  : '',
-                      beatStart ? 'beat-start' : '',
-                      oddGroup  ? 'group-odd'  : '',
+                      active      ? 'active'      : '',
+                      isSubActive ? 'sub-active'  : '',
+                      playing     ? 'playhead'    : '',
+                      barStart    ? 'bar-start'   : '',
+                      beatStart   ? 'beat-start'  : '',
+                      oddGroup    ? 'group-odd'   : '',
+                      hasSub      ? 'has-substep' : '',
+                      isDrawerCol ? 'drawer-col'  : '',
                     ].filter(Boolean).join(' ')}
                     onClick={() => handleCell(col, midi)}
                   />
