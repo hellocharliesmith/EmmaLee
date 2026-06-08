@@ -46,7 +46,7 @@ export default function App() {
   useEffect(() => { setUnsupported(checkSupport()); }, []);
 
   const {
-    steps, visibleNotes, allNotes, scale, rootNote, scroll, maxScroll,
+    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
     toggleNote, toggleStrumDir, loadSteps,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
