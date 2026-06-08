@@ -239,6 +239,19 @@ export function triggerNote(midiNote: number): void {
 }
 
 // ── LFO — config forwarded to AudioWorklet ────────────────────────────────
+export function setRingsReverbEnabled(enabled: boolean): void {
+  if (!workletNode) return;
+  workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled } });
+  // When Rings reverb is on, bypass the external reverb chain
+  if (wetGain) wetGain.gain.value = enabled ? 0 : 0.5;
+  if (dryGain) dryGain.gain.value = enabled ? 1 : 0.75;
+}
+
+export function setRingsReverbParams(amount: number, time: number, lp: number): void {
+  if (!workletNode) return;
+  workletNode.port.postMessage({ type: 'rings-reverb-set', payload: { amount, time, lp } });
+}
+
 export function setLFOEnabled(i: number, enabled: boolean): void {
   if (!workletNode || !isReady) return;
   workletNode.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'enabled', value: enabled } });

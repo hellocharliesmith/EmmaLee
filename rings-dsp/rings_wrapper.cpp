@@ -3,11 +3,17 @@
 #include <cmath>
 
 #include "../rings-source/rings/dsp/part.h"
+#include "../rings-source/rings/dsp/fx/reverb.h"
 
 static rings::Part part;
 static rings::PerformanceState performance;
 static rings::Patch patch;
 static uint16_t reverb_buffer[32768];
+
+// Standalone reverb — works with any model, applied after Part::Process
+static rings::Reverb standalone_reverb;
+static uint16_t standalone_reverb_buf[32768];
+static bool standalone_reverb_enabled = false;
 
 static float in_buffer[rings::kMaxBlockSize];
 static float out_buffer[rings::kMaxBlockSize];
@@ -31,6 +37,15 @@ void rings_init(float sample_rate) {
   performance.internal_exciter = true;
   performance.internal_strum = false;
   performance.internal_note = false;
+
+  // Init standalone reverb
+  memset(standalone_reverb_buf, 0, sizeof(standalone_reverb_buf));
+  standalone_reverb.Init(standalone_reverb_buf);
+  standalone_reverb.set_amount(0.5f);
+  standalone_reverb.set_diffusion(0.625f);
+  standalone_reverb.set_input_gain(0.2f);
+  standalone_reverb.set_time(0.5f);
+  standalone_reverb.set_lp(0.7f);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -58,6 +73,21 @@ void rings_trigger() {
   performance.strum = true;
 }
 
+// Enable/disable standalone reverb
+EMSCRIPTEN_KEEPALIVE
+void rings_reverb_enable(int enabled) {
+  standalone_reverb_enabled = (enabled != 0);
+}
+
+// Set standalone reverb parameters
+// amount: 0-1 (wet/dry), time: 0-1 (decay), lp: 0-1 (brightness)
+EMSCRIPTEN_KEEPALIVE
+void rings_reverb_set(float amount, float time, float lp) {
+  standalone_reverb.set_amount(amount);
+  standalone_reverb.set_time(0.35f + 0.63f * time);
+  standalone_reverb.set_lp(0.3f + 0.6f * lp);
+}
+
 EMSCRIPTEN_KEEPALIVE
 void rings_process(float* output, int num_samples) {
   int i = 0;
@@ -67,6 +97,11 @@ void rings_process(float* output, int num_samples) {
 
     memset(in_buffer, 0, sizeof(float) * block);
     part.Process(performance, patch, in_buffer, out_buffer, aux_buffer, block);
+
+    // Apply standalone reverb in-place on out_buffer/aux_buffer before output copy
+    if (standalone_reverb_enabled) {
+      standalone_reverb.Process(out_buffer, aux_buffer, block);
+    }
 
     for (int j = 0; j < block; j++) {
       output[(i + j) * 2]     = out_buffer[j];

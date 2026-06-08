@@ -12,11 +12,13 @@ class RingsProcessor extends AudioWorkletProcessor {
     this.base       = 0;    // outputPtr >> 2, pre-computed
 
     // Cached WASM exports (avoids property-chain lookups in process())
-    this._setParam = null;
-    this._setModel = null;
-    this._setNote  = null;
-    this._trigger  = null;
-    this._process  = null;
+    this._setParam     = null;
+    this._setModel     = null;
+    this._setNote      = null;
+    this._trigger      = null;
+    this._reverbEnable = null;
+    this._reverbSet    = null;
+    this._process      = null;
 
     this.pendingTrigger = false;
 
@@ -65,6 +67,14 @@ class RingsProcessor extends AudioWorkletProcessor {
           this._setModel?.(payload.model);
           break;
 
+        case 'rings-reverb-enable':
+          this._reverbEnable?.(payload.enabled ? 1 : 0);
+          break;
+
+        case 'rings-reverb-set':
+          this._reverbSet?.(payload.amount, payload.time, payload.lp);
+          break;
+
         case 'set-lfo': {
           const { index, field, value } = payload;
           const lfo = this.lfos[index];
@@ -99,16 +109,19 @@ class RingsProcessor extends AudioWorkletProcessor {
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory
 
-      // Cache exports — d=init e=set_param f=set_model g=set_note h=trigger i=process j=malloc
-      this._setParam = instance.exports.e;
-      this._setModel = instance.exports.f;
-      this._setNote  = instance.exports.g;
-      this._trigger  = instance.exports.h;
-      this._process  = instance.exports.i;
+      // d=init e=set_param f=set_model g=set_note h=trigger
+      // i=reverb_enable j=reverb_set k=process l=malloc m=free
+      this._setParam     = instance.exports.e;
+      this._setModel     = instance.exports.f;
+      this._setNote      = instance.exports.g;
+      this._trigger      = instance.exports.h;
+      this._reverbEnable = instance.exports.i;
+      this._reverbSet    = instance.exports.j;
+      this._process      = instance.exports.k;
 
       instance.exports.d(sampleRate); // rings_init
 
-      this.outputPtr = instance.exports.j(128 * 2 * 4); // malloc
+      this.outputPtr = instance.exports.l(128 * 2 * 4); // malloc
       this.base      = this.outputPtr >> 2;              // pre-computed float offset
 
       // Cache heap view — safe to hold since memory doesn't grow after init

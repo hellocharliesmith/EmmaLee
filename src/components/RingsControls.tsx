@@ -6,6 +6,10 @@ const MODELS = [
   { id: 0, label: 'Modal',   description: 'Struck metal, glass, wood — 60 resonant modes' },
   { id: 1, label: 'Strings', description: 'Sympathetic strings — sitar-like overtones' },
   { id: 2, label: 'String',  description: 'Karplus-Strong — plucked/bowed string' },
+  // Secret modes (bonus models from MI firmware)
+  { id: 3, label: 'FM',      description: 'FM voice — stiff string + frequency modulation' },
+  { id: 4, label: 'Sym.Q',   description: 'Sympathetic strings, pitch-quantized to semitones' },
+  { id: 5, label: 'S+Rev',   description: 'String synth with Rings\' built-in plate reverb (Damping controls depth)' },
 ];
 
 const PARAM_LABELS = ['Structure', 'Brightness', 'Damping', 'Position'];
@@ -33,7 +37,7 @@ export function RingsControls({ model, params, lfo, onModelChange, onParamChange
     <div className="rings-controls">
       <div className="knob-row">
         <label>Model</label>
-        <div className="reverb-type-btns">
+        <div className="reverb-type-btns" style={{ flexWrap: 'wrap' }}>
           {MODELS.map(m => (
             <button key={m.id}
               className={`reverb-type-btn${model === m.id ? ' active' : ''}`}
