@@ -32,12 +32,12 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
     if (id === activeType || loading) return;
     setLoading(true);
     if (id === 'rings') {
-      // Enable Rings DSP reverb, bypass external chain
-      setRingsReverbEnabled(true);
-      setRingsReverbParams(wet, decay, tone);
+      // lp must be 0-1; tone state may be in Hz when coming from another type
+      const normalLp = tone > 1 ? Math.min(1, tone / 20000) : tone;
+      setRingsReverbEnabled(true, wet);
+      setRingsReverbParams(wet, decay, normalLp);
     } else {
-      // Switching away from Rings reverb — disable it
-      if (activeType === 'rings') setRingsReverbEnabled(false);
+      if (activeType === 'rings') setRingsReverbEnabled(false, wet);
       await setReverbType(id);
     }
     onTypeChange(id);

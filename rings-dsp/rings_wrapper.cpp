@@ -79,10 +79,12 @@ void rings_reverb_enable(int enabled) {
   standalone_reverb_enabled = (enabled != 0);
 }
 
-// Set standalone reverb parameters
-// amount: 0-1 (wet/dry), time: 0-1 (decay), lp: 0-1 (brightness)
+// Set standalone reverb parameters — all values clamped to [0,1] for safety
 EMSCRIPTEN_KEEPALIVE
 void rings_reverb_set(float amount, float time, float lp) {
+  if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
+  if (time   < 0.0f) time   = 0.0f; if (time   > 1.0f) time   = 1.0f;
+  if (lp     < 0.0f) lp     = 0.0f; if (lp     > 1.0f) lp     = 1.0f;
   standalone_reverb.set_amount(amount);
   standalone_reverb.set_time(0.35f + 0.63f * time);
   standalone_reverb.set_lp(0.3f + 0.6f * lp);

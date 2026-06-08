@@ -239,12 +239,23 @@ export function triggerNote(midiNote: number): void {
 }
 
 // ── LFO — config forwarded to AudioWorklet ────────────────────────────────
-export function setRingsReverbEnabled(enabled: boolean): void {
+export function setRingsReverbEnabled(enabled: boolean, restoreWet = 0.5): void {
   if (!workletNode) return;
   workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled } });
-  // When Rings reverb is on, bypass the external reverb chain
-  if (wetGain) wetGain.gain.value = enabled ? 0 : 0.5;
-  if (dryGain) dryGain.gain.value = enabled ? 1 : 0.75;
+  // Smooth 50ms ramp to avoid pop when switching
+  const rampTime = 0.05;
+  if (wetGain) {
+    const ctx = wetGain.context as AudioContext;
+    const target = enabled ? 0 : restoreWet;
+    wetGain.gain.cancelScheduledValues(ctx.currentTime);
+    wetGain.gain.linearRampToValueAtTime(target, ctx.currentTime + rampTime);
+  }
+  if (dryGain) {
+    const ctx = dryGain.context as AudioContext;
+    const target = enabled ? 1 : Math.max(0, 1 - restoreWet * 0.5);
+    dryGain.gain.cancelScheduledValues(ctx.currentTime);
+    dryGain.gain.linearRampToValueAtTime(target, ctx.currentTime + rampTime);
+  }
 }
 
 export function setRingsReverbParams(amount: number, time: number, lp: number): void {
