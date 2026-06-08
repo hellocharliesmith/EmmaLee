@@ -242,20 +242,32 @@ export function triggerNote(midiNote: number): void {
 export function setRingsReverbEnabled(enabled: boolean, restoreWet = 0.5): void {
   if (!workletNode) return;
   workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled } });
-  // Smooth 50ms ramp to avoid pop when switching
-  const rampTime = 0.05;
+
+  // setTargetAtTime is more reliable than ramp — no cancel/hold edge cases
+  const tau = 0.025; // 25ms time constant, smooth but fast
   if (wetGain) {
     const ctx = wetGain.context as AudioContext;
-    const target = enabled ? 0 : restoreWet;
-    wetGain.gain.cancelScheduledValues(ctx.currentTime);
-    wetGain.gain.linearRampToValueAtTime(target, ctx.currentTime + rampTime);
+    const t = ctx.currentTime;
+    wetGain.gain.cancelScheduledValues(t);
+    wetGain.gain.setValueAtTime(wetGain.gain.value, t); // anchor current value
+    wetGain.gain.setTargetAtTime(enabled ? 0 : restoreWet, t, tau);
   }
   if (dryGain) {
     const ctx = dryGain.context as AudioContext;
-    const target = enabled ? 1 : Math.max(0, 1 - restoreWet * 0.5);
-    dryGain.gain.cancelScheduledValues(ctx.currentTime);
-    dryGain.gain.linearRampToValueAtTime(target, ctx.currentTime + rampTime);
+    const t = ctx.currentTime;
+    const dryTarget = enabled ? 1 : Math.max(0, 1 - restoreWet * 0.5);
+    dryGain.gain.cancelScheduledValues(t);
+    dryGain.gain.setValueAtTime(dryGain.gain.value, t);
+    dryGain.gain.setTargetAtTime(dryTarget, t, tau);
   }
+}
+
+// Emergency restore — call if audio disappears unexpectedly
+export function restoreGains(wet = 0.5): void {
+  if (wetGain) wetGain.gain.value = wet;
+  if (dryGain) dryGain.gain.value = Math.max(0, 1 - wet * 0.5);
+  if (masterGain) masterGain.gain.value = 1;
+  if (workletNode) workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled: false } });
 }
 
 export function setRingsReverbParams(amount: number, time: number, lp: number): void {
