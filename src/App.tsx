@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer, type ScaleType } from './hooks/useSequencer';
+import { useSequencer, type ScaleType, type StepValue } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
@@ -46,9 +46,12 @@ export default function App() {
   useEffect(() => { setUnsupported(checkSupport()); }, []);
 
   const {
-    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
+    steps, pageSteps, enabledPages, viewPage, playingPage,
+    visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir, loadSteps,
+    toggleNote, toggleStrumDir,
+    toggleEnablePage, switchViewPage,
+    loadAllPages,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   } = useSequencer();
@@ -79,7 +82,7 @@ export default function App() {
 
   function captureState(): SongState {
     return {
-      steps, scale, rootNote, scrollRow: scroll, bpm,
+      steps: pageSteps, scale, rootNote, scrollRow: scroll, bpm,
       model,
       structure: params[0], brightness: params[1],
       damping: params[2],   position: params[3],
@@ -93,7 +96,11 @@ export default function App() {
     const s = song.state;
     setScale(s.scale);
     setRootNote(s.rootNote);
-    loadSteps(s.steps);
+    // Support both old (single page) and new (4 page) formats
+    const pages = Array.isArray(s.steps[0]) || s.steps.length > 32
+      ? s.steps as unknown as StepValue[][]
+      : [s.steps as unknown as StepValue[], Array(32).fill(null), Array(32).fill(null), Array(32).fill(null)];
+    loadAllPages(pages, s.enabledPages ?? [true, false, false, false]);
     setScrollRowDirect(s.scrollRow);
     updateBpm(s.bpm);
     setModel(s.model);
@@ -192,6 +199,31 @@ export default function App() {
           <button className="banner-dismiss" onClick={() => setAudioError(null)}>✕</button>
         </div>
       )}
+
+      {/* Page selector */}
+      <div className="page-selector">
+        <span className="page-label">Pages</span>
+        {[0,1,2,3].map(p => {
+          const enabled  = enabledPages[p];
+          const viewing  = viewPage === p;
+          const playing  = isPlaying && playingPage === p;
+          return (
+            <div key={p} className="page-item">
+              <button
+                className={['page-btn', viewing ? 'viewing' : '', enabled ? 'enabled' : '', playing ? 'playing' : ''].filter(Boolean).join(' ')}
+                onClick={() => { if (!enabled && p > 0) toggleEnablePage(p); switchViewPage(p); }}
+                title={enabled ? `Page ${p+1} (in loop)` : `Page ${p+1} — click to add to loop`}
+              >
+                {p + 1}
+                {playing && <span className="page-playing-dot" />}
+              </button>
+              {p > 0 && enabled && (
+                <button className="page-remove" onClick={() => toggleEnablePage(p)} title="Remove from loop">×</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <PianoRoll
         steps={steps} visibleNotes={visibleNotes}

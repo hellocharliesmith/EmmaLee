@@ -9,7 +9,8 @@ export interface LfoState {
 }
 
 export interface SongState {
-  steps: StepValue[];
+  steps: StepValue[][] | StepValue[]; // new: 4 pages; old: single page (backward compat)
+  enabledPages?: boolean[];
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;

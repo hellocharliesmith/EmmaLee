@@ -288,6 +288,77 @@
   width: 30px;
 }
 
+/* ── Page selector ── */
+.page-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+}
+.page-label {
+  font-size: 0.68rem;
+  color: #4b5060;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: 2px;
+}
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.page-btn {
+  width: 28px;
+  height: 28px;
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  border-radius: 4px;
+  color: #4b5060;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.page-btn.enabled  { border-color: #3a3d4a; color: #9ca3af; }
+.page-btn.viewing  { border-color: #c4849a; color: #c4849a; background: rgba(196,132,154,0.08); }
+.page-btn.playing  { background: rgba(196,132,154,0.15); }
+.page-btn:hover    { border-color: #4b5060; color: #9ca3af; }
+
+.page-playing-dot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c4849a;
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from { opacity: 0.5; }
+  to   { opacity: 1; }
+}
+
+.page-remove {
+  width: 14px;
+  height: 28px;
+  background: none;
+  border: none;
+  color: #3a3d4a;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.12s;
+  line-height: 1;
+}
+.page-remove:hover { color: #ef4444; }
+
 /* ── Piano Roll ── */
 .piano-roll-wrap {
   display: flex;

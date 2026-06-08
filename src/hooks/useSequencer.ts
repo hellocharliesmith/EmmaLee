@@ -1,20 +1,19 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import * as Tone from 'tone';
 import { triggerNote } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 
-// ── Step data ─────────────────────────────────────────────────────────────
 export interface StepData {
-  notes: number[];        // 1–4 sorted (ascending) MIDI notes
-  strumDown: boolean;     // false = low→high (up), true = high→low (down)
+  notes: number[];
+  strumDown: boolean;
 }
-
 export type StepValue = StepData | null;
-
 export const MAX_NOTES_PER_STEP = 4;
+export const STEP_COUNT   = 32;
+export const VISIBLE_ROWS = 12;
+export const NUM_PAGES    = 4;
 
-// ── Scale / note helpers ──────────────────────────────────────────────────
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
   'melodic-minor': [0, 2, 3, 5, 7, 9, 11],
@@ -30,7 +29,7 @@ export function noteName(midi: number): string {
 export function buildNotes(root: number, scale: ScaleType): number[] {
   const intervals = SCALE_INTERVALS[scale];
   const notes: number[] = [];
-  for (let oct = 3; oct <= 5; oct++) {
+  for (let oct = 3; oct <= 6; oct++) {   // ← now 4 octaves: C3–B6
     for (const iv of intervals) {
       const midi = 12 * (oct + 1) + root + iv;
       if (midi >= 0 && midi <= 127) notes.push(midi);
@@ -39,12 +38,7 @@ export function buildNotes(root: number, scale: ScaleType): number[] {
   return notes;
 }
 
-export const STEP_COUNT    = 32;
-export const VISIBLE_ROWS  = 12;
-
-function note(midi: number): StepData {
-  return { notes: [midi], strumDown: false };
-}
+function note(midi: number): StepData { return { notes: [midi], strumDown: false }; }
 
 function makeDefaultSteps(): StepValue[] {
   const s: StepValue[] = Array(STEP_COUNT).fill(null);
@@ -56,80 +50,114 @@ function makeDefaultSteps(): StepValue[] {
   return s;
 }
 
-export function useSequencer() {
-  const [steps, setSteps]         = useState<StepValue[]>(makeDefaultSteps);
-  const [scale, setScaleState]    = useState<ScaleType>('major');
-  const [rootNote, setRootNoteState] = useState(0);
-  const [scrollRow, setScrollRow] = useState(0);   // 12 rows: start at top
-  const [bpm, setBpm]             = useState(72);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentStep, setCurrentStep] = useState(-1);
-  const sequenceRef = useRef<Tone.Sequence | null>(null);
+function makeEmptyPage(): StepValue[] { return Array(STEP_COUNT).fill(null); }
 
-  const stepsRef = useRef(steps);
-  // keep ref in sync synchronously to avoid closure issues
-  const updateSteps = (fn: (prev: StepValue[]) => StepValue[]) => {
-    setSteps(prev => {
+export function useSequencer() {
+  // ── Per-page step data ────────────────────────────────────────────────
+  const [pageSteps, setPageSteps] = useState<StepValue[][]>(() => [
+    makeDefaultSteps(),
+    makeEmptyPage(),
+    makeEmptyPage(),
+    makeEmptyPage(),
+  ]);
+  const [enabledPages, setEnabledPages] = useState<boolean[]>([true, false, false, false]);
+  const [viewPage, setViewPage] = useState(0);
+
+  // ── Playback state ─────────────────────────────────────────────────────
+  const [scale, setScaleState]       = useState<ScaleType>('major');
+  const [rootNote, setRootNoteState] = useState(0);
+  const [scrollRow, setScrollRow]    = useState(7); // B5–E4 default view
+  const [bpm, setBpm]                = useState(72);
+  const [isPlaying, setIsPlaying]    = useState(false);
+  const [currentStep, setCurrentStep]  = useState(-1);
+  const [playingPage, setPlayingPage]  = useState(-1); // absolute page 0–3 during playback
+
+  const sequenceRef    = useRef<Tone.Sequence | null>(null);
+  const pageStepsRef   = useRef(pageSteps);
+  const enabledRef     = useRef(enabledPages);
+
+  // Keep refs in sync
+  const updatePageSteps = (fn: (prev: StepValue[][]) => StepValue[][]) => {
+    setPageSteps(prev => {
       const next = fn(prev);
-      stepsRef.current = next;
+      pageStepsRef.current = next;
       return next;
     });
   };
 
+  // ── Derived: current page's visible steps ────────────────────────────
+  const steps = pageSteps[viewPage];
+
   const allNotes     = buildNotes(rootNote, scale);
-  const reversed     = [...allNotes].reverse();
+  const reversed     = useMemo(() => [...allNotes].reverse(), [allNotes]);
   const maxScroll    = Math.max(0, reversed.length - VISIBLE_ROWS);
   const scroll       = Math.min(scrollRow, maxScroll);
   const visibleNotes = reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
-  // Toggle a note in a step (multi-select, max 4)
+  // ── Step editing ──────────────────────────────────────────────────────
   const toggleNote = useCallback((col: number, midi: number) => {
-    updateSteps(prev => {
-      const step = prev[col];
-      const currentNotes = step?.notes ?? [];
+    updatePageSteps(prev => {
+      const page  = prev[viewPage];
+      const step  = page[col];
+      const cur   = step?.notes ?? [];
       let newNotes: number[];
 
-      if (currentNotes.includes(midi)) {
-        newNotes = currentNotes.filter(n => n !== midi);
+      if (cur.includes(midi)) {
+        newNotes = cur.filter(n => n !== midi);
       } else {
-        if (currentNotes.length >= MAX_NOTES_PER_STEP) return prev; // at limit
-        newNotes = [...currentNotes, midi].sort((a, b) => a - b);
+        if (cur.length >= MAX_NOTES_PER_STEP) return prev;
+        newNotes = [...cur, midi].sort((a, b) => a - b);
       }
 
+      const newPage = [...page];
+      newPage[col]  = newNotes.length === 0
+        ? null : { notes: newNotes, strumDown: step?.strumDown ?? false };
       const next = [...prev];
-      next[col] = newNotes.length === 0
-        ? null
-        : { notes: newNotes, strumDown: step?.strumDown ?? false };
+      next[viewPage] = newPage;
       return next;
     });
-  }, []);
+  }, [viewPage]);
 
   const toggleStrumDir = useCallback((col: number) => {
-    updateSteps(prev => {
-      const step = prev[col];
+    updatePageSteps(prev => {
+      const page = prev[viewPage];
+      const step = page[col];
       if (!step) return prev;
+      const newPage = [...page];
+      newPage[col] = { ...step, strumDown: !step.strumDown };
       const next = [...prev];
-      next[col] = { ...step, strumDown: !step.strumDown };
+      next[viewPage] = newPage;
+      return next;
+    });
+  }, [viewPage]);
+
+  // ── Page management ───────────────────────────────────────────────────
+  const toggleEnablePage = useCallback((p: number) => {
+    if (p === 0) return; // page 1 always enabled
+    setEnabledPages(prev => {
+      const next = [...prev];
+      next[p] = !next[p];
+      enabledRef.current = next;
       return next;
     });
   }, []);
 
-  const loadSteps = useCallback((newSteps: StepValue[]) => {
-    setSteps(newSteps);
-    stepsRef.current = newSteps;
+  const switchViewPage = useCallback((p: number) => {
+    setViewPage(p);
   }, []);
 
+  // ── Scale / root ──────────────────────────────────────────────────────
   const setScale = useCallback((s: ScaleType) => {
     setScaleState(s);
-    const cleared = Array(STEP_COUNT).fill(null) as StepValue[];
-    setSteps(cleared); stepsRef.current = cleared;
+    const blank: StepValue[][] = Array(NUM_PAGES).fill(null).map(makeEmptyPage);
+    setPageSteps(blank); pageStepsRef.current = blank;
     setScrollRow(0);
   }, []);
 
   const setRootNote = useCallback((r: number) => {
     setRootNoteState(r);
-    const cleared = Array(STEP_COUNT).fill(null) as StepValue[];
-    setSteps(cleared); stepsRef.current = cleared;
+    const blank: StepValue[][] = Array(NUM_PAGES).fill(null).map(makeEmptyPage);
+    setPageSteps(blank); pageStepsRef.current = blank;
     setScrollRow(0);
   }, []);
 
@@ -140,17 +168,39 @@ export function useSequencer() {
       return Math.min(max, p + 1);
     });
   }, [rootNote, scale]);
-
   const setScrollRowDirect = useCallback((r: number) => setScrollRow(r), []);
 
+  // ── Load (for save/load system) ───────────────────────────────────────
+  const loadAllPages = useCallback((pages: StepValue[][], enabled: boolean[]) => {
+    setPageSteps(pages); pageStepsRef.current = pages;
+    setEnabledPages(enabled); enabledRef.current = enabled;
+    setViewPage(0);
+  }, []);
+
+  // ── Playback ──────────────────────────────────────────────────────────
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
 
-    sequenceRef.current = new Tone.Sequence(
-      (time, stepIdx) => {
-        const step = stepsRef.current[stepIdx as number];
+    // Build the flat sequence across enabled pages (in page order)
+    const enabledIndices  = enabledRef.current.map((e, i) => e ? i : -1).filter(i => i >= 0);
+    const flatSteps       = enabledIndices.flatMap(pi => pageStepsRef.current[pi]);
+    const totalSteps      = flatSteps.length;
 
-        Tone.getDraw().schedule(() => setCurrentStep(stepIdx as number), time);
+    // Ref so the callback always sees the latest steps
+    const seqRef = { current: flatSteps };
+
+    sequenceRef.current = new Tone.Sequence(
+      (time, rawIdx) => {
+        const idx       = rawIdx as number;
+        const step      = seqRef.current[idx];
+        const pageSlot  = Math.floor(idx / STEP_COUNT);           // 0-based enabled-page slot
+        const stepInPg  = idx % STEP_COUNT;
+        const absPage   = enabledIndices[pageSlot] ?? 0;
+
+        Tone.getDraw().schedule(() => {
+          setCurrentStep(stepInPg);
+          setPlayingPage(absPage);
+        }, time);
 
         if (!step) return;
 
@@ -163,12 +213,11 @@ export function useSequencer() {
         } else {
           const stepSecs = Tone.Time('16n').toSeconds();
           ordered.forEach((note, i) => {
-            const offset = (i / ordered.length) * stepSecs;
-            Tone.getDraw().schedule(() => triggerNote(note), time + offset);
+            Tone.getDraw().schedule(() => triggerNote(note), time + (i / ordered.length) * stepSecs);
           });
         }
       },
-      Array.from({ length: STEP_COUNT }, (_, i) => i),
+      Array.from({ length: totalSteps }, (_, i) => i),
       '16n'
     );
 
@@ -182,6 +231,7 @@ export function useSequencer() {
     sequenceRef.current?.dispose();
     sequenceRef.current = null;
     setCurrentStep(-1);
+    setPlayingPage(-1);
     setIsPlaying(false);
   }, []);
 
@@ -191,9 +241,12 @@ export function useSequencer() {
   }, []);
 
   return {
-    steps, visibleNotes, allNotes, scale, rootNote,
+    steps, pageSteps, enabledPages, viewPage, playingPage,
+    visibleNotes, allNotes, scale, rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir, loadSteps,
+    toggleNote, toggleStrumDir,
+    toggleEnablePage, switchViewPage,
+    loadAllPages,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   };
