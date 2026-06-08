@@ -260,6 +260,29 @@
 .bpm-row input[type='range'] {
   width: 100px;
 }
+
+/* Root + Scale dropdowns in transport */
+.scale-selects {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.scale-select {
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.scale-select:focus { border-color: #c4849a; color: #c8cad0; }
 .bpm-row .bpm-val {
   color: #c8cad0;
   width: 30px;
@@ -550,6 +573,40 @@
   text-align: center;
   min-width: 36px;
 }
+
+/* Strum direction row */
+.pr-strum-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 14px;
+}
+.pr-strum-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-strum-btn {
+  background: none;
+  border: 1px solid #2e3040;
+  color: #6b7280;
+  font-size: 9px;
+  width: 22px;
+  height: 13px;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.1s;
+}
+.pr-strum-btn:hover  { border-color: #c4849a; color: #c4849a; }
+.pr-strum-btn.down   { color: #c4849a; border-color: rgba(196,132,154,0.4); }
+
+/* Multi-note strum: faint gradient from first to last note */
+.pr-cell.strum-first { opacity: 1; }
+.pr-cell.strum-last  { opacity: 0.75; }
 
 /* Bar numbers */
 .pr-step-nums {

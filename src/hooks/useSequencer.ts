@@ -1,27 +1,18 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import * as Tone from 'tone';
 import { triggerNote } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 
-// ── Sub-step types ────────────────────────────────────────────────────────
-export interface SubStep {
-  div: 2 | 3 | 4;
-  notes: Array<number | null>;
+// ── Step data ─────────────────────────────────────────────────────────────
+export interface StepData {
+  notes: number[];        // 1–4 sorted (ascending) MIDI notes
+  strumDown: boolean;     // false = low→high (up), true = high→low (down)
 }
 
-/** A step is a single MIDI note, silence, or a sub-step strum pattern */
-export type StepValue = number | null | SubStep;
+export type StepValue = StepData | null;
 
-export function isSubStep(s: StepValue): s is SubStep {
-  return s !== null && typeof s === 'object';
-}
-
-/** The "primary" note for display/comparison purposes */
-export function stepMainNote(s: StepValue): number | null {
-  if (s === null || typeof s === 'number') return s as number | null;
-  return (s as SubStep).notes[0] ?? null;
-}
+export const MAX_NOTES_PER_STEP = 4;
 
 // ── Scale / note helpers ──────────────────────────────────────────────────
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
@@ -48,40 +39,79 @@ export function buildNotes(root: number, scale: ScaleType): number[] {
   return notes;
 }
 
-export const STEP_COUNT = 32;
-export const VISIBLE_ROWS = 8;
+export const STEP_COUNT    = 32;
+export const VISIBLE_ROWS  = 12;
+
+function note(midi: number): StepData {
+  return { notes: [midi], strumDown: false };
+}
 
 function makeDefaultSteps(): StepValue[] {
   const s: StepValue[] = Array(STEP_COUNT).fill(null);
-  s[0]  = 64; // E4
-  s[8]  = 71; // B4
-  s[14] = 69; // A4
-  s[23] = 81; // A5
-  s[24] = 79; // G5
+  s[0]  = note(64); // E4
+  s[8]  = note(71); // B4
+  s[14] = note(69); // A4
+  s[23] = note(81); // A5
+  s[24] = note(79); // G5
   return s;
 }
 
 export function useSequencer() {
-  const [steps, setSteps] = useState<StepValue[]>(makeDefaultSteps);
-  const [scale, setScaleState] = useState<ScaleType>('major');
+  const [steps, setSteps]         = useState<StepValue[]>(makeDefaultSteps);
+  const [scale, setScaleState]    = useState<ScaleType>('major');
   const [rootNote, setRootNoteState] = useState(0);
-  const [scrollRow, setScrollRow] = useState(5);
-  const [bpm, setBpm] = useState(72);
+  const [scrollRow, setScrollRow] = useState(0);   // 12 rows: start at top
+  const [bpm, setBpm]             = useState(72);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const sequenceRef = useRef<Tone.Sequence | null>(null);
 
   const stepsRef = useRef(steps);
-  useEffect(() => { stepsRef.current = steps; }, [steps]);
+  // keep ref in sync synchronously to avoid closure issues
+  const updateSteps = (fn: (prev: StepValue[]) => StepValue[]) => {
+    setSteps(prev => {
+      const next = fn(prev);
+      stepsRef.current = next;
+      return next;
+    });
+  };
 
-  const allNotes = buildNotes(rootNote, scale);
-  const reversed = [...allNotes].reverse();
-  const maxScroll = Math.max(0, reversed.length - VISIBLE_ROWS);
-  const scroll = Math.min(scrollRow, maxScroll);
+  const allNotes     = buildNotes(rootNote, scale);
+  const reversed     = [...allNotes].reverse();
+  const maxScroll    = Math.max(0, reversed.length - VISIBLE_ROWS);
+  const scroll       = Math.min(scrollRow, maxScroll);
   const visibleNotes = reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
-  const setStep = useCallback((index: number, value: StepValue) => {
-    setSteps(prev => { const n = [...prev]; n[index] = value; return n; });
+  // Toggle a note in a step (multi-select, max 4)
+  const toggleNote = useCallback((col: number, midi: number) => {
+    updateSteps(prev => {
+      const step = prev[col];
+      const currentNotes = step?.notes ?? [];
+      let newNotes: number[];
+
+      if (currentNotes.includes(midi)) {
+        newNotes = currentNotes.filter(n => n !== midi);
+      } else {
+        if (currentNotes.length >= MAX_NOTES_PER_STEP) return prev; // at limit
+        newNotes = [...currentNotes, midi].sort((a, b) => a - b);
+      }
+
+      const next = [...prev];
+      next[col] = newNotes.length === 0
+        ? null
+        : { notes: newNotes, strumDown: step?.strumDown ?? false };
+      return next;
+    });
+  }, []);
+
+  const toggleStrumDir = useCallback((col: number) => {
+    updateSteps(prev => {
+      const step = prev[col];
+      if (!step) return prev;
+      const next = [...prev];
+      next[col] = { ...step, strumDown: !step.strumDown };
+      return next;
+    });
   }, []);
 
   const loadSteps = useCallback((newSteps: StepValue[]) => {
@@ -91,17 +121,19 @@ export function useSequencer() {
 
   const setScale = useCallback((s: ScaleType) => {
     setScaleState(s);
-    setSteps(Array(STEP_COUNT).fill(null));
+    const cleared = Array(STEP_COUNT).fill(null) as StepValue[];
+    setSteps(cleared); stepsRef.current = cleared;
     setScrollRow(0);
   }, []);
 
   const setRootNote = useCallback((r: number) => {
     setRootNoteState(r);
-    setSteps(Array(STEP_COUNT).fill(null));
+    const cleared = Array(STEP_COUNT).fill(null) as StepValue[];
+    setSteps(cleared); stepsRef.current = cleared;
     setScrollRow(0);
   }, []);
 
-  const scrollUp = useCallback(() => setScrollRow(p => Math.max(0, p - 1)), []);
+  const scrollUp   = useCallback(() => setScrollRow(p => Math.max(0, p - 1)), []);
   const scrollDown = useCallback(() => {
     setScrollRow(p => {
       const max = Math.max(0, buildNotes(rootNote, scale).length - VISIBLE_ROWS);
@@ -109,7 +141,7 @@ export function useSequencer() {
     });
   }, [rootNote, scale]);
 
-  const setScrollRowDirect = useCallback((row: number) => setScrollRow(row), []);
+  const setScrollRowDirect = useCallback((r: number) => setScrollRow(r), []);
 
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
@@ -118,21 +150,22 @@ export function useSequencer() {
       (time, stepIdx) => {
         const step = stepsRef.current[stepIdx as number];
 
-        if (isSubStep(step)) {
-          // Schedule each sub-step trigger within this step's 16th-note window
-          const stepSecs = Tone.Time('16n').toSeconds();
-          (step as SubStep).notes.forEach((note, i) => {
-            const noteTime = time + (i / (step as SubStep).div) * stepSecs;
-            Tone.getDraw().schedule(() => {
-              if (i === 0) setCurrentStep(stepIdx as number);
-              if (note !== null) triggerNote(note);
-            }, noteTime);
-          });
+        Tone.getDraw().schedule(() => setCurrentStep(stepIdx as number), time);
+
+        if (!step) return;
+
+        const ordered = step.strumDown
+          ? [...step.notes].reverse()
+          : [...step.notes];
+
+        if (ordered.length === 1) {
+          Tone.getDraw().schedule(() => triggerNote(ordered[0]), time);
         } else {
-          Tone.getDraw().schedule(() => {
-            setCurrentStep(stepIdx as number);
-            if (typeof step === 'number') triggerNote(step);
-          }, time);
+          const stepSecs = Tone.Time('16n').toSeconds();
+          ordered.forEach((note, i) => {
+            const offset = (i / ordered.length) * stepSecs;
+            Tone.getDraw().schedule(() => triggerNote(note), time + offset);
+          });
         }
       },
       Array.from({ length: STEP_COUNT }, (_, i) => i),
@@ -160,8 +193,8 @@ export function useSequencer() {
   return {
     steps, visibleNotes, allNotes, scale, rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
-    setStep, loadSteps, setScale, setRootNote,
-    scrollUp, scrollDown, setScrollRowDirect,
+    toggleNote, toggleStrumDir, loadSteps,
+    setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   };
 }

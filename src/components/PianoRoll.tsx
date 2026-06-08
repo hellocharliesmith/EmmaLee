@@ -1,64 +1,39 @@
 import { useCallback } from 'react';
-import { noteName, isSubStep, STEP_COUNT, VISIBLE_ROWS,
-         type ScaleType, type StepValue, type SubStep } from '../hooks/useSequencer';
+import { noteName, STEP_COUNT, VISIBLE_ROWS,
+         type StepValue } from '../hooks/useSequencer';
 
-const ROOT_LABELS = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
-const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
-  { id: 'major',         label: 'Major' },
-  { id: 'melodic-minor', label: 'Mel. Minor' },
-  { id: 'chromatic',     label: 'Chromatic' },
-];
-
-const BLACK_KEYS = new Set([1, 3, 6, 8, 10]); // C# D# F# G# A#
+const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
 function PianoKey({ midi, rootNote }: { midi: number; rootNote: number }) {
   const pitch   = midi % 12;
   const isBlack = BLACK_KEYS.has(pitch);
   const isRoot  = pitch === rootNote;
   return (
-    <div className={[
-      'pk',
-      isBlack ? 'pk--black' : 'pk--white',
-      isRoot  ? 'pk--root'  : '',
-    ].filter(Boolean).join(' ')} />
+    <div className={['pk', isBlack ? 'pk--black' : 'pk--white', isRoot ? 'pk--root' : ''].filter(Boolean).join(' ')} />
   );
 }
 
 interface Props {
   steps: StepValue[];
   visibleNotes: number[];
-  scale: ScaleType;
   rootNote: number;
   scroll: number;
   maxScroll: number;
   currentStep: number;
-  drawerStep: number | null;
-  onSetStep: (step: number, value: StepValue) => void;
-  onSetScale: (s: ScaleType) => void;
-  onSetRootNote: (r: number) => void;
+  onToggleNote: (col: number, midi: number) => void;
+  onToggleStrumDir: (col: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
-  onOpenDrawer: (col: number) => void;
 }
 
 export function PianoRoll({
-  steps, visibleNotes, scale, rootNote, scroll, maxScroll,
-  currentStep, drawerStep, onSetStep, onSetScale, onSetRootNote,
-  onScrollUp, onScrollDown, onOpenDrawer,
+  steps, visibleNotes, rootNote, scroll, maxScroll,
+  currentStep, onToggleNote, onToggleStrumDir, onScrollUp, onScrollDown,
 }: Props) {
 
   const handleCell = useCallback((col: number, midi: number) => {
-    const step = steps[col];
-    if (isSubStep(step)) {
-      // Sub-step column — open drawer
-      onOpenDrawer(col);
-      return;
-    }
-    // Normal toggle
-    const next = step === midi ? null : midi;
-    onSetStep(col, next);
-    if (next !== null) onOpenDrawer(col); // open drawer on activate
-  }, [steps, onSetStep, onOpenDrawer]);
+    onToggleNote(col, midi);
+  }, [onToggleNote]);
 
   const ROW_H = 30;
   const GAP   = 2;
@@ -67,48 +42,20 @@ export function PianoRoll({
   return (
     <div className="piano-roll-wrap">
 
-      {/* Scale + root controls */}
-      <div className="pr-controls">
-        <div className="pr-control-group">
-          <span className="pr-ctrl-label">Root</span>
-          <div className="reverb-type-btns pr-root-btns">
-            {ROOT_LABELS.map((n, i) => (
-              <button key={i}
-                className={`reverb-type-btn${rootNote === i ? ' active' : ''}`}
-                onClick={() => onSetRootNote(i)}
-              >{n}</button>
-            ))}
-          </div>
-        </div>
-        <div className="pr-control-group">
-          <span className="pr-ctrl-label">Scale</span>
-          <div className="reverb-type-btns">
-            {SCALE_OPTIONS.map(s => (
-              <button key={s.id}
-                className={`reverb-type-btn${scale === s.id ? ' active' : ''}`}
-                onClick={() => onSetScale(s.id)}
-              >{s.label}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Scroll up — sits above the grid, aligned to piano+label width */}
+      {/* Scroll up */}
       <div className="pr-scroll-row">
         <button className="pr-scroll-btn" onClick={onScrollUp} disabled={scroll === 0}>▲</button>
       </div>
 
-      {/* Piano keys | labels | grid — all aligned to same row height */}
+      {/* Piano keys | labels | grid */}
       <div className="pr-row">
 
-        {/* Piano keys column */}
         <div className="pr-piano-col" style={{ height: gridH }}>
           {visibleNotes.map((midi, i) => (
             <PianoKey key={i} midi={midi} rootNote={rootNote} />
           ))}
         </div>
 
-        {/* Note label column — perfectly aligned, no scroll buttons inside */}
         <div className="pr-labels-list" style={{ height: gridH }}>
           {visibleNotes.map((midi, row) => (
             <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
@@ -117,7 +64,6 @@ export function PianoRoll({
           ))}
         </div>
 
-        {/* Scrollable grid */}
         <div className="pr-grid-col">
           <div
             className="pr-grid"
@@ -128,30 +74,30 @@ export function PianoRoll({
           >
             {Array.from({ length: VISIBLE_ROWS }, (_, row) =>
               Array.from({ length: STEP_COUNT }, (_, col) => {
-                const midi = visibleNotes[row];
-                const active    = steps[col] === midi;
+                const midi      = visibleNotes[row];
+                const step      = steps[col];
+                const isActive  = !!step?.notes.includes(midi);
+                const noteCount = step?.notes.length ?? 0;
+                const noteIdx   = isActive ? step!.notes.indexOf(midi) : -1;
+                const isFirst   = noteIdx === 0;
+                const isLast    = noteIdx === noteCount - 1;
                 const playing   = col === currentStep;
-                const barStart   = col % 8 === 0;
-                const beatStart  = col % 4 === 0 && !barStart;
-                const oddGroup   = Math.floor(col / 4) % 2 === 1;
-                const stepData   = steps[col];
-                const hasSub     = isSubStep(stepData);
-                const subNotes   = hasSub ? (stepData as SubStep).notes : [];
-                const isSubActive = hasSub && subNotes.includes(midi);
-                const isDrawerCol = col === drawerStep;
+                const barStart  = col % 8 === 0;
+                const beatStart = col % 4 === 0 && !barStart;
+                const oddGroup  = Math.floor(col / 4) % 2 === 1;
+                const isMulti   = noteCount > 1;
                 return (
                   <div
                     key={`${row}-${col}`}
                     className={[
                       'pr-cell',
-                      active      ? 'active'      : '',
-                      isSubActive ? 'sub-active'  : '',
-                      playing     ? 'playhead'    : '',
-                      barStart    ? 'bar-start'   : '',
-                      beatStart   ? 'beat-start'  : '',
-                      oddGroup    ? 'group-odd'   : '',
-                      hasSub      ? 'has-substep' : '',
-                      isDrawerCol ? 'drawer-col'  : '',
+                      isActive  ? 'active'     : '',
+                      isMulti && isActive && isFirst ? 'strum-first' : '',
+                      isMulti && isActive && isLast  ? 'strum-last'  : '',
+                      playing   ? 'playhead'   : '',
+                      barStart  ? 'bar-start'  : '',
+                      beatStart ? 'beat-start' : '',
+                      oddGroup  ? 'group-odd'  : '',
                     ].filter(Boolean).join(' ')}
                     onClick={() => handleCell(col, midi)}
                   />
@@ -160,13 +106,34 @@ export function PianoRoll({
             )}
           </div>
 
-          {/* Bar numbers */}
+          {/* Step numbers */}
           <div className="pr-step-nums">
             {Array.from({ length: STEP_COUNT }, (_, i) => (
               <div key={i} className={`pr-step-num${i % 8 === 0 ? ' bar' : ''}`}>
                 {i % 8 === 0 ? i / 8 + 1 : ''}
               </div>
             ))}
+          </div>
+
+          {/* Strum direction row */}
+          <div className="pr-strum-row">
+            {Array.from({ length: STEP_COUNT }, (_, i) => {
+              const step = steps[i];
+              const multi = step && step.notes.length > 1;
+              return (
+                <div key={i} className="pr-strum-cell">
+                  {multi && (
+                    <button
+                      className={`pr-strum-btn${step.strumDown ? ' down' : ''}`}
+                      onClick={() => onToggleStrumDir(i)}
+                      title={step.strumDown ? 'Strum down — click to flip' : 'Strum up — click to flip'}
+                    >
+                      {step.strumDown ? '↓' : '↑'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

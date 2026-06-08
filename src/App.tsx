@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
-import { Knob } from './components/Knob';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer } from './hooks/useSequencer';
+import { useSequencer, type ScaleType } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
-import { SubStepDrawer } from './components/SubStepDrawer';
+import { Knob } from './components/Knob';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { DelayControls } from './components/DelayControls';
@@ -13,6 +12,13 @@ import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
 import type { LfoState, SavedSong, SongState } from './types';
 import './App.css';
+
+const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
+  { id: 'major',         label: 'Major' },
+  { id: 'melodic-minor', label: 'Mel. Minor' },
+  { id: 'chromatic',     label: 'Chromatic' },
+];
 
 function checkSupport(): string | null {
   if (typeof AudioContext === 'undefined' && typeof (window as any).webkitAudioContext === 'undefined')
@@ -25,53 +31,50 @@ function checkSupport(): string | null {
   return null;
 }
 
-// ── Default synth state ───────────────────────────────────────────────────
 const DEFAULT_LFO: LfoState[] = [
-  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Structure
-  { on: true,  wave: 'random', rate: 1.6,  depth: 0.1  }, // Brightness
-  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Damping
-  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 }, // Position
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
+  { on: true,  wave: 'random', rate: 1.6,  depth: 0.1  },
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
+  { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
 ];
 
 export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
   const [audioError,   setAudioError]   = useState<string | null>(null);
   const [unsupported,  setUnsupported]  = useState<string | null>(null);
-  const [drawerStep,   setDrawerStep]   = useState<number | null>(null);
 
   useEffect(() => { setUnsupported(checkSupport()); }, []);
 
-  // ── Sequencer state ─────────────────────────────────────────────────────
   const {
     steps, visibleNotes, allNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
-    setStep, loadSteps, setScale, setRootNote,
-    scrollUp, scrollDown, setScrollRowDirect,
+    toggleNote, toggleStrumDir, loadSteps,
+    setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   } = useSequencer();
 
-  // ── Rings state (lifted) ────────────────────────────────────────────────
+  // ── Rings
   const [model,  setModel]  = useState(1);
   const [params, setParams] = useState<[number,number,number,number]>([0.11, 0.24, 0.44, 0.25]);
   const [lfo,    setLfo]    = useState<LfoState[]>(DEFAULT_LFO);
 
-  // ── Delay state (lifted) ────────────────────────────────────────────────
+  // ── Delay
   const [delayDivision, setDelayDivision] = useState('1/8');
   const [delayMix,      setDelayMix]      = useState(0.2);
   const [delayFeedback, setDelayFeedback] = useState(0.16);
   const [delayFilter,   setDelayFilter]   = useState(2800);
 
-  // ── Master volume ───────────────────────────────────────────────────────
-  const [masterVolume, setMasterVolume] = useState(1.0);
-
-  // ── Reverb state (lifted) ───────────────────────────────────────────────
+  // ── Reverb
   const [reverbType,     setReverbType]     = useState('algo');
   const [reverbMix,      setReverbMix]      = useState(0.5);
   const [reverbDecay,    setReverbDecay]    = useState(0.72);
   const [reverbPreDelay, setReverbPreDelay] = useState(0.02);
   const [reverbTone,     setReverbTone]     = useState(6000);
 
-  // ── Save / load ─────────────────────────────────────────────────────────
+  // ── Master volume
+  const [masterVolume, setMasterVolume] = useState(1.0);
+
+  // ── Save / load
   const { songs, save, remove } = useSavedSongs();
 
   function captureState(): SongState {
@@ -88,33 +91,23 @@ export default function App() {
 
   function loadSong(song: SavedSong) {
     const s = song.state;
-
-    // Sequencer
     setScale(s.scale);
     setRootNote(s.rootNote);
     loadSteps(s.steps);
     setScrollRowDirect(s.scrollRow);
     updateBpm(s.bpm);
-
-    // Rings state
     setModel(s.model);
     setParams([s.structure, s.brightness, s.damping, s.position]);
     setLfo(s.lfo);
-
-    // Delay state
     setDelayDivision(s.delayDivision);
     setDelayMix(s.delayMix);
     setDelayFeedback(s.delayFeedback);
     setDelayFilter(s.delayFilter);
-
-    // Reverb state
     setReverbType(s.reverbType);
     setReverbMix(s.reverbMix);
     setReverbDecay(s.reverbDecay);
     setReverbPreDelay(s.reverbPreDelay);
     setReverbTone(s.reverbTone);
-
-    // Update engine if audio is already running
     if (Engine.isAudioReady()) {
       Engine.setRingsParam(0, s.structure);
       Engine.setRingsParam(1, s.brightness);
@@ -139,7 +132,6 @@ export default function App() {
     }
   }
 
-  // ── Audio init ──────────────────────────────────────────────────────────
   async function handlePlayStop() {
     if (unsupported) return;
     setAudioError(null);
@@ -156,7 +148,6 @@ export default function App() {
     if (isPlaying) stop(); else start();
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="app">
       <h1>Emma Lee</h1>
@@ -176,6 +167,17 @@ export default function App() {
             onChange={e => updateBpm(parseInt(e.target.value))} />
           <span className="bpm-val">{bpm}</span>
         </div>
+        {/* Root + Scale inline with transport */}
+        <div className="scale-selects">
+          <select className="scale-select" value={rootNote}
+            onChange={e => setRootNote(parseInt(e.target.value))}>
+            {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+          </select>
+          <select className="scale-select" value={scale}
+            onChange={e => setScale(e.target.value as ScaleType)}>
+            {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
         <SaveLoad
           songs={songs}
           onSave={name => save(name, captureState())}
@@ -192,22 +194,13 @@ export default function App() {
       )}
 
       <PianoRoll
-        steps={steps} visibleNotes={visibleNotes} scale={scale}
+        steps={steps} visibleNotes={visibleNotes}
         rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-        currentStep={currentStep} drawerStep={drawerStep}
-        onSetStep={setStep} onSetScale={setScale} onSetRootNote={setRootNote}
+        currentStep={currentStep}
+        onToggleNote={toggleNote}
+        onToggleStrumDir={toggleStrumDir}
         onScrollUp={scrollUp} onScrollDown={scrollDown}
-        onOpenDrawer={col => setDrawerStep(prev => prev === col ? null : col)}
       />
-      {drawerStep !== null && steps[drawerStep] !== null && (
-        <SubStepDrawer
-          stepIndex={drawerStep}
-          step={steps[drawerStep]}
-          allNotes={allNotes}
-          onClose={() => setDrawerStep(null)}
-          onUpdate={value => setStep(drawerStep, value)}
-        />
-      )}
 
       <div className="waveform-section">
         <div className="master-vol-wrap">
@@ -221,7 +214,7 @@ export default function App() {
 
       <RingsControls
         model={model} params={params} lfo={lfo}
-        onModelChange={m  => setModel(m)}
+        onModelChange={m => setModel(m)}
         onParamChange={(i, v) => setParams(prev => { const n = [...prev] as [number,number,number,number]; n[i]=v; return n; })}
         onLfoChange={(i, u) => setLfo(prev => prev.map((l, idx) => idx===i ? {...l,...u} : l))}
       />

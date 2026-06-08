@@ -1,4 +1,5 @@
 import type { ScaleType, StepValue } from './hooks/useSequencer';
+export type { StepValue };
 
 export interface LfoState {
   on: boolean;
