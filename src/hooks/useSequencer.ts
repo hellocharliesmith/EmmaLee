@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
 import { triggerNote } from '../audio/engine';
 
@@ -72,9 +72,12 @@ export function useSequencer() {
   const [currentStep, setCurrentStep]  = useState(-1);
   const [playingPage, setPlayingPage]  = useState(-1); // absolute page 0–3 during playback
 
-  const sequenceRef    = useRef<Tone.Sequence | null>(null);
-  const pageStepsRef   = useRef(pageSteps);
-  const enabledRef     = useRef(enabledPages);
+  const sequenceRef  = useRef<Tone.Sequence | null>(null);
+  const pageStepsRef = useRef(pageSteps);
+  const enabledRef   = useRef(enabledPages);
+  // Keep refs in sync with state
+  useEffect(() => { pageStepsRef.current = pageSteps; }, [pageSteps]);
+  useEffect(() => { enabledRef.current = enabledPages; }, [enabledPages]);
 
   // Keep refs in sync
   const updatePageSteps = (fn: (prev: StepValue[][]) => StepValue[][]) => {
@@ -177,59 +180,65 @@ export function useSequencer() {
     setViewPage(0);
   }, []);
 
-  // ── Playback ──────────────────────────────────────────────────────────
+  // ── Playback — Tone.Loop reads live refs every tick so page changes take effect immediately ──
+  const globalStepRef = useRef(0);
+  const loopRef = useRef<Tone.Loop | null>(null);
+
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
+    globalStepRef.current = 0;
 
-    // Build the flat sequence across enabled pages (in page order)
-    const enabledIndices  = enabledRef.current.map((e, i) => e ? i : -1).filter(i => i >= 0);
-    const flatSteps       = enabledIndices.flatMap(pi => pageStepsRef.current[pi]);
-    const totalSteps      = flatSteps.length;
+    const loop = new Tone.Loop((time) => {
+      // Read LIVE enabled pages and step data on every tick
+      const enabledIdxs = enabledRef.current
+        .map((e, i) => (e ? i : -1))
+        .filter((i): i is number => i >= 0);
 
-    // Ref so the callback always sees the latest steps
-    const seqRef = { current: flatSteps };
+      if (enabledIdxs.length === 0) return;
 
-    sequenceRef.current = new Tone.Sequence(
-      (time, rawIdx) => {
-        const idx       = rawIdx as number;
-        const step      = seqRef.current[idx];
-        const pageSlot  = Math.floor(idx / STEP_COUNT);           // 0-based enabled-page slot
-        const stepInPg  = idx % STEP_COUNT;
-        const absPage   = enabledIndices[pageSlot] ?? 0;
+      const totalSteps = enabledIdxs.length * STEP_COUNT;
+      const cycleStep  = globalStepRef.current % totalSteps;
+      const pageSlot   = Math.floor(cycleStep / STEP_COUNT);
+      const stepInPage = cycleStep % STEP_COUNT;
+      const absPage    = enabledIdxs[pageSlot] ?? 0;
 
-        Tone.getDraw().schedule(() => {
-          setCurrentStep(stepInPg);
-          setPlayingPage(absPage);
-        }, time);
+      globalStepRef.current++;
 
-        if (!step) return;
+      Tone.getDraw().schedule(() => {
+        setCurrentStep(stepInPage);
+        setPlayingPage(absPage);
+      }, time);
 
-        const ordered = step.strumDown
-          ? [...step.notes].reverse()
-          : [...step.notes];
+      const step = pageStepsRef.current[absPage]?.[stepInPage];
+      if (!step) return;
 
-        if (ordered.length === 1) {
-          Tone.getDraw().schedule(() => triggerNote(ordered[0]), time);
-        } else {
-          const stepSecs = Tone.Time('16n').toSeconds();
-          ordered.forEach((note, i) => {
-            Tone.getDraw().schedule(() => triggerNote(note), time + (i / ordered.length) * stepSecs);
-          });
-        }
-      },
-      Array.from({ length: totalSteps }, (_, i) => i),
-      '16n'
-    );
+      const ordered = step.strumDown
+        ? [...step.notes].reverse()
+        : [...step.notes];
 
-    sequenceRef.current.start(0);
+      if (ordered.length === 1) {
+        Tone.getDraw().schedule(() => triggerNote(ordered[0]), time);
+      } else {
+        const stepSecs = Tone.Time('16n').toSeconds();
+        ordered.forEach((note, i) => {
+          Tone.getDraw().schedule(() => triggerNote(note), time + (i / ordered.length) * stepSecs);
+        });
+      }
+    }, '16n');
+
+    loopRef.current = loop;
+    loop.start(0);
     Tone.getTransport().start();
     setIsPlaying(true);
   }, [bpm]);
 
   const stop = useCallback(() => {
     Tone.getTransport().stop();
+    loopRef.current?.dispose();
+    loopRef.current = null;
     sequenceRef.current?.dispose();
     sequenceRef.current = null;
+    globalStepRef.current = 0;
     setCurrentStep(-1);
     setPlayingPage(-1);
     setIsPlaying(false);
