@@ -288,6 +288,97 @@
   width: 30px;
 }
 
+/* ── App header ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 960px;
+}
+.app-header h1 { margin: 0; }
+
+/* ── Kids mode toggle ── */
+.kids-toggle {
+  background: #1e2028;
+  border: 1px solid #2e3040;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-family: inherit;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.kids-toggle.active {
+  background: rgba(196,132,154,0.15);
+  border-color: #c4849a;
+  color: #c4849a;
+}
+.kids-toggle:hover { border-color: #c4849a; color: #c4849a; }
+
+/* ── Kids mode layout ── */
+.kids-mode {
+  background: #0a0c12;
+  padding: 12px 16px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.kids-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.kids-play {
+  font-size: 1.1rem !important;
+  padding: 12px 32px !important;
+  border-radius: 8px !important;
+  letter-spacing: 0.1em;
+}
+
+/* Kids piano roll — no labels, circle cells */
+.kids-piano-roll {
+  width: 100%;
+}
+
+.kids-piano-roll .pr-scroll-row {
+  padding-left: 0;
+}
+
+.kids-scroll-btn {
+  width: 100% !important;
+  max-width: 220px;
+  height: 44px !important;
+  font-size: 18px !important;
+  border-radius: 8px !important;
+  border-color: #2e3040 !important;
+}
+
+.kids-cell {
+  border-radius: 50% !important;
+  width: 56px !important;
+  height: 56px !important;
+  min-width: 56px !important;
+  min-height: 56px !important;
+  border: 2px solid #1e2028 !important;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.kids-cell:hover { transform: scale(1.08); }
+.kids-cell.active { transform: scale(1.05); }
+.kids-cell.playhead {
+  outline: 3px solid rgba(255,255,255,0.7) !important;
+  outline-offset: 2px !important;
+}
+
+/* Kids mode grid — horizontal scroll, 56px circles */
+.kids-piano-roll .pr-grid {
+  grid-template-columns: repeat(32, 56px) !important;
+  gap: 6px !important;
+}
+
 /* ── Page selector ── */
 .page-selector {
   display: flex;

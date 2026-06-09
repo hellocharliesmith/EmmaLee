@@ -77,6 +77,10 @@ export default function App() {
   // ── Master volume
   const [masterVolume, setMasterVolume] = useState(1.0);
 
+  // ── Kids mode
+  const [kidsMode, setKidsMode] = useState(false);
+  const KIDS_ROWS = 8;
+
   // ── Save / load
   const { songs, save, remove } = useSavedSongs();
 
@@ -155,123 +159,156 @@ export default function App() {
     if (isPlaying) stop(); else start();
   }
 
+  const kidsNotes = kidsMode ? visibleNotes.slice(0, KIDS_ROWS) : visibleNotes;
+
+  // Shared page selector used in both modes
+  const PageSelector = () => (
+    <div className="page-selector">
+      {!kidsMode && <span className="page-label">Pages</span>}
+      {[0,1,2,3].map(p => {
+        const enabled = enabledPages[p];
+        const viewing = viewPage === p;
+        const playing = isPlaying && playingPage === p;
+        return (
+          <div key={p} className="page-item">
+            <button
+              className={['page-btn', viewing ? 'viewing' : '', enabled ? 'enabled' : '', playing ? 'playing' : ''].filter(Boolean).join(' ')}
+              onClick={() => { if (!enabled && p > 0) toggleEnablePage(p); switchViewPage(p); }}
+            >
+              {p + 1}
+              {playing && <span className="page-playing-dot" />}
+            </button>
+            {p > 0 && enabled && !kidsMode && (
+              <button className="page-remove" onClick={() => toggleEnablePage(p)}>×</button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="app">
-      <h1>Emma Lee</h1>
+    <div className={`app${kidsMode ? ' kids-mode' : ''}`}>
+
+      {/* ── Header ── */}
+      <div className="app-header">
+        <h1>Emma Lee</h1>
+        <button
+          className={`kids-toggle${kidsMode ? ' active' : ''}`}
+          onClick={() => setKidsMode(v => !v)}
+          title={kidsMode ? 'Exit Kids Mode' : 'Kids Mode'}
+        >
+          {kidsMode ? '🎮 Exit Kids' : '🎮 Kids'}
+        </button>
+      </div>
 
       {unsupported && <div className="audio-banner error">⚠ {unsupported}</div>}
 
-      <div className="transport">
-        <button
-          className={`play-btn${isPlaying ? ' playing' : ''}${unsupported ? ' disabled' : ''}`}
-          onClick={handlePlayStop} disabled={!!unsupported}
-        >
-          {isPlaying ? '■ Stop' : '▶ Play'}
-        </button>
-        <div className="bpm-row">
-          <label>BPM</label>
-          <input type="range" min={40} max={200} value={bpm}
-            onChange={e => updateBpm(parseInt(e.target.value))} />
-          <span className="bpm-val">{bpm}</span>
-        </div>
-        {/* Root + Scale inline with transport */}
-        <div className="scale-selects">
-          <select className="scale-select" value={rootNote}
-            onChange={e => setRootNote(parseInt(e.target.value))}>
-            {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-          </select>
-          <select className="scale-select" value={scale}
-            onChange={e => setScale(e.target.value as ScaleType)}>
-            {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </div>
-        <SaveLoad
-          songs={songs}
-          onSave={name => save(name, captureState())}
-          onLoad={loadSong}
-          onDelete={remove}
-        />
-      </div>
-
-      {audioError && (
-        <div className="audio-banner error">
-          ⚠ {audioError}
-          <button className="banner-dismiss" onClick={() => setAudioError(null)}>✕</button>
-        </div>
-      )}
-
-      {/* Page selector */}
-      <div className="page-selector">
-        <span className="page-label">Pages</span>
-        {[0,1,2,3].map(p => {
-          const enabled  = enabledPages[p];
-          const viewing  = viewPage === p;
-          const playing  = isPlaying && playingPage === p;
-          return (
-            <div key={p} className="page-item">
-              <button
-                className={['page-btn', viewing ? 'viewing' : '', enabled ? 'enabled' : '', playing ? 'playing' : ''].filter(Boolean).join(' ')}
-                onClick={() => { if (!enabled && p > 0) toggleEnablePage(p); switchViewPage(p); }}
-                title={enabled ? `Page ${p+1} (in loop)` : `Page ${p+1} — click to add to loop`}
-              >
-                {p + 1}
-                {playing && <span className="page-playing-dot" />}
-              </button>
-              {p > 0 && enabled && (
-                <button className="page-remove" onClick={() => toggleEnablePage(p)} title="Remove from loop">×</button>
-              )}
+      {/* ── Kids mode layout ── */}
+      {kidsMode ? (
+        <>
+          <div className="kids-top-bar">
+            <button
+              className={`play-btn kids-play${isPlaying ? ' playing' : ''}`}
+              onClick={handlePlayStop} disabled={!!unsupported}
+            >
+              {isPlaying ? '■ Stop' : '▶ Play'}
+            </button>
+            <PageSelector />
+            <div className="master-vol-wrap">
+              <Knob value={masterVolume} min={0} max={1.5} label="Vol"
+                onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
             </div>
-          );
-        })}
-      </div>
-
-      <PianoRoll
-        steps={steps} visibleNotes={visibleNotes}
-        rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-        currentStep={currentStep}
-        onToggleNote={toggleNote}
-        onToggleStrumDir={toggleStrumDir}
-        onScrollUp={scrollUp} onScrollDown={scrollDown}
-      />
-
-      <div className="waveform-section">
-        <div className="master-vol-wrap">
-          <Knob
-            value={masterVolume} min={0} max={1.5} label="Vol"
-            onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }}
+          </div>
+          <WaveformMeter />
+          <PianoRoll
+            steps={steps} visibleNotes={kidsNotes}
+            rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
+            currentStep={currentStep} kidsMode
+            onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+            onScrollUp={scrollUp} onScrollDown={scrollDown}
           />
-        </div>
-        <WaveformMeter />
-      </div>
+        </>
+      ) : (
+        <>
+          {/* ── Normal mode layout ── */}
+          <div className="transport">
+            <button
+              className={`play-btn${isPlaying ? ' playing' : ''}${unsupported ? ' disabled' : ''}`}
+              onClick={handlePlayStop} disabled={!!unsupported}
+            >
+              {isPlaying ? '■ Stop' : '▶ Play'}
+            </button>
+            <div className="bpm-row">
+              <label>BPM</label>
+              <input type="range" min={40} max={200} value={bpm}
+                onChange={e => updateBpm(parseInt(e.target.value))} />
+              <span className="bpm-val">{bpm}</span>
+            </div>
+            <div className="scale-selects">
+              <select className="scale-select" value={rootNote}
+                onChange={e => setRootNote(parseInt(e.target.value))}>
+                {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+              </select>
+              <select className="scale-select" value={scale}
+                onChange={e => setScale(e.target.value as ScaleType)}>
+                {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <SaveLoad songs={songs}
+              onSave={name => save(name, captureState())}
+              onLoad={loadSong} onDelete={remove} />
+          </div>
 
-      <RingsControls
-        model={model} params={params} lfo={lfo}
-        onModelChange={m => setModel(m)}
-        onParamChange={(i, v) => setParams(prev => { const n = [...prev] as [number,number,number,number]; n[i]=v; return n; })}
-        onLfoChange={(i, u) => setLfo(prev => prev.map((l, idx) => idx===i ? {...l,...u} : l))}
-      />
+          {audioError && (
+            <div className="audio-banner error">
+              ⚠ {audioError}
+              <button className="banner-dismiss" onClick={() => setAudioError(null)}>✕</button>
+            </div>
+          )}
 
-      <div className="fx-row">
-        <DelayControls
-          bpm={bpm}
-          division={delayDivision}  mix={delayMix}
-          feedback={delayFeedback}  filter={delayFilter}
-          onDivisionChange={setDelayDivision}
-          onMixChange={setDelayMix}
-          onFeedbackChange={setDelayFeedback}
-          onFilterChange={setDelayFilter}
-        />
-        <ReverbControls
-          activeType={reverbType}   wet={reverbMix}
-          decay={reverbDecay}       preDelay={reverbPreDelay}
-          tone={reverbTone}
-          onTypeChange={setReverbType}
-          onWetChange={setReverbMix}
-          onDecayChange={setReverbDecay}
-          onPreDelayChange={setReverbPreDelay}
-          onToneChange={setReverbTone}
-        />
-      </div>
+          <PageSelector />
+
+          <PianoRoll
+            steps={steps} visibleNotes={visibleNotes}
+            rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
+            currentStep={currentStep}
+            onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+            onScrollUp={scrollUp} onScrollDown={scrollDown}
+          />
+
+          <div className="waveform-section">
+            <div className="master-vol-wrap">
+              <Knob value={masterVolume} min={0} max={1.5} label="Vol"
+                onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
+            </div>
+            <WaveformMeter />
+          </div>
+
+          <RingsControls
+            model={model} params={params} lfo={lfo}
+            onModelChange={m => setModel(m)}
+            onParamChange={(i, v) => setParams(prev => { const n = [...prev] as [number,number,number,number]; n[i]=v; return n; })}
+            onLfoChange={(i, u) => setLfo(prev => prev.map((l, idx) => idx===i ? {...l,...u} : l))}
+          />
+
+          <div className="fx-row">
+            <DelayControls
+              bpm={bpm} division={delayDivision} mix={delayMix}
+              feedback={delayFeedback} filter={delayFilter}
+              onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
+              onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
+            />
+            <ReverbControls
+              activeType={reverbType} wet={reverbMix}
+              decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
+              onTypeChange={setReverbType} onWetChange={setReverbMix}
+              onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
+              onToneChange={setReverbTone}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
