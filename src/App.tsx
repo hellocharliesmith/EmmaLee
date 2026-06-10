@@ -49,7 +49,7 @@ export default function App() {
     steps, pageSteps, enabledPages, viewPage, playingPage,
     visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir,
+    toggleNote, toggleStrumDir, setProbability,
     toggleEnablePage, switchViewPage,
     loadAllPages,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
@@ -226,6 +226,7 @@ export default function App() {
             rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
             currentStep={currentStep} kidsMode
             onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+            onSetProbability={setProbability}
             onScrollUp={scrollUp} onScrollDown={scrollDown}
           />
         </>
@@ -274,6 +275,7 @@ export default function App() {
             rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
             currentStep={currentStep}
             onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+            onSetProbability={setProbability}
             onScrollUp={scrollUp} onScrollDown={scrollDown}
           />
 

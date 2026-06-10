@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
-import { noteName, STEP_COUNT,
+import { noteName, STEP_COUNT, PROB_OPTIONS,
          type StepValue } from '../hooks/useSequencer';
+
+const PROB_LABELS: Record<number, string> = {
+  1: '', 0.75: '75', 0.66: '66', 0.5: '50', 0.33: '33', 0.25: '25',
+};
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
@@ -35,13 +39,14 @@ interface Props {
   kidsMode?: boolean;
   onToggleNote: (col: number, midi: number) => void;
   onToggleStrumDir: (col: number) => void;
+  onSetProbability: (col: number, prob: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
 }
 
 export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
-  currentStep, kidsMode, onToggleNote, onToggleStrumDir, onScrollUp, onScrollDown,
+  currentStep, kidsMode, onToggleNote, onToggleStrumDir, onSetProbability, onScrollUp, onScrollDown,
 }: Props) {
 
   const handleCell = useCallback((col: number, midi: number) => {
@@ -107,6 +112,8 @@ export function PianoRoll({
                 const beatStart = col % 4 === 0 && !barStart;
                 const oddGroup  = Math.floor(col / 4) % 2 === 1;
                 const isMulti   = noteCount > 1;
+                const stepProb  = step?.prob ?? 1;
+                const probReduced = isActive && stepProb < 1;
                 const rowColor  = kidsMode ? KIDS_COLORS[row % KIDS_COLORS.length] : undefined;
                 const cellStyle = kidsMode ? {
                   background: (isActive || isFirst)
@@ -114,14 +121,16 @@ export function PianoRoll({
                     : playing ? `${rowColor}28` : undefined,
                   boxShadow: (isActive || isFirst)
                     ? `0 0 16px ${rowColor}aa` : undefined,
+                  opacity: probReduced ? 0.55 : undefined,
                 } : undefined;
                 return (
                   <div
                     key={`${row}-${col}`}
                     className={[
                       'pr-cell',
-                      kidsMode  ? 'kids-cell'  : '',
-                      isActive  ? 'active'     : '',
+                      kidsMode    ? 'kids-cell'    : '',
+                      isActive    ? 'active'       : '',
+                      probReduced ? 'prob-reduced' : '',
                       isMulti && isActive && isFirst ? 'strum-first' : '',
                       isMulti && isActive && isLast  ? 'strum-last'  : '',
                       playing   ? 'playhead'   : '',
@@ -162,6 +171,29 @@ export function PianoRoll({
                       {step.strumDown ? '↓' : '↑'}
                     </button>
                   )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Probability row */}
+          <div className="pr-prob-row">
+            {Array.from({ length: STEP_COUNT }, (_, i) => {
+              const step = steps[i];
+              if (!step) return <div key={i} className="pr-prob-cell" />;
+              const prob  = step.prob ?? 1;
+              const label = PROB_LABELS[prob] ?? String(Math.round(prob * 100));
+              const idx   = PROB_OPTIONS.indexOf(prob as typeof PROB_OPTIONS[number]);
+              const next  = PROB_OPTIONS[(idx === -1 ? 0 : (idx + 1) % PROB_OPTIONS.length)];
+              return (
+                <div key={i} className="pr-prob-cell">
+                  <button
+                    className={`pr-prob-btn${prob < 1 ? ' active' : ''}`}
+                    onClick={() => onSetProbability(i, next)}
+                    title={`Probability: ${Math.round(prob * 100)}% — click to change`}
+                  >
+                    {prob < 1 ? label : '·'}
+                  </button>
                 </div>
               );
             })}

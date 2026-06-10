@@ -7,12 +7,14 @@ export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 export interface StepData {
   notes: number[];
   strumDown: boolean;
+  prob?: number; // 0–1, default 1 (100%)
 }
 export type StepValue = StepData | null;
 export const MAX_NOTES_PER_STEP = 4;
 export const STEP_COUNT   = 32;
 export const VISIBLE_ROWS = 12;
 export const NUM_PAGES    = 4;
+export const PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
@@ -134,6 +136,19 @@ export function useSequencer() {
     });
   }, [viewPage]);
 
+  const setProbability = useCallback((col: number, prob: number) => {
+    updatePageSteps(prev => {
+      const page = prev[viewPage];
+      const step = page[col];
+      if (!step) return prev;
+      const newPage = [...page];
+      newPage[col] = { ...step, prob };
+      const next = [...prev];
+      next[viewPage] = newPage;
+      return next;
+    });
+  }, [viewPage]);
+
   // ── Page management ───────────────────────────────────────────────────
   const toggleEnablePage = useCallback((p: number) => {
     if (p === 0) return; // page 1 always enabled
@@ -212,6 +227,9 @@ export function useSequencer() {
       const step = pageStepsRef.current[absPage]?.[stepInPage];
       if (!step) return;
 
+      const prob = step.prob ?? 1;
+      if (prob < 1 && Math.random() > prob) return;
+
       const ordered = step.strumDown
         ? [...step.notes].reverse()
         : [...step.notes];
@@ -253,7 +271,7 @@ export function useSequencer() {
     steps, pageSteps, enabledPages, viewPage, playingPage,
     visibleNotes, allNotes, scale, rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir,
+    toggleNote, toggleStrumDir, setProbability,
     toggleEnablePage, switchViewPage,
     loadAllPages,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,

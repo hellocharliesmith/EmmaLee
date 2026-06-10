@@ -409,6 +409,7 @@
 /* Hide elements irrelevant in kids mode */
 .kids-piano-roll .pr-step-nums { display: none; }
 .kids-piano-roll .pr-strum-row { display: none; }
+.kids-piano-roll .pr-prob-row  { display: none; }
 
 /* ── Page selector ── */
 .page-selector {
@@ -622,6 +623,7 @@
 .pr-cell.beat-start { border-left-color: #2e3040; }
 .pr-cell.bar-start  { border-left-color: #404258; }
 .pr-cell.active { background: #c4849a; border-color: #a8687c; }
+.pr-cell.active.prob-reduced { opacity: 0.55; }
 .pr-cell.active:hover { background: #b3748a; }
 .pr-cell.sub-active {
   background: rgba(196, 132, 154, 0.55);
@@ -774,6 +776,39 @@
   margin-top: 2px;
   height: 14px;
 }
+
+/* Probability row */
+.pr-prob-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 14px;
+}
+.pr-prob-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-prob-btn {
+  background: none;
+  border: 1px solid #2e3040;
+  color: #3a3d4a;
+  font-size: 8px;
+  width: 22px;
+  height: 13px;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.pr-prob-btn:hover     { border-color: #c4849a; color: #c4849a; }
+.pr-prob-btn.active    { color: #c4849a; border-color: rgba(196,132,154,0.5); background: rgba(196,132,154,0.08); }
+.pr-prob-btn.active:hover { background: rgba(196,132,154,0.15); }
 .pr-strum-cell {
   width: 26px;
   flex-shrink: 0;
