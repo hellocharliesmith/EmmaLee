@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { noteName, STEP_COUNT, VISIBLE_ROWS,
+import { noteName, STEP_COUNT,
          type StepValue } from '../hooks/useSequencer';
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
@@ -13,10 +13,16 @@ function PianoKey({ midi, rootNote }: { midi: number; rootNote: number }) {
   );
 }
 
-// Rainbow colours for kids mode rows (top = highest pitch)
+// Muted bedtime palette — low-saturation, distinct hues
 const KIDS_COLORS = [
-  '#FF6B9D','#FF9F40','#FFD700','#66BB6A',
-  '#42A5F5','#AB47BC','#FF7043','#26C6DA',
+  '#7a5568',  // dusty rose
+  '#3d6b5e',  // sage teal
+  '#445878',  // slate blue
+  '#6e5535',  // warm amber
+  '#5c4a78',  // muted purple
+  '#2f6068',  // midnight teal
+  '#685e35',  // dusty gold
+  '#5e3558',  // deep mauve
 ];
 
 interface Props {
@@ -80,12 +86,14 @@ export function PianoRoll({
         <div className="pr-grid-col">
           <div
             className="pr-grid"
-            style={{
+            style={kidsMode ? {
+              gridTemplateColumns: `repeat(${STEP_COUNT}, minmax(0, 1fr))`,
+            } : {
               gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
-              gridTemplateRows: `repeat(${VISIBLE_ROWS}, ${ROW_H}px)`,
+              gridTemplateRows: `repeat(${rows}, ${ROW_H}px)`,
             }}
           >
-            {Array.from({ length: VISIBLE_ROWS }, (_, row) =>
+            {Array.from({ length: rows }, (_, row) =>
               Array.from({ length: STEP_COUNT }, (_, col) => {
                 const midi      = visibleNotes[row];
                 const step      = steps[col];
