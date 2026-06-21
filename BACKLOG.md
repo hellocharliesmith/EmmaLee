@@ -26,36 +26,36 @@ first if you're new to the codebase. This file is just queued ideas.
   order, not header declaration order) and the WASM export-letter discovery process.
 - **2026-06-21** — Added LPG Colour to Plaits (the hardware's hold-button-A +
   Timbre secondary function, exposed as a regular 5th slider instead of a gesture).
+- **2026-06-21** — Multitrack Phase 4 (final phase): Drum track, 5th tab. 3 voices
+  (Hi-Hat/Snare/Kick), each a tiny Plaits instance reusing the already-compiled
+  binary, locked to Plaits' bass_drum(21)/snare_drum(22)/hi_hat(23) engines. Unlike
+  the melodic tracks, the 3 drum voices are independent so they can overlap on the
+  same step. No per-voice tone controls in v1 (kept deliberately simple) — see
+  "Per-voice drum tone shaping" below if that's wanted later.
 - (Already in place before this round, in case it looks unimplemented) — Save/load
   patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
 
 ---
 
-## Multitrack — in progress (phased plan, see AGENTS.md)
+## Multitrack expansion — COMPLETE (2026-06-21)
 
-Goal: 2x Rings (done) + 1x Plaits melodic (done) + 1x drum track (3 voices:
-kick/snare/hi-hat, also from Plaits' built-in drum engines). Decisions already made:
+All 4 phases shipped same-day: 2x Rings + 1x Plaits melodic + 1x Drums (3 voices),
+master bus with shared delay/reverb fed by per-track sends, track tabs, Master mixer.
+Full architecture writeup lives in AGENTS.md "Multitrack architecture" — read that
+before changing any of this, especially the Plaits engine-index table (hardware
+registration order, not header declaration order — easy to get wrong, already was
+once this session) and the WASM export-letter discovery process for wrapper changes.
 
-- **Phase 1 (DONE 2026-06-21)**: core multitrack refactor — see "Recently shipped" above.
-- **Phase 2 (DONE 2026-06-21)**: shipped as part of Phase 1 — track tabs, Master
-  section, send knobs, plus the volume-knob follow-up the same day.
-- **Phase 3 (DONE 2026-06-21)**: Plaits melodic track — see "Recently shipped" above.
-- **Phase 4 (next)**: Drum track — reuse the Plaits wrapper/binary from Phase 3, 3
-  small instances locked to `bass_drum_engine`(21)/`snare_drum_engine`(22)/
-  `hi_hat_engine`(23) so they can overlap on the same step (real drum-machine
-  behavior, not monophonic). Drum-machine-style UI (fixed named rows, not a
-  chromatic piano roll). Note: the engine indices for drums were also affected by
-  the hardware-registration-order correction — confirm 21/22/23 against voice.cc
-  before building, same way Phase 3's melodic indices were verified.
-- Track polyphony: monophonic per track throughout (matches how Rings already works),
-  except the 3 drum voices which are independent so kick+hat can hit together.
-- Song structure: 1 page per track for v1 — multi-page song sections deliberately
-  deferred, see AGENTS.md.
-
-**Verification note**: actual audio playback (does Plaits sound right when triggered,
-do all 3 tracks play together cleanly, any glitches) could not be fully confirmed in
-the Claude Code preview tool during Phase 1 or Phase 3 — see AGENTS.md "Verification
-caveat". Confirm in a real browser before Phase 4.
+### Per-voice drum tone shaping (possible fast-follow)
+- v1 ships with NO per-voice controls on the Drums tab — just the grid + one shared
+  Sends row (Volume/Delay/Reverb broadcasts to all 3 voices identically). Each drum
+  voice already has independent `harmonics`/`timbre`/`morph`/`decay` patch state
+  under the hood (separate Plaits instances) — only the UI is missing.
+- If wanted: add a small 2-knob pair per row (e.g. "Tone" = harmonics, "Decay") —
+  needs a new `setDrumParam(voiceId, param, value)` in engine.ts (trivial, mirrors
+  setPlaitsParam) and a 3-row mini-panel in App.tsx/a new DrumControls.tsx.
+- Was deliberately deferred — "simple drum track" was the explicit ask, and 3 lots
+  of tone knobs felt like more complexity than that called for on the first pass.
 
 ---
 

@@ -7,11 +7,10 @@ Codex, Cursor, or any other AI coding tool. It's written to be tool-agnostic.
 
 A public-facing, no-install browser synthesizer built for a non-technical lead
 (AI-assisted development throughout — explain things in plain terms, not jargon).
-Multitrack step sequencer: 2 tracks of Mutable Instruments Rings + 1 track of
-Mutable Instruments Plaits (both real hardware module DSP, compiled from actual
-C++ source to WebAssembly), with a drum track planned next — see "Multitrack
-architecture" below and BACKLOG.md. Master bus owns shared delay + reverb; each
-track sends into them independently.
+Multitrack step sequencer, 5 tabs: 2 tracks of Mutable Instruments Rings, 1 track
+of Mutable Instruments Plaits (melodic), a 3-voice drum kit (also Plaits, different
+engines), and Master — see "Multitrack architecture" below and BACKLOG.md. Master
+bus owns shared delay + reverb; each track sends into them independently.
 
 - **Live:** https://emma-lee.hellocharliesmith.workers.dev
 - **GitHub:** https://github.com/hellocharliesmith/EmmaLee
@@ -56,16 +55,19 @@ what the wrangler.jsonc might suggest) — the explicit `wrangler deploy` is wha
 src/
   audio/
     engine.ts       — the native Web Audio graph: per-track instances (ringsA,
-                       ringsB, plaits — each its own AudioWorkletNode) + a shared
-                       master bus owning delay and reverb. initAudio() builds it
-                       once on first user gesture (browser autoplay rules). A
-                       generic `tracks` Map (TrackId -> {worklet, dryGain,
-                       delaySend, reverbSend}) backs triggerNote/setTrackSend/
-                       setTrackVolume for ANY track type. Instrument-specific
-                       setters stay separate: setRingsParam/setRingsModel(trackId,...)
-                       vs setPlaitsParam/setPlaitsModel(...) (Plaits has only one
-                       track, so no trackId needed there). Master setters
-                       (setReverbWet, setDelayTime, etc.) are global, untouched.
+                       ringsB, plaits, drumHihat, drumSnare, drumKick — each its
+                       own AudioWorkletNode, 6 total) + a shared master bus owning
+                       delay and reverb. initAudio() builds it once on first user
+                       gesture (browser autoplay rules). A generic `tracks` Map
+                       (TrackId -> {worklet, dryGain, delaySend, reverbSend}) backs
+                       triggerNote/setTrackSend/setTrackVolume for ANY track type.
+                       Instrument-specific setters stay separate:
+                       setRingsParam/setRingsModel(trackId,...) vs
+                       setPlaitsParam/setPlaitsModel(...) (Plaits melodic has only
+                       one track, so no trackId needed there). Drum voices reuse
+                       createTrackWorklet + the 'plaits-processor' processor, just
+                       locked to a fixed engine/note via createDrumTrack(). Master
+                       setters (setReverbWet, setDelayTime, etc.) are global, untouched.
     utils.ts         — small helpers (e.g. divisionSeconds for BPM-synced delay times)
   hooks/
     useSequencer.ts  — multitrack sequencer state: Record<TrackId, TrackSeqState>,
@@ -74,34 +76,54 @@ src/
                        LIVE refs (tracksRef) every tick and dispatches a trigger per
                        track — NOT closures — so editing a track while playing takes
                        effect immediately. Editing functions (toggleNote etc.) always
-                       target whichever track is `activeTrack`. Plaits track reuses
-                       this exact same step-grid model as Rings (monophonic melodic,
-                       same piano roll) — only the instrument control panel differs.
+                       target whichever track is `activeTrack`. Plaits melodic track
+                       reuses the exact same step-grid model as Rings (monophonic
+                       melodic, same piano roll) — only the instrument panel differs.
+                       IMPORTANT: this hook's `TrackId` (4 values: ringsA/ringsB/
+                       plaits/drums — the UI tabs) is a DIFFERENT, independent type
+                       from engine.ts's `TrackId` (6 values — the actual worklets).
+                       The Drums tab is one grid here but dispatches to 3 separate
+                       engine.ts tracks — see the playback loop's `if (id === 'drums')`
+                       branch, which fires all active rows simultaneously (no strum
+                       stagger, unlike melodic multi-note steps).
     useSavedSongs.ts — localStorage-backed save/load list
   components/
-    PianoRoll.tsx    — the step grid, shared across all melodic tracks and Kids Mode
-                       (kidsMode prop changes cell count/styling/hides some rows).
+    PianoRoll.tsx    — the step grid, shared across all tracks and Kids Mode.
+                       `rowLabels`/`noStrum` props (added for Drums) swap chromatic
+                       note names for fixed text rows and hide piano keys/root-
+                       highlighting/strum row/scroll buttons when not needed.
     RingsControls.tsx  — takes a `trackId` prop, calls engine functions itself
                        (App.tsx callbacks are pure state setters).
     PlaitsControls.tsx — Engine picker (6 curated engines) + Harmonics/Timbre/
-                       Morph/Decay sliders. No trackId prop — only one Plaits track.
+                       Morph/Decay/LPG Colour sliders. No trackId prop — only one
+                       Plaits melodic track.
+    (No DrumControls.tsx in v1 — the Drums tab has no instrument panel, just the
+                       grid + a shared Sends row. See BACKLOG.md "Per-voice drum
+                       tone shaping" if that's wanted later.)
     DelayControls.tsx, ReverbControls.tsx — master-only, no per-track concept
     Knob.tsx, SaveLoad.tsx, WaveformMeter.tsx
-  App.tsx            — track tabs (Rings A / Rings B / Plaits / Master) + viewSection
-                       toggle. `trackParams` is a discriminated union
-                       (RingsParamsState | PlaitsParamsState) since the two
-                       instruments' control surfaces are genuinely different shapes
+  App.tsx            — track tabs (Rings A / Rings B / Plaits / Drums / Master) +
+                       viewSection toggle. `trackParams` is a discriminated union
+                       (RingsParamsState | PlaitsParamsState | DrumParamsState)
+                       since each instrument's control surface is a different shape
                        — narrow on `.kind` before rendering the per-track panel.
-                       kids-mode branch pinned to ringsA only.
+                       Drums' Sends knobs broadcast to all 3 engine.ts drum tracks
+                       at once (setVolumeFor/setSendFor helpers) since there's no
+                       per-voice mixing UI. kids-mode branch pinned to ringsA only.
 public/
   rings-processor.js  — Rings AudioWorklet (one registered class, instantiated
                        twice — once per Rings track).
   plaits-processor.js — Plaits AudioWorklet, modeled on rings-processor.js but
-                       slimmed (no LFO, no internal reverb toggle).
+                       slimmed (no LFO, no internal reverb toggle). Instantiated
+                       4 times: melodic Plaits + 3 drum voices, all from the SAME
+                       compiled binary, each just locked to a different engine
+                       index. Has a 'set-note' message type (distinct from
+                       'trigger') that sets pitch WITHOUT firing — used once at
+                       drum-voice creation so they don't sound on page load.
   Both load WASM via WebAssembly.instantiate directly (importScripts is NOT
   available inside AudioWorklet global scope). Each WASM module is compiled ONCE
-  in engine.ts; for Rings the same compiled Module is posted to both track
-  instances (saves re-compiling per track).
+  in engine.ts; the same compiled Module is posted to every instance that needs it
+  (2x for Rings, 4x for Plaits) — saves re-compiling per instance.
   rings.wasm/rings.js, plaits.wasm/plaits.js — compiled output, see "Recompiling
                        the WASM" below
 rings-dsp/
@@ -110,22 +132,25 @@ rings-dsp/
                        set_model/set_note/trigger/process. Compiles Plaits' full
                        Voice class (all 22 engines — can't selectively compile,
                        Voice statically includes them all as members); the engine
-                       picker in PlaitsControls.tsx just limits which indices the
-                       UI exposes, not what's in the binary.
+                       picker in PlaitsControls.tsx (and the fixed engines used by
+                       the 3 drum voices) just limit which indices get used, not
+                       what's in the binary — this is also why drums needed no new
+                       WASM compile, just more JS-side worklet instances.
 rings-source/        — full clone of Mutable Instruments' actual firmware source for
-                       both Rings and Plaits (also contains peaks/drums/ for the
-                       planned drum track — see BACKLOG.md)
+                       both Rings and Plaits
 build-wasm.sh        — the emcc compile command for Rings
 build-plaits-wasm.sh — same for Plaits (longer file list — speech synth, FM,
                        physical modelling, chords all need compiling in since
                        Voice references all engines)
 ```
 
-## Multitrack architecture (added 2026-06-21)
+## Multitrack architecture (added 2026-06-21, completed same day)
 
-Four tracks exist today: `ringsA`, `ringsB`, `plaits`, each its own AudioWorkletNode
-instance. A 3-voice drum track (kick/snare/hi-hat, also from Plaits' built-in drum
-engines) is planned next — see BACKLOG.md for the phased plan.
+6 AudioWorkletNode instances back 5 UI tabs today: `ringsA`, `ringsB`, `plaits`,
+the 3-voice drum kit (`drumHihat`/`drumSnare`/`drumKick`, one UI tab/grid but 3
+separate engine.ts tracks), and Master (not a track, just the shared bus controls).
+All 4 originally-planned phases shipped 2026-06-21 — see BACKLOG.md's "Recently
+shipped" log for the day-by-day breakdown.
 
 **Signal flow per track:** `worklet → dryGain → masterGain` (always, fixed ~0.85 level,
 no per-track volume fader yet) AND `worklet → delaySend → delayBusInput` AND
@@ -182,10 +207,12 @@ g=set_note, h=trigger, i=process, j=malloc, k=free, b=memory.
 `ready`) could not be runtime-verified in the Claude Code preview/headless-browser
 tool during this work — synthetic clicks there don't carry real `navigator.userActivation`
 (`isActive: false`), which can affect Chrome's audio-thread scheduling for worklets.
-Phase 1 (2 Rings tracks) and Phase 3 (+ Plaits) were both deployed to the live site and
-reviewed carefully by static inspection, but **actual audio playback with all 3 tracks
-running simultaneously should be confirmed in a real browser** before building Phase 4
-(drums, which adds 3 more worklet instances) on top of it.
+Every phase (1: 2 Rings, 3: +Plaits, 4: +3 drum voices) was deployed to the live site
+and reviewed carefully by static inspection instead, with the user confirming actual
+audio playback in a real browser after each phase. If you're picking up further work
+on this (e.g. per-voice drum tone shaping, or a new track type), the same constraint
+applies — you likely can't verify real audio in an automated preview tool either;
+deploy and ask the user to confirm.
 
 ## Key decisions worth knowing before you change things
 
