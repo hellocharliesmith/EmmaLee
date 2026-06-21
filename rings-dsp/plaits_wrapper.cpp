@@ -42,7 +42,9 @@ void plaits_init(float sample_rate) {
   modulations.level_patched = false;
 }
 
-// param: 0=harmonics 1=timbre 2=morph 3=decay
+// param: 0=harmonics 1=timbre 2=morph 3=decay 4=lpg_colour
+// (decay and lpg_colour are the hardware's "hold button A, turn Morph/Timbre"
+// secondary functions — exposed here as regular sliders instead of a hold gesture)
 EMSCRIPTEN_KEEPALIVE
 void plaits_set_param(int param, float value) {
   switch (param) {
@@ -50,6 +52,7 @@ void plaits_set_param(int param, float value) {
     case 1: patch.timbre = value; break;
     case 2: patch.morph = value; break;
     case 3: patch.decay = value; break;
+    case 4: patch.lpg_colour = value; break;
   }
 }
 

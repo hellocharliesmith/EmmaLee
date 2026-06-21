@@ -33,6 +33,7 @@ export interface PlaitsTrackState extends BaseTrackState {
   timbre: number;
   morph: number;
   decay: number;
+  lpgColour: number;
 }
 
 export interface SongState {

@@ -54,7 +54,7 @@ interface RingsParamsState {
 interface PlaitsParamsState {
   kind: 'plaits';
   engine: number;
-  params: [number, number, number, number]; // harmonics, timbre, morph, decay
+  params: [number, number, number, number, number]; // harmonics, timbre, morph, decay, lpgColour
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -66,7 +66,7 @@ function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
-  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
 function defaultParamsFor(id: TrackId): AnyTrackParams {
   return id === 'plaits' ? defaultPlaitsParams() : defaultRingsParams();
@@ -152,7 +152,7 @@ export default function App() {
     const plaits: PlaitsTrackState = {
       steps: tracks.plaits.steps, scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
-      morph: plaitsP.params[2], decay: plaitsP.params[3],
+      morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
     };
 
@@ -180,7 +180,7 @@ export default function App() {
     };
     const plaits: PlaitsTrackState = {
       steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
-      engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5,
+      engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5, lpgColour: 0.5,
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     return {
@@ -219,7 +219,7 @@ export default function App() {
       },
       plaits: {
         kind: 'plaits', engine: state.tracks.plaits.engine,
-        params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay],
+        params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
       },
     };
@@ -261,6 +261,7 @@ export default function App() {
       Engine.setPlaitsParam(1, pp.params[1]);
       Engine.setPlaitsParam(2, pp.params[2]);
       Engine.setPlaitsParam(3, pp.params[3]);
+      Engine.setPlaitsParam(4, pp.params[4]);
       Engine.setPlaitsModel(pp.engine);
       Engine.setTrackVolume('plaits', pp.volume);
       Engine.setTrackSend('plaits', 'delay', pp.delaySend);
@@ -421,7 +422,7 @@ export default function App() {
                   onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
                   onParamChange={(i, v) => updateActiveParams(p => {
                     if (p.kind !== 'plaits') return p;
-                    const n = [...p.params] as [number,number,number,number]; n[i] = v;
+                    const n = [...p.params] as [number,number,number,number,number]; n[i] = v;
                     return { ...p, params: n };
                   })}
                 />

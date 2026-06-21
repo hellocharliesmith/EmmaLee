@@ -15,17 +15,20 @@ const ENGINES = [
   { id: 6,  label: 'String Machine', description: 'String-machine/organ pads — lush, sustained' },
 ];
 
-const PARAM_LABELS = ['Harmonics', 'Timbre', 'Morph', 'Decay'];
+// Decay and LPG Colour are the hardware's "hold button A, turn Morph/Timbre"
+// secondary functions — exposed here as regular sliders instead of a hold gesture.
+const PARAM_LABELS = ['Harmonics', 'Timbre', 'Morph', 'Decay', 'LPG Colour'];
 const PARAM_DESCS  = [
   'Harmonic content — meaning depends on engine',
   'Timbral character — meaning depends on engine',
   'Waveform morph — meaning depends on engine',
-  'Envelope decay time',
+  'Envelope decay time (hold-A + Morph on real hardware)',
+  'Low-pass gate tone: filtered/dark vs open/bright decay (hold-A + Timbre on real hardware)',
 ];
 
 export interface PlaitsControlsProps {
   engine: number;
-  params: [number, number, number, number];
+  params: [number, number, number, number, number];
   onEngineChange: (e: number) => void;
   onParamChange: (i: number, v: number) => void;
 }
