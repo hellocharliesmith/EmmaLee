@@ -12,8 +12,42 @@ first if you're new to the codebase. This file is just queued ideas.
   grid rows were clickable and triggered phantom notes.
 - **2026-06-20/21** — Step probability: each step cycles through 100/75/66/50/33/25%
   via a small button row under the grid. Backward-compatible with old saves.
+- **2026-06-21** — Multitrack Phase 1: 2 Rings tracks (ringsA/ringsB), each its own
+  AudioWorkletNode. Master bus owns shared delay+reverb, fed by per-track Sends knobs.
+  Track tabs in UI (Rings A / Rings B / Master). See AGENTS.md "Multitrack architecture"
+  for the full signal-flow writeup and what got dropped (Rings-internal reverb type,
+  multi-page song sections — both noted there with reasoning).
 - (Already in place before this round, in case it looks unimplemented) — Save/load
   patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
+
+---
+
+## Multitrack — in progress (phased plan, see AGENTS.md)
+
+Goal: 2x Rings (done) + 1x slimmed Plaits (melodic) + 1x drum track (3 voices:
+kick/snare/hi-hat, also from Plaits' built-in drum engines). Decisions already made:
+
+- **Phase 1 (DONE 2026-06-21)**: core multitrack refactor — see "Recently shipped" above.
+- **Phase 2 (next)**: this is mostly done already as part of Phase 1 (track tabs +
+  Master section + send knobs shipped together). Remaining: visual polish pass on the
+  Sends knobs / track tabs if needed.
+- **Phase 3**: Plaits melodic track. Engines chosen: Virtual Analog (0), FM (2),
+  String (11), Modal (12), Six-Op (15), String Machine (17) — 6 of Plaits' 22 engines.
+  Needs `plaits_wrapper.cpp` (new, mirrors `rings-dsp/rings_wrapper.cpp`), a build
+  script, and a new `plaits-processor.js` AudioWorklet. Test CPU/buffer with 3 worklets
+  live before moving to Phase 4.
+- **Phase 4**: Drum track — reuse the Plaits wrapper/binary from Phase 3, 3 small
+  instances locked to `bass_drum_engine`/`snare_drum_engine`/`hi_hat_engine` so they can
+  overlap on the same step (real drum-machine behavior, not monophonic). Drum-machine-
+  style UI (fixed named rows, not a chromatic piano roll).
+- Track polyphony: monophonic per track throughout (matches how Rings already works),
+  except the 3 drum voices which are independent so kick+hat can hit together.
+- Song structure: 1 page per track for v1 — multi-page song sections deliberately
+  deferred, see AGENTS.md.
+
+**Verification note**: actual audio playback with 2 Rings tracks running simultaneously
+should be confirmed in a real browser before starting Phase 3 — see AGENTS.md
+"Verification caveat" for why this couldn't be fully confirmed during Phase 1 itself.
 
 ---
 
@@ -38,9 +72,12 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Reverb
 
-### Rings' built-in reverb
-- Expose Rings' internal FDN reverb parameters directly from the WASM wrapper. Already running inside `Part::Process`, just needs to be surfaced. Best tonal fit — designed specifically for Rings' sound.
-- Requires WASM recompile + new wrapper functions.
+### Rings' built-in reverb (per-track toggle, not master)
+- Previously a master reverb-type option ("Rings"), removed in the 2026-06-21
+  multitrack refactor — see AGENTS.md "Multitrack architecture" for why it doesn't fit
+  a shared master effect. The wrapper functions (`rings_reverb_enable`/`rings_reverb_set`)
+  already exist and work — would need re-exposing as a per-track toggle on each Rings
+  track's own controls instead of in the Master reverb-type selector.
 
 ### Real IR options / improvements
 - The current Algo reverb is functional but the comb filter network could be improved. Consider implementing Freeverb properly (8 combs + 4 allpass per channel) for better diffusion.

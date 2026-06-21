@@ -7,8 +7,10 @@ Codex, Cursor, or any other AI coding tool. It's written to be tool-agnostic.
 
 A public-facing, no-install browser synthesizer built for a non-technical lead
 (AI-assisted development throughout — explain things in plain terms, not jargon).
-Mutable Instruments Rings (real hardware module DSP, compiled from its actual C++
-source to WebAssembly) driven by a step sequencer, with delay and reverb.
+Multitrack step sequencer: 2 tracks of Mutable Instruments Rings (real hardware
+module DSP, compiled from its actual C++ source to WebAssembly), with more tracks
+(Plaits, drums) planned — see "Multitrack architecture" below and BACKLOG.md.
+Master bus owns shared delay + reverb; each track sends into them independently.
 
 - **Live:** https://emma-lee.hellocharliesmith.workers.dev
 - **GitHub:** https://github.com/hellocharliesmith/EmmaLee
@@ -52,32 +54,79 @@ what the wrangler.jsonc might suggest) — the explicit `wrangler deploy` is wha
 ```
 src/
   audio/
-    engine.ts       — the entire native Web Audio graph. initAudio() builds it once
-                       on first user gesture (browser autoplay rules). All later
-                       param changes go through exported setters (setReverbWet,
-                       setDelayTime, setRingsParam, etc.) that mutate existing nodes.
+    engine.ts       — the native Web Audio graph: per-track Rings instances
+                       (ringsA/ringsB, each its own AudioWorkletNode) + a shared
+                       master bus owning delay and reverb. initAudio() builds it
+                       once on first user gesture (browser autoplay rules). Per-track
+                       setters take a trackId first arg (setRingsParam(id, ...) etc);
+                       master setters (setReverbWet, setDelayTime, etc.) are global.
     utils.ts         — small helpers (e.g. divisionSeconds for BPM-synced delay times)
   hooks/
-    useSequencer.ts  — all sequencer state: 4 pages x 32 steps, per-step notes/strum/
-                       probability. Playback uses Tone.Loop reading LIVE refs
-                       (pageStepsRef, enabledRef) every tick — NOT closures — so
-                       editing a page while it's playing takes effect immediately.
+    useSequencer.ts  — multitrack sequencer state: Record<TrackId, TrackSeqState>,
+                       one 32-step page per track (v1 simplification — no multi-page
+                       song sections yet, see BACKLOG.md). One shared Tone.Loop reads
+                       LIVE refs (tracksRef) every tick and dispatches a trigger per
+                       track — NOT closures — so editing a track while playing takes
+                       effect immediately. Editing functions (toggleNote etc.) always
+                       target whichever track is `activeTrack`.
     useSavedSongs.ts — localStorage-backed save/load list
   components/
-    PianoRoll.tsx    — the step grid. Shared between normal mode and Kids Mode
-                       (kidsMode prop changes cell count, styling, hides some rows).
-    RingsControls.tsx, DelayControls.tsx, ReverbControls.tsx, Knob.tsx, SaveLoad.tsx,
-    WaveformMeter.tsx
-  App.tsx            — top-level state, wires hooks to components, kids-mode branch
+    PianoRoll.tsx    — the step grid, shared across tracks and Kids Mode (kidsMode
+                       prop changes cell count/styling/hides some rows).
+    RingsControls.tsx (now takes a `trackId` prop and calls engine functions itself,
+                       same pattern as before — App.tsx callbacks are pure state setters)
+    DelayControls.tsx, ReverbControls.tsx — now master-only, no per-track concept
+    Knob.tsx, SaveLoad.tsx, WaveformMeter.tsx
+  App.tsx            — track tabs (Rings A / Rings B / Master) + viewSection toggle,
+                       per-track instrument state (trackParams) + sends, kids-mode
+                       branch pinned to ringsA only
 public/
-  rings-processor.js — the AudioWorklet. Loads WASM via WebAssembly.instantiate
-                       directly (importScripts is NOT available inside AudioWorklet
-                       global scope — this tripped up earlier sessions).
+  rings-processor.js — the AudioWorklet (one registered processor class, instantiated
+                       twice — once per Rings track). Loads WASM via
+                       WebAssembly.instantiate directly (importScripts is NOT
+                       available inside AudioWorklet global scope). WASM is compiled
+                       ONCE in engine.ts and the same compiled Module is posted to
+                       each track's worklet instance (saves re-compiling per track).
   rings.wasm/rings.js — compiled output, see "Recompiling the WASM" below
 rings-dsp/rings_wrapper.cpp — thin C wrapper exposing rings_init/set_param/trigger/etc
 rings-source/        — full clone of Mutable Instruments' actual firmware source
-build-wasm.sh        — the emcc compile command (see below)
+                       (also contains plaits/ and peaks/drums/ for the planned
+                       Plaits + drum tracks — see BACKLOG.md)
+build-wasm.sh        — the emcc compile command for Rings (see below)
 ```
+
+## Multitrack architecture (added 2026-06-21)
+
+Two tracks of Rings exist today (`ringsA`, `ringsB`), each its own AudioWorkletNode
+instance. Plaits (melodic) and a 3-voice drum track (kick/snare/hi-hat, also from
+Plaits' built-in drum engines) are planned next — see BACKLOG.md for the phased plan.
+
+**Signal flow per track:** `worklet → dryGain → masterGain` (always, fixed ~0.85 level,
+no per-track volume fader yet) AND `worklet → delaySend → delayBusInput` AND
+`worklet → reverbSend → reverbBusInput`, where `delaySend`/`reverbSend` gain values are
+the per-track Sends knobs (0–1, default 0.5 each). `delayBusInput`/`reverbBusInput` feed
+the (single, shared) delay and reverb chains, whose wet return level is controlled by
+the Master tab's existing Mix knobs — same role as before, just now fed by multiple
+tracks instead of one.
+
+**Removed**: the "Rings" reverb-type option (toggled one worklet's own internal FDN
+reverb directly, bypassing the master chain) doesn't generalize to a shared master
+effect across multiple Rings tracks — it was tied 1:1 to a single worklet. Dropped
+`setRingsReverbEnabled`/`setRingsReverbParams`/`restoreGains` from engine.ts. Worth
+revisiting later as a per-Rings-track toggle instead of a master reverb type, if wanted.
+
+**Song structure simplified for v1**: dropped the old 4-page-per-track "song section"
+system (each track is just one 32-step page now) to keep the first multitrack release's
+state/UI surface small. Old single-track saves still load (migrated into `ringsA`,
+`ringsB` defaults to empty) — see `migrateLegacy()` in App.tsx.
+
+**Verification caveat**: the AudioWorklet message-port handshake (`load-wasm` →
+`ready`) could not be runtime-verified in the Claude Code preview/headless-browser
+tool during this work — synthetic clicks there don't carry real `navigator.userActivation`
+(`isActive: false`), which can affect Chrome's audio-thread scheduling for worklets.
+The code was deployed to the live site and reviewed carefully by static inspection, but
+**actual audio playback with 2 simultaneous Rings tracks should be confirmed in a real
+browser** before building Phase 3 (Plaits) on top of it.
 
 ## Key decisions worth knowing before you change things
 
