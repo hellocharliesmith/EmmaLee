@@ -471,6 +471,15 @@
   gap: 16px;
 }
 
+/* Mixer knob row, on the Master page */
+.mixer-row {
+  width: 100%;
+  max-width: 960px;
+}
+.mixer-row .knob-row {
+  gap: 16px;
+}
+
 .page-playing-dot {
   position: absolute;
   bottom: 4px;

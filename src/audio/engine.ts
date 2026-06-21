@@ -284,6 +284,12 @@ export function setTrackSend(trackId: RingsTrackId, kind: 'delay' | 'reverb', va
   (kind === 'delay' ? t.delaySend : t.reverbSend).gain.value = value;
 }
 
+export function setTrackVolume(trackId: RingsTrackId, value: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t) return;
+  t.dryGain.gain.value = Math.max(0, Math.min(1.5, value));
+}
+
 // ── Master reverb ────────────────────────────────────────────────────────
 export async function setReverbType(name: string): Promise<void> {
   if (!audioCtx) return;

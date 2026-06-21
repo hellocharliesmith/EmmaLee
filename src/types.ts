@@ -19,6 +19,7 @@ export interface RingsTrackState {
   damping: number;
   position: number;
   lfo: LfoState[];
+  volume: number;
   delaySend: number;
   reverbSend: number;
 }

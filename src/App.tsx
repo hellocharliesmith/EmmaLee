@@ -43,12 +43,13 @@ interface RingsTrackParams {
   model: number;
   params: [number, number, number, number];
   lfo: LfoState[];
+  volume: number;
   delaySend: number;
   reverbSend: number;
 }
 
 function defaultTrackParams(): RingsTrackParams {
-  return { model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, delaySend: 0.5, reverbSend: 0.5 };
+  return { model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
 
 type ViewSection = 'track' | 'master';
@@ -80,8 +81,11 @@ export default function App() {
   });
   const active = trackParams[activeTrack];
 
+  function updateTrackParamsFor(id: TrackId, fn: (prev: RingsTrackParams) => RingsTrackParams) {
+    setTrackParams(prev => ({ ...prev, [id]: fn(prev[id]) }));
+  }
   function updateActiveParams(fn: (prev: RingsTrackParams) => RingsTrackParams) {
-    setTrackParams(prev => ({ ...prev, [activeTrack]: fn(prev[activeTrack]) }));
+    updateTrackParamsFor(activeTrack, fn);
   }
 
   // ── Delay (master) ───────────────────────────────────────────────────
@@ -122,6 +126,7 @@ export default function App() {
         damping: trackParams[id].params[2],
         position: trackParams[id].params[3],
         lfo: trackParams[id].lfo,
+        volume: trackParams[id].volume,
         delaySend: trackParams[id].delaySend,
         reverbSend: trackParams[id].reverbSend,
       };
@@ -141,12 +146,12 @@ export default function App() {
       steps: oldSteps, scale: old.scale, rootNote: old.rootNote, scrollRow: old.scrollRow,
       model: old.model, structure: old.structure, brightness: old.brightness,
       damping: old.damping, position: old.position, lfo: old.lfo,
-      delaySend: 0.5, reverbSend: 0.5,
+      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const ringsB: RingsTrackState = {
       steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
       model: 1, structure: 0.11, brightness: 0.24, damping: 0.44, position: 0.25,
-      lfo: DEFAULT_LFO, delaySend: 0.5, reverbSend: 0.5,
+      lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     return {
       version: 2, bpm: old.bpm, tracks: { ringsA, ringsB },
@@ -171,7 +176,7 @@ export default function App() {
       nextTracks[id] = { steps: t.steps, scale: t.scale, rootNote: t.rootNote, scrollRow: t.scrollRow };
       nextParams[id] = {
         model: t.model, params: [t.structure, t.brightness, t.damping, t.position],
-        lfo: t.lfo, delaySend: t.delaySend, reverbSend: t.reverbSend,
+        lfo: t.lfo, volume: t.volume, delaySend: t.delaySend, reverbSend: t.reverbSend,
       };
     }
     loadTracks(nextTracks);
@@ -202,6 +207,7 @@ export default function App() {
           Engine.setLFODepth(id, i, l.depth);
           Engine.setLFOEnabled(id, i, l.on);
         });
+        Engine.setTrackVolume(id, p.volume);
         Engine.setTrackSend(id, 'delay', p.delaySend);
         Engine.setTrackSend(id, 'reverb', p.reverbSend);
       }
@@ -234,21 +240,6 @@ export default function App() {
   }
 
   const kidsNotes = kidsMode ? visibleNotes.slice(0, KIDS_ROWS) : visibleNotes;
-
-  const TrackTabs = () => (
-    <div className="page-selector">
-      {TRACK_IDS.map(id => (
-        <button key={id}
-          className={['page-btn', 'track-tab', (viewSection === 'track' && activeTrack === id) ? 'viewing' : ''].filter(Boolean).join(' ')}
-          onClick={() => { setActiveTrack(id); setViewSection('track'); }}
-        >{TRACK_LABELS[id]}</button>
-      ))}
-      <button
-        className={['page-btn', 'track-tab', viewSection === 'master' ? 'viewing' : ''].filter(Boolean).join(' ')}
-        onClick={() => setViewSection('master')}
-      >Master</button>
-    </div>
-  );
 
   return (
     <div className={`app${kidsMode ? ' kids-mode' : ''}`}>
@@ -332,7 +323,18 @@ export default function App() {
             </div>
           )}
 
-          <TrackTabs />
+          <div className="page-selector">
+            {TRACK_IDS.map(id => (
+              <button key={id}
+                className={['page-btn', 'track-tab', (viewSection === 'track' && activeTrack === id) ? 'viewing' : ''].filter(Boolean).join(' ')}
+                onClick={() => { setActiveTrack(id); setViewSection('track'); }}
+              >{TRACK_LABELS[id]}</button>
+            ))}
+            <button
+              className={['page-btn', 'track-tab', viewSection === 'master' ? 'viewing' : ''].filter(Boolean).join(' ')}
+              onClick={() => setViewSection('master')}
+            >Master</button>
+          </div>
 
           {viewSection === 'track' ? (
             <>
@@ -356,6 +358,8 @@ export default function App() {
               <div className="send-row">
                 <div className="knob-row">
                   <label>Sends</label>
+                  <Knob value={active.volume} min={0} max={1.5} label="Volume"
+                    onChange={v => { updateActiveParams(p => ({ ...p, volume: v })); Engine.setTrackVolume(activeTrack, v); }} />
                   <Knob value={active.delaySend} min={0} max={1} label="Delay"
                     onChange={v => { updateActiveParams(p => ({ ...p, delaySend: v })); Engine.setTrackSend(activeTrack, 'delay', v); }} />
                   <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
@@ -371,6 +375,16 @@ export default function App() {
                     onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
                 </div>
                 <WaveformMeter />
+              </div>
+
+              <div className="mixer-row">
+                <div className="knob-row">
+                  <label>Mixer</label>
+                  {TRACK_IDS.map(id => (
+                    <Knob key={id} value={trackParams[id].volume} min={0} max={1.5} label={TRACK_LABELS[id]}
+                      onChange={v => { updateTrackParamsFor(id, p => ({ ...p, volume: v })); Engine.setTrackVolume(id, v); }} />
+                  ))}
+                </div>
               </div>
 
               <div className="fx-row">
