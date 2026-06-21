@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
+import { RINGS_TRACK_IDS, type RingsTrackId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
 import { useSequencer, TRACK_IDS, TRACK_LABELS,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
@@ -8,10 +9,11 @@ import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
+import { PlaitsControls } from './components/PlaitsControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
-import type { LfoState, SavedSong, SongState, RingsTrackState, LegacySongStateV1 } from './types';
+import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, LegacySongStateV1 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -39,17 +41,35 @@ const DEFAULT_LFO: LfoState[] = [
   { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
 ];
 
-interface RingsTrackParams {
+interface RingsParamsState {
+  kind: 'rings';
   model: number;
-  params: [number, number, number, number];
+  params: [number, number, number, number]; // structure, brightness, damping, position
   lfo: LfoState[];
   volume: number;
   delaySend: number;
   reverbSend: number;
 }
 
-function defaultTrackParams(): RingsTrackParams {
-  return { model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+interface PlaitsParamsState {
+  kind: 'plaits';
+  engine: number;
+  params: [number, number, number, number]; // harmonics, timbre, morph, decay
+  volume: number;
+  delaySend: number;
+  reverbSend: number;
+}
+
+type AnyTrackParams = RingsParamsState | PlaitsParamsState;
+
+function defaultRingsParams(): RingsParamsState {
+  return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+}
+function defaultPlaitsParams(): PlaitsParamsState {
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+}
+function defaultParamsFor(id: TrackId): AnyTrackParams {
+  return id === 'plaits' ? defaultPlaitsParams() : defaultRingsParams();
 }
 
 type ViewSection = 'track' | 'master';
@@ -74,17 +94,17 @@ export default function App() {
   const [viewSection, setViewSection] = useState<ViewSection>('track');
 
   // ── Per-track instrument state ───────────────────────────────────────
-  const [trackParams, setTrackParams] = useState<Record<TrackId, RingsTrackParams>>(() => {
-    const init = {} as Record<TrackId, RingsTrackParams>;
-    for (const id of TRACK_IDS) init[id] = defaultTrackParams();
+  const [trackParams, setTrackParams] = useState<Record<TrackId, AnyTrackParams>>(() => {
+    const init = {} as Record<TrackId, AnyTrackParams>;
+    for (const id of TRACK_IDS) init[id] = defaultParamsFor(id);
     return init;
   });
   const active = trackParams[activeTrack];
 
-  function updateTrackParamsFor(id: TrackId, fn: (prev: RingsTrackParams) => RingsTrackParams) {
+  function updateTrackParamsFor(id: TrackId, fn: (prev: AnyTrackParams) => AnyTrackParams) {
     setTrackParams(prev => ({ ...prev, [id]: fn(prev[id]) }));
   }
-  function updateActiveParams(fn: (prev: RingsTrackParams) => RingsTrackParams) {
+  function updateActiveParams(fn: (prev: AnyTrackParams) => AnyTrackParams) {
     updateTrackParamsFor(activeTrack, fn);
   }
 
@@ -113,26 +133,31 @@ export default function App() {
   const { songs, save, remove } = useSavedSongs();
 
   function captureState(): SongState {
-    const tracksOut = {} as Record<TrackId, RingsTrackState>;
-    for (const id of TRACK_IDS) {
-      tracksOut[id] = {
-        steps: tracks[id].steps,
-        scale: tracks[id].scale,
-        rootNote: tracks[id].rootNote,
-        scrollRow: tracks[id].scrollRow,
-        model: trackParams[id].model,
-        structure: trackParams[id].params[0],
-        brightness: trackParams[id].params[1],
-        damping: trackParams[id].params[2],
-        position: trackParams[id].params[3],
-        lfo: trackParams[id].lfo,
-        volume: trackParams[id].volume,
-        delaySend: trackParams[id].delaySend,
-        reverbSend: trackParams[id].reverbSend,
-      };
-    }
+    const ringsAP = trackParams.ringsA as RingsParamsState;
+    const ringsBP = trackParams.ringsB as RingsParamsState;
+    const plaitsP = trackParams.plaits as PlaitsParamsState;
+
+    const ringsA: RingsTrackState = {
+      steps: tracks.ringsA.steps, scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
+      model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
+      damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo,
+      volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend,
+    };
+    const ringsB: RingsTrackState = {
+      steps: tracks.ringsB.steps, scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
+      model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
+      damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo,
+      volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend,
+    };
+    const plaits: PlaitsTrackState = {
+      steps: tracks.plaits.steps, scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
+      engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
+      morph: plaitsP.params[2], decay: plaitsP.params[3],
+      volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
+    };
+
     return {
-      version: 2, bpm, tracks: tracksOut,
+      version: 2, bpm, tracks: { ringsA, ringsB, plaits },
       delayDivision, delayMix, delayFeedback, delayFilter,
       reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone,
     };
@@ -153,8 +178,13 @@ export default function App() {
       model: 1, structure: 0.11, brightness: 0.24, damping: 0.44, position: 0.25,
       lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
+    const plaits: PlaitsTrackState = {
+      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5,
+      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+    };
     return {
-      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB },
+      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB, plaits },
       delayDivision: old.delayDivision, delayMix: old.delayMix,
       delayFeedback: old.delayFeedback, delayFilter: old.delayFilter,
       reverbType: old.reverbType === 'rings' ? 'algo' : old.reverbType,
@@ -169,16 +199,31 @@ export default function App() {
       ? raw as SongState
       : migrateLegacy(raw as LegacySongStateV1);
 
-    const nextTracks = {} as Record<TrackId, TrackSeqState>;
-    const nextParams = {} as Record<TrackId, RingsTrackParams>;
-    for (const id of TRACK_IDS) {
-      const t = state.tracks[id];
-      nextTracks[id] = { steps: t.steps, scale: t.scale, rootNote: t.rootNote, scrollRow: t.scrollRow };
-      nextParams[id] = {
-        model: t.model, params: [t.structure, t.brightness, t.damping, t.position],
-        lfo: t.lfo, volume: t.volume, delaySend: t.delaySend, reverbSend: t.reverbSend,
-      };
-    }
+    const nextTracks: Record<TrackId, TrackSeqState> = {
+      ringsA: { steps: state.tracks.ringsA.steps, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
+      ringsB: { steps: state.tracks.ringsB.steps, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
+      plaits: { steps: state.tracks.plaits.steps, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
+    };
+    const nextParams: Record<TrackId, AnyTrackParams> = {
+      ringsA: {
+        kind: 'rings', model: state.tracks.ringsA.model,
+        params: [state.tracks.ringsA.structure, state.tracks.ringsA.brightness, state.tracks.ringsA.damping, state.tracks.ringsA.position],
+        lfo: state.tracks.ringsA.lfo, volume: state.tracks.ringsA.volume,
+        delaySend: state.tracks.ringsA.delaySend, reverbSend: state.tracks.ringsA.reverbSend,
+      },
+      ringsB: {
+        kind: 'rings', model: state.tracks.ringsB.model,
+        params: [state.tracks.ringsB.structure, state.tracks.ringsB.brightness, state.tracks.ringsB.damping, state.tracks.ringsB.position],
+        lfo: state.tracks.ringsB.lfo, volume: state.tracks.ringsB.volume,
+        delaySend: state.tracks.ringsB.delaySend, reverbSend: state.tracks.ringsB.reverbSend,
+      },
+      plaits: {
+        kind: 'plaits', engine: state.tracks.plaits.engine,
+        params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay],
+        volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
+      },
+    };
+
     loadTracks(nextTracks);
     setTrackParams(nextParams);
 
@@ -194,8 +239,8 @@ export default function App() {
     setReverbTone(state.reverbTone);
 
     if (Engine.isAudioReady()) {
-      for (const id of TRACK_IDS) {
-        const p = nextParams[id];
+      for (const id of RINGS_TRACK_IDS) {
+        const p = nextParams[id] as RingsParamsState;
         Engine.setRingsParam(id, 0, p.params[0]);
         Engine.setRingsParam(id, 1, p.params[1]);
         Engine.setRingsParam(id, 2, p.params[2]);
@@ -211,6 +256,16 @@ export default function App() {
         Engine.setTrackSend(id, 'delay', p.delaySend);
         Engine.setTrackSend(id, 'reverb', p.reverbSend);
       }
+      const pp = nextParams.plaits as PlaitsParamsState;
+      Engine.setPlaitsParam(0, pp.params[0]);
+      Engine.setPlaitsParam(1, pp.params[1]);
+      Engine.setPlaitsParam(2, pp.params[2]);
+      Engine.setPlaitsParam(3, pp.params[3]);
+      Engine.setPlaitsModel(pp.engine);
+      Engine.setTrackVolume('plaits', pp.volume);
+      Engine.setTrackSend('plaits', 'delay', pp.delaySend);
+      Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
+
       Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));
       Engine.setDelayMix(state.delayMix);
       Engine.setDelayFeedback(state.delayFeedback);
@@ -347,13 +402,30 @@ export default function App() {
                 onScrollUp={scrollUp} onScrollDown={scrollDown}
               />
 
-              <RingsControls
-                trackId={activeTrack}
-                model={active.model} params={active.params} lfo={active.lfo}
-                onModelChange={m => updateActiveParams(p => ({ ...p, model: m }))}
-                onParamChange={(i, v) => updateActiveParams(p => { const n = [...p.params] as [number,number,number,number]; n[i]=v; return { ...p, params: n }; })}
-                onLfoChange={(i, u) => updateActiveParams(p => ({ ...p, lfo: p.lfo.map((l, idx) => idx===i ? {...l,...u} : l) }))}
-              />
+              {active.kind === 'rings' ? (
+                <RingsControls
+                  trackId={activeTrack as RingsTrackId}
+                  model={active.model} params={active.params} lfo={active.lfo}
+                  onModelChange={m => updateActiveParams(p => p.kind === 'rings' ? ({ ...p, model: m }) : p)}
+                  onParamChange={(i, v) => updateActiveParams(p => {
+                    if (p.kind !== 'rings') return p;
+                    const n = [...p.params] as [number,number,number,number]; n[i] = v;
+                    return { ...p, params: n };
+                  })}
+                  onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'rings'
+                    ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
+                />
+              ) : (
+                <PlaitsControls
+                  engine={active.engine} params={active.params}
+                  onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
+                  onParamChange={(i, v) => updateActiveParams(p => {
+                    if (p.kind !== 'plaits') return p;
+                    const n = [...p.params] as [number,number,number,number]; n[i] = v;
+                    return { ...p, params: n };
+                  })}
+                />
+              )}
 
               <div className="send-row">
                 <div className="knob-row">

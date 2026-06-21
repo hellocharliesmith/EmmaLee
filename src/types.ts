@@ -8,26 +8,41 @@ export interface LfoState {
   depth: number;
 }
 
-export interface RingsTrackState {
+interface BaseTrackState {
   steps: StepValue[];
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;
+  volume: number;
+  delaySend: number;
+  reverbSend: number;
+}
+
+export interface RingsTrackState extends BaseTrackState {
   model: number;
   structure: number;
   brightness: number;
   damping: number;
   position: number;
   lfo: LfoState[];
-  volume: number;
-  delaySend: number;
-  reverbSend: number;
+}
+
+export interface PlaitsTrackState extends BaseTrackState {
+  engine: number;
+  harmonics: number;
+  timbre: number;
+  morph: number;
+  decay: number;
 }
 
 export interface SongState {
   version: 2;
   bpm: number;
-  tracks: Record<TrackId, RingsTrackState>;
+  tracks: {
+    ringsA: RingsTrackState;
+    ringsB: RingsTrackState;
+    plaits: PlaitsTrackState;
+  };
   // Master
   delayDivision: string;
   delayMix: number;

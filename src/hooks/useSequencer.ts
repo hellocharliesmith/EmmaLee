@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
-import { triggerNote, type RingsTrackId } from '../audio/engine';
+import { triggerNote, type TrackId as EngineTrackId } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
-export type TrackId = RingsTrackId; // widen to include 'plaits' | 'drums' in later phases
+export type TrackId = EngineTrackId; // widen to include drum voices in a later phase
 
 export interface StepData {
   notes: number[];
@@ -16,8 +16,8 @@ export const STEP_COUNT   = 32;
 export const VISIBLE_ROWS = 12;
 export const PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
 
-export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB'];
-export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B' };
+export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits'];
+export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits' };
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],

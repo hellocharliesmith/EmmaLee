@@ -1,7 +1,11 @@
 import * as Tone from 'tone';
 
 export type RingsTrackId = 'ringsA' | 'ringsB';
+export type PlaitsTrackId = 'plaits';
+export type TrackId = RingsTrackId | PlaitsTrackId;
 export const RINGS_TRACK_IDS: RingsTrackId[] = ['ringsA', 'ringsB'];
+export const PLAITS_TRACK_ID: PlaitsTrackId = 'plaits';
+export const ALL_TRACK_IDS: TrackId[] = [...RINGS_TRACK_IDS, PLAITS_TRACK_ID];
 
 let audioCtx: AudioContext | null = null;
 let isReady = false;
@@ -20,7 +24,7 @@ let masterGain: GainNode | null = null;
 let analyserL: AnalyserNode | null = null;
 let analyserR: AnalyserNode | null = null;
 
-const dspLoadByTrack = new Map<RingsTrackId, number>();
+const dspLoadByTrack = new Map<TrackId, number>();
 
 export function getAnalysers(): [AnalyserNode | null, AnalyserNode | null] { return [analyserL, analyserR]; }
 export function getDSPLoad(): number {
@@ -115,17 +119,19 @@ function swapReverb(newUnit: ReverbUnit) {
   reverbUnit = newUnit;
 }
 
-// ── Rings track ──────────────────────────────────────────────────────────
-interface RingsTrackNodes {
+// ── Tracks (shared by Rings and Plaits) ────────────────────────────────────
+interface TrackNodes {
   worklet: AudioWorkletNode;
   dryGain: GainNode;
   delaySend: GainNode;
   reverbSend: GainNode;
 }
-const ringsTracks = new Map<RingsTrackId, RingsTrackNodes>();
+const tracks = new Map<TrackId, TrackNodes>();
 
-async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule: WebAssembly.Module): Promise<void> {
-  const worklet = new AudioWorkletNode(ctx, 'rings-processor', {
+// Builds the worklet, awaits its 'ready' handshake, and wires dry/delaySend/reverbSend
+// into the shared master bus. Caller is responsible for instrument-specific defaults.
+async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmModule: WebAssembly.Module): Promise<AudioWorkletNode> {
+  const worklet = new AudioWorkletNode(ctx, processorName, {
     numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
   });
 
@@ -148,7 +154,12 @@ async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule:
   worklet.connect(delaySend);   delaySend.connect(delayBusInput!);
   worklet.connect(reverbSend);  reverbSend.connect(reverbBusInput!);
 
-  ringsTracks.set(id, { worklet, dryGain, delaySend, reverbSend });
+  tracks.set(id, { worklet, dryGain, delaySend, reverbSend });
+  return worklet;
+}
+
+async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule: WebAssembly.Module): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, id, 'rings-processor', wasmModule);
 
   // Defaults — Structure/Brightness/Damping/Position, Strings model
   worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.11 } });
@@ -164,6 +175,17 @@ async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule:
   worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'enabled', value: true } });
 }
 
+async function createPlaitsTrack(ctx: AudioContext, wasmModule: WebAssembly.Module): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, PLAITS_TRACK_ID, 'plaits-processor', wasmModule);
+
+  // Defaults — Harmonics/Timbre/Morph/Decay, Virtual Analog engine (index 8)
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.5 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.5 } });
+  worklet.port.postMessage({ type: 'set-model', payload: { model: 8 } });
+}
+
 // ── initAudio ─────────────────────────────────────────────────────────────
 export async function initAudio(ctx: AudioContext): Promise<void> {
   audioCtx = ctx;
@@ -172,6 +194,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   await Tone.start();
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
+  await audioCtx.audioWorklet.addModule('/plaits-processor.js');
 
   // Master bus
   masterGain = audioCtx.createGain();
@@ -229,65 +252,85 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   splitter.connect(analyserR, 1);
 
   // Rings tracks — compile WASM once, instantiate per track
-  const wasmBytes  = await fetch('/rings.wasm').then(r => r.arrayBuffer());
-  const wasmModule = await WebAssembly.compile(wasmBytes);
+  const ringsBytes  = await fetch('/rings.wasm').then(r => r.arrayBuffer());
+  const ringsModule = await WebAssembly.compile(ringsBytes);
   for (const id of RINGS_TRACK_IDS) {
-    await createRingsTrack(audioCtx, id, wasmModule);
+    await createRingsTrack(audioCtx, id, ringsModule);
   }
+
+  // Plaits track
+  const plaitsBytes  = await fetch('/plaits.wasm').then(r => r.arrayBuffer());
+  const plaitsModule = await WebAssembly.compile(plaitsBytes);
+  await createPlaitsTrack(audioCtx, plaitsModule);
 
   isReady = true;
 }
 
-// ── Per-track controls ────────────────────────────────────────────────────
+// ── Generic per-track controls (any track type) ────────────────────────────
+export function triggerNote(trackId: TrackId, midiNote: number): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote } });
+}
+
+export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb', value: number): void {
+  const t = tracks.get(trackId);
+  if (!t) return;
+  (kind === 'delay' ? t.delaySend : t.reverbSend).gain.value = value;
+}
+
+export function setTrackVolume(trackId: TrackId, value: number): void {
+  const t = tracks.get(trackId);
+  if (!t) return;
+  t.dryGain.gain.value = Math.max(0, Math.min(1.5, value));
+}
+
+// ── Rings-specific controls ─────────────────────────────────────────────────
 export function setRingsParam(trackId: RingsTrackId, param: number, value: number): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-param', payload: { param, value } });
 }
 
 export function setRingsModel(trackId: RingsTrackId, model: number): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-model', payload: { model } });
 }
 
-export function triggerNote(trackId: RingsTrackId, midiNote: number): void {
-  const t = ringsTracks.get(trackId);
-  if (!t || !isReady) return;
-  t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote } });
-}
-
 export function setLFOEnabled(trackId: RingsTrackId, i: number, enabled: boolean): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'enabled', value: enabled } });
 }
 export function setLFOWave(trackId: RingsTrackId, i: number, wave: string): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'wave', value: wave } });
 }
 export function setLFORate(trackId: RingsTrackId, i: number, rate: number): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'rate', value: rate } });
 }
 export function setLFODepth(trackId: RingsTrackId, i: number, depth: number): void {
-  const t = ringsTracks.get(trackId);
+  const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
 }
 
-export function setTrackSend(trackId: RingsTrackId, kind: 'delay' | 'reverb', value: number): void {
-  const t = ringsTracks.get(trackId);
-  if (!t) return;
-  (kind === 'delay' ? t.delaySend : t.reverbSend).gain.value = value;
+// ── Plaits-specific controls (single track, no trackId needed) ────────────
+// param: 0=harmonics 1=timbre 2=morph 3=decay
+export function setPlaitsParam(param: number, value: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-param', payload: { param, value } });
 }
 
-export function setTrackVolume(trackId: RingsTrackId, value: number): void {
-  const t = ringsTracks.get(trackId);
-  if (!t) return;
-  t.dryGain.gain.value = Math.max(0, Math.min(1.5, value));
+export function setPlaitsModel(engine: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-model', payload: { model: engine } });
 }
 
 // ── Master reverb ────────────────────────────────────────────────────────
