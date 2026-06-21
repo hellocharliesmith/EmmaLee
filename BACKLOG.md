@@ -17,6 +17,13 @@ first if you're new to the codebase. This file is just queued ideas.
   Track tabs in UI (Rings A / Rings B / Master). See AGENTS.md "Multitrack architecture"
   for the full signal-flow writeup and what got dropped (Rings-internal reverb type,
   multi-page song sections — both noted there with reasoning).
+- **2026-06-21** — Fixed track-tab click glitch (inline-defined component was
+  remounting on every render, eating clicks). Added per-track Volume knob + a Mixer
+  row on the Master page (one volume knob per track).
+- **2026-06-21** — Multitrack Phase 3: Plaits melodic track, 4th track tab. 6 curated
+  engines (Virtual Analog, FM, String, Modal, Six-Op, String Machine) — see AGENTS.md
+  "Multitrack architecture" for the engine-index correction (hardware registration
+  order, not header declaration order) and the WASM export-letter discovery process.
 - (Already in place before this round, in case it looks unimplemented) — Save/load
   patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
 
@@ -24,30 +31,29 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Multitrack — in progress (phased plan, see AGENTS.md)
 
-Goal: 2x Rings (done) + 1x slimmed Plaits (melodic) + 1x drum track (3 voices:
+Goal: 2x Rings (done) + 1x Plaits melodic (done) + 1x drum track (3 voices:
 kick/snare/hi-hat, also from Plaits' built-in drum engines). Decisions already made:
 
 - **Phase 1 (DONE 2026-06-21)**: core multitrack refactor — see "Recently shipped" above.
-- **Phase 2 (next)**: this is mostly done already as part of Phase 1 (track tabs +
-  Master section + send knobs shipped together). Remaining: visual polish pass on the
-  Sends knobs / track tabs if needed.
-- **Phase 3**: Plaits melodic track. Engines chosen: Virtual Analog (0), FM (2),
-  String (11), Modal (12), Six-Op (15), String Machine (17) — 6 of Plaits' 22 engines.
-  Needs `plaits_wrapper.cpp` (new, mirrors `rings-dsp/rings_wrapper.cpp`), a build
-  script, and a new `plaits-processor.js` AudioWorklet. Test CPU/buffer with 3 worklets
-  live before moving to Phase 4.
-- **Phase 4**: Drum track — reuse the Plaits wrapper/binary from Phase 3, 3 small
-  instances locked to `bass_drum_engine`/`snare_drum_engine`/`hi_hat_engine` so they can
-  overlap on the same step (real drum-machine behavior, not monophonic). Drum-machine-
-  style UI (fixed named rows, not a chromatic piano roll).
+- **Phase 2 (DONE 2026-06-21)**: shipped as part of Phase 1 — track tabs, Master
+  section, send knobs, plus the volume-knob follow-up the same day.
+- **Phase 3 (DONE 2026-06-21)**: Plaits melodic track — see "Recently shipped" above.
+- **Phase 4 (next)**: Drum track — reuse the Plaits wrapper/binary from Phase 3, 3
+  small instances locked to `bass_drum_engine`(21)/`snare_drum_engine`(22)/
+  `hi_hat_engine`(23) so they can overlap on the same step (real drum-machine
+  behavior, not monophonic). Drum-machine-style UI (fixed named rows, not a
+  chromatic piano roll). Note: the engine indices for drums were also affected by
+  the hardware-registration-order correction — confirm 21/22/23 against voice.cc
+  before building, same way Phase 3's melodic indices were verified.
 - Track polyphony: monophonic per track throughout (matches how Rings already works),
   except the 3 drum voices which are independent so kick+hat can hit together.
 - Song structure: 1 page per track for v1 — multi-page song sections deliberately
   deferred, see AGENTS.md.
 
-**Verification note**: actual audio playback with 2 Rings tracks running simultaneously
-should be confirmed in a real browser before starting Phase 3 — see AGENTS.md
-"Verification caveat" for why this couldn't be fully confirmed during Phase 1 itself.
+**Verification note**: actual audio playback (does Plaits sound right when triggered,
+do all 3 tracks play together cleanly, any glitches) could not be fully confirmed in
+the Claude Code preview tool during Phase 1 or Phase 3 — see AGENTS.md "Verification
+caveat". Confirm in a real browser before Phase 4.
 
 ---
 
