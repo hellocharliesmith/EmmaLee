@@ -1,13 +1,11 @@
-import { useState, useRef } from 'react';
-import { setReverbType, setReverbWet, setReverbDecay, setReverbPreDelay, setReverbTone,
-         setRingsReverbEnabled, setRingsReverbParams } from '../audio/engine';
+import { useRef } from 'react';
+import { setReverbType, setReverbWet, setReverbDecay, setReverbPreDelay, setReverbTone } from '../audio/engine';
 
 const TYPES = [
   { id: 'plate',   label: 'Plate' },
   { id: 'hall',    label: 'Hall' },
   { id: 'digital', label: 'Digital' },
   { id: 'algo',    label: 'Algo'  },
-  { id: 'rings',   label: 'Rings' }, // built-in FDN reverb from Rings DSP
 ];
 
 export interface ReverbControlsProps {
@@ -25,23 +23,12 @@ export interface ReverbControlsProps {
 
 export function ReverbControls({ activeType, wet, decay, preDelay, tone,
   onTypeChange, onWetChange, onDecayChange, onPreDelayChange, onToneChange }: ReverbControlsProps) {
-  const [loading, setLoading] = useState(false);
   const decayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleTypeChange(id: string) {
-    if (id === activeType || loading) return;
-    setLoading(true);
-    if (id === 'rings') {
-      // lp must be 0-1; tone state may be in Hz when coming from another type
-      const normalLp = tone > 1 ? Math.min(1, tone / 20000) : tone;
-      setRingsReverbEnabled(true, wet);
-      setRingsReverbParams(wet, decay, normalLp);
-    } else {
-      if (activeType === 'rings') setRingsReverbEnabled(false, wet);
-      await setReverbType(id);
-    }
+  function handleTypeChange(id: string) {
+    if (id === activeType) return;
     onTypeChange(id);
-    setLoading(false);
+    void setReverbType(id);
   }
 
   function handleDecayChange(value: number) {
@@ -49,8 +36,6 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
     if (decayTimer.current) clearTimeout(decayTimer.current);
     decayTimer.current = setTimeout(() => setReverbDecay(value), 200);
   }
-
-  const isRings = activeType === 'rings';
 
   return (
     <div className="rings-controls">
@@ -62,7 +47,6 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
             <button key={t.id}
               className={`reverb-type-btn${activeType === t.id ? ' active' : ''}`}
               onClick={() => handleTypeChange(t.id)}
-              disabled={loading}
             >{t.label}</button>
           ))}
         </div>
@@ -70,38 +54,24 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
       <div className="knob-row">
         <label>Mix</label>
         <input type="range" min={0} max={1} step={0.01} value={wet}
-          onChange={e => {
-            const v = parseFloat(e.target.value);
-            onWetChange(v);
-            if (isRings) setRingsReverbParams(v, decay, tone);
-            else setReverbWet(v);
-          }} />
+          onChange={e => { const v = parseFloat(e.target.value); onWetChange(v); setReverbWet(v); }} />
       </div>
       <div className="knob-row">
         <label>Decay</label>
         <input type="range" min={0.05} max={1} step={0.01} value={decay}
-          onChange={e => {
-            const v = parseFloat(e.target.value);
-            onDecayChange(v);
-            if (isRings) setRingsReverbParams(wet, v, tone);
-            else handleDecayChange(v);
-          }} />
+          onChange={e => handleDecayChange(parseFloat(e.target.value))} />
       </div>
-      {!isRings && (
-        <div className="knob-row">
-          <label>Pre-delay</label>
-          <input type="range" min={0} max={0.12} step={0.001} value={preDelay}
-            onChange={e => { const v = parseFloat(e.target.value); onPreDelayChange(v); setReverbPreDelay(v); }} />
-        </div>
-      )}
+      <div className="knob-row">
+        <label>Pre-delay</label>
+        <input type="range" min={0} max={0.12} step={0.001} value={preDelay}
+          onChange={e => { const v = parseFloat(e.target.value); onPreDelayChange(v); setReverbPreDelay(v); }} />
+      </div>
       <div className="knob-row">
         <label>Tone</label>
-        <input type="range" min={0} max={1} step={0.01}
-          value={isRings ? tone : tone / 20000}
+        <input type="range" min={0} max={1} step={0.01} value={tone / 20000}
           onChange={e => {
-            const v = parseFloat(e.target.value);
-            if (isRings) { onToneChange(v); setRingsReverbParams(wet, decay, v); }
-            else { const hz = v * 20000; onToneChange(hz); setReverbTone(hz); }
+            const hz = parseFloat(e.target.value) * 20000;
+            onToneChange(hz); setReverbTone(hz);
           }} />
       </div>
     </div>

@@ -451,6 +451,26 @@
 .page-btn.playing  { background: rgba(196,132,154,0.15); }
 .page-btn:hover    { border-color: #4b5060; color: #9ca3af; }
 
+/* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.) */
+.track-tab {
+  width: auto;
+  padding: 0 14px;
+  border-color: #3a3d4a;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+}
+
+/* Sends knob row, below the per-track instrument controls */
+.send-row {
+  width: 100%;
+  max-width: 960px;
+}
+.send-row .knob-row {
+  gap: 16px;
+}
+
 .page-playing-dot {
   position: absolute;
   bottom: 4px;

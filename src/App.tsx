@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer, type ScaleType, type StepValue } from './hooks/useSequencer';
+import { useSequencer, TRACK_IDS, TRACK_LABELS,
+         type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
@@ -10,7 +11,7 @@ import { RingsControls } from './components/RingsControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
-import type { LfoState, SavedSong, SongState } from './types';
+import type { LfoState, SavedSong, SongState, RingsTrackState, LegacySongStateV1 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -38,6 +39,20 @@ const DEFAULT_LFO: LfoState[] = [
   { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
 ];
 
+interface RingsTrackParams {
+  model: number;
+  params: [number, number, number, number];
+  lfo: LfoState[];
+  delaySend: number;
+  reverbSend: number;
+}
+
+function defaultTrackParams(): RingsTrackParams {
+  return { model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, delaySend: 0.5, reverbSend: 0.5 };
+}
+
+type ViewSection = 'track' | 'master';
+
 export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
   const [audioError,   setAudioError]   = useState<string | null>(null);
@@ -46,100 +61,159 @@ export default function App() {
   useEffect(() => { setUnsupported(checkSupport()); }, []);
 
   const {
-    steps, pageSteps, enabledPages, viewPage, playingPage,
-    visibleNotes, scale, rootNote, scroll, maxScroll,
+    tracks, activeTrack, setActiveTrack,
+    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
     toggleNote, toggleStrumDir, setProbability,
-    toggleEnablePage, switchViewPage,
-    loadAllPages,
-    setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
+    loadTracks,
+    setScale, setRootNote, scrollUp, scrollDown,
     start, stop, updateBpm,
   } = useSequencer();
 
-  // ── Rings
-  const [model,  setModel]  = useState(1);
-  const [params, setParams] = useState<[number,number,number,number]>([0.11, 0.24, 0.44, 0.25]);
-  const [lfo,    setLfo]    = useState<LfoState[]>(DEFAULT_LFO);
+  const [viewSection, setViewSection] = useState<ViewSection>('track');
 
-  // ── Delay
+  // ── Per-track instrument state ───────────────────────────────────────
+  const [trackParams, setTrackParams] = useState<Record<TrackId, RingsTrackParams>>(() => {
+    const init = {} as Record<TrackId, RingsTrackParams>;
+    for (const id of TRACK_IDS) init[id] = defaultTrackParams();
+    return init;
+  });
+  const active = trackParams[activeTrack];
+
+  function updateActiveParams(fn: (prev: RingsTrackParams) => RingsTrackParams) {
+    setTrackParams(prev => ({ ...prev, [activeTrack]: fn(prev[activeTrack]) }));
+  }
+
+  // ── Delay (master) ───────────────────────────────────────────────────
   const [delayDivision, setDelayDivision] = useState('1/8');
   const [delayMix,      setDelayMix]      = useState(0.2);
   const [delayFeedback, setDelayFeedback] = useState(0.16);
   const [delayFilter,   setDelayFilter]   = useState(2800);
 
-  // ── Reverb
+  // ── Reverb (master) ──────────────────────────────────────────────────
   const [reverbType,     setReverbType]     = useState('algo');
   const [reverbMix,      setReverbMix]      = useState(0.5);
   const [reverbDecay,    setReverbDecay]    = useState(0.72);
   const [reverbPreDelay, setReverbPreDelay] = useState(0.02);
   const [reverbTone,     setReverbTone]     = useState(6000);
 
-  // ── Master volume
+  // ── Master volume ────────────────────────────────────────────────────
   const [masterVolume, setMasterVolume] = useState(1.0);
 
-  // ── Kids mode
+  // ── Kids mode ─────────────────────────────────────────────────────────
   const [kidsMode, setKidsMode] = useState(false);
   const KIDS_ROWS = 8;
+  useEffect(() => { if (kidsMode) setActiveTrack('ringsA'); }, [kidsMode, setActiveTrack]);
 
-  // ── Save / load
+  // ── Save / load ───────────────────────────────────────────────────────
   const { songs, save, remove } = useSavedSongs();
 
   function captureState(): SongState {
+    const tracksOut = {} as Record<TrackId, RingsTrackState>;
+    for (const id of TRACK_IDS) {
+      tracksOut[id] = {
+        steps: tracks[id].steps,
+        scale: tracks[id].scale,
+        rootNote: tracks[id].rootNote,
+        scrollRow: tracks[id].scrollRow,
+        model: trackParams[id].model,
+        structure: trackParams[id].params[0],
+        brightness: trackParams[id].params[1],
+        damping: trackParams[id].params[2],
+        position: trackParams[id].params[3],
+        lfo: trackParams[id].lfo,
+        delaySend: trackParams[id].delaySend,
+        reverbSend: trackParams[id].reverbSend,
+      };
+    }
     return {
-      steps: pageSteps, scale, rootNote, scrollRow: scroll, bpm,
-      model,
-      structure: params[0], brightness: params[1],
-      damping: params[2],   position: params[3],
-      lfo,
+      version: 2, bpm, tracks: tracksOut,
       delayDivision, delayMix, delayFeedback, delayFilter,
       reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone,
     };
   }
 
+  function migrateLegacy(old: LegacySongStateV1): SongState {
+    const oldSteps: StepValue[] = Array.isArray(old.steps[0]) || (old.steps as StepValue[]).length > 32
+      ? (old.steps as unknown as StepValue[][])[0]
+      : (old.steps as StepValue[]);
+    const ringsA: RingsTrackState = {
+      steps: oldSteps, scale: old.scale, rootNote: old.rootNote, scrollRow: old.scrollRow,
+      model: old.model, structure: old.structure, brightness: old.brightness,
+      damping: old.damping, position: old.position, lfo: old.lfo,
+      delaySend: 0.5, reverbSend: 0.5,
+    };
+    const ringsB: RingsTrackState = {
+      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      model: 1, structure: 0.11, brightness: 0.24, damping: 0.44, position: 0.25,
+      lfo: DEFAULT_LFO, delaySend: 0.5, reverbSend: 0.5,
+    };
+    return {
+      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB },
+      delayDivision: old.delayDivision, delayMix: old.delayMix,
+      delayFeedback: old.delayFeedback, delayFilter: old.delayFilter,
+      reverbType: old.reverbType === 'rings' ? 'algo' : old.reverbType,
+      reverbMix: old.reverbMix, reverbDecay: old.reverbDecay,
+      reverbPreDelay: old.reverbPreDelay, reverbTone: old.reverbTone,
+    };
+  }
+
   function loadSong(song: SavedSong) {
-    const s = song.state;
-    setScale(s.scale);
-    setRootNote(s.rootNote);
-    // Support both old (single page) and new (4 page) formats
-    const pages = Array.isArray(s.steps[0]) || s.steps.length > 32
-      ? s.steps as unknown as StepValue[][]
-      : [s.steps as unknown as StepValue[], Array(32).fill(null), Array(32).fill(null), Array(32).fill(null)];
-    loadAllPages(pages, s.enabledPages ?? [true, false, false, false]);
-    setScrollRowDirect(s.scrollRow);
-    updateBpm(s.bpm);
-    setModel(s.model);
-    setParams([s.structure, s.brightness, s.damping, s.position]);
-    setLfo(s.lfo);
-    setDelayDivision(s.delayDivision);
-    setDelayMix(s.delayMix);
-    setDelayFeedback(s.delayFeedback);
-    setDelayFilter(s.delayFilter);
-    setReverbType(s.reverbType);
-    setReverbMix(s.reverbMix);
-    setReverbDecay(s.reverbDecay);
-    setReverbPreDelay(s.reverbPreDelay);
-    setReverbTone(s.reverbTone);
+    const raw = song.state;
+    const state: SongState = ('version' in raw && raw.version === 2)
+      ? raw as SongState
+      : migrateLegacy(raw as LegacySongStateV1);
+
+    const nextTracks = {} as Record<TrackId, TrackSeqState>;
+    const nextParams = {} as Record<TrackId, RingsTrackParams>;
+    for (const id of TRACK_IDS) {
+      const t = state.tracks[id];
+      nextTracks[id] = { steps: t.steps, scale: t.scale, rootNote: t.rootNote, scrollRow: t.scrollRow };
+      nextParams[id] = {
+        model: t.model, params: [t.structure, t.brightness, t.damping, t.position],
+        lfo: t.lfo, delaySend: t.delaySend, reverbSend: t.reverbSend,
+      };
+    }
+    loadTracks(nextTracks);
+    setTrackParams(nextParams);
+
+    updateBpm(state.bpm);
+    setDelayDivision(state.delayDivision);
+    setDelayMix(state.delayMix);
+    setDelayFeedback(state.delayFeedback);
+    setDelayFilter(state.delayFilter);
+    setReverbType(state.reverbType);
+    setReverbMix(state.reverbMix);
+    setReverbDecay(state.reverbDecay);
+    setReverbPreDelay(state.reverbPreDelay);
+    setReverbTone(state.reverbTone);
+
     if (Engine.isAudioReady()) {
-      Engine.setRingsParam(0, s.structure);
-      Engine.setRingsParam(1, s.brightness);
-      Engine.setRingsParam(2, s.damping);
-      Engine.setRingsParam(3, s.position);
-      Engine.setRingsModel(s.model);
-      s.lfo.forEach((l, i) => {
-        Engine.setLFOWave(i, l.wave);
-        Engine.setLFORate(i, l.rate);
-        Engine.setLFODepth(i, l.depth);
-        Engine.setLFOEnabled(i, l.on);
-      });
-      Engine.setDelayTime(divisionSeconds(s.delayDivision, s.bpm));
-      Engine.setDelayMix(s.delayMix);
-      Engine.setDelayFeedback(s.delayFeedback);
-      Engine.setDelayFilter(s.delayFilter);
-      Engine.setReverbType(s.reverbType);
-      Engine.setReverbWet(s.reverbMix);
-      Engine.setReverbDecay(s.reverbDecay);
-      Engine.setReverbPreDelay(s.reverbPreDelay);
-      Engine.setReverbTone(s.reverbTone);
+      for (const id of TRACK_IDS) {
+        const p = nextParams[id];
+        Engine.setRingsParam(id, 0, p.params[0]);
+        Engine.setRingsParam(id, 1, p.params[1]);
+        Engine.setRingsParam(id, 2, p.params[2]);
+        Engine.setRingsParam(id, 3, p.params[3]);
+        Engine.setRingsModel(id, p.model);
+        p.lfo.forEach((l, i) => {
+          Engine.setLFOWave(id, i, l.wave);
+          Engine.setLFORate(id, i, l.rate);
+          Engine.setLFODepth(id, i, l.depth);
+          Engine.setLFOEnabled(id, i, l.on);
+        });
+        Engine.setTrackSend(id, 'delay', p.delaySend);
+        Engine.setTrackSend(id, 'reverb', p.reverbSend);
+      }
+      Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));
+      Engine.setDelayMix(state.delayMix);
+      Engine.setDelayFeedback(state.delayFeedback);
+      Engine.setDelayFilter(state.delayFilter);
+      void Engine.setReverbType(state.reverbType);
+      Engine.setReverbWet(state.reverbMix);
+      Engine.setReverbDecay(state.reverbDecay);
+      Engine.setReverbPreDelay(state.reverbPreDelay);
+      Engine.setReverbTone(state.reverbTone);
     }
   }
 
@@ -161,29 +235,18 @@ export default function App() {
 
   const kidsNotes = kidsMode ? visibleNotes.slice(0, KIDS_ROWS) : visibleNotes;
 
-  // Shared page selector used in both modes
-  const PageSelector = () => (
+  const TrackTabs = () => (
     <div className="page-selector">
-      {!kidsMode && <span className="page-label">Pages</span>}
-      {[0,1,2,3].map(p => {
-        const enabled = enabledPages[p];
-        const viewing = viewPage === p;
-        const playing = isPlaying && playingPage === p;
-        return (
-          <div key={p} className="page-item">
-            <button
-              className={['page-btn', viewing ? 'viewing' : '', enabled ? 'enabled' : '', playing ? 'playing' : ''].filter(Boolean).join(' ')}
-              onClick={() => { if (!enabled && p > 0) toggleEnablePage(p); switchViewPage(p); }}
-            >
-              {p + 1}
-              {playing && <span className="page-playing-dot" />}
-            </button>
-            {p > 0 && enabled && !kidsMode && (
-              <button className="page-remove" onClick={() => toggleEnablePage(p)}>×</button>
-            )}
-          </div>
-        );
-      })}
+      {TRACK_IDS.map(id => (
+        <button key={id}
+          className={['page-btn', 'track-tab', (viewSection === 'track' && activeTrack === id) ? 'viewing' : ''].filter(Boolean).join(' ')}
+          onClick={() => { setActiveTrack(id); setViewSection('track'); }}
+        >{TRACK_LABELS[id]}</button>
+      ))}
+      <button
+        className={['page-btn', 'track-tab', viewSection === 'master' ? 'viewing' : ''].filter(Boolean).join(' ')}
+        onClick={() => setViewSection('master')}
+      >Master</button>
     </div>
   );
 
@@ -204,7 +267,7 @@ export default function App() {
 
       {unsupported && <div className="audio-banner error">⚠ {unsupported}</div>}
 
-      {/* ── Kids mode layout ── */}
+      {/* ── Kids mode layout (always Rings A, no track/master tabs) ── */}
       {kidsMode ? (
         <>
           <div className="kids-top-bar">
@@ -214,7 +277,6 @@ export default function App() {
             >
               {isPlaying ? '■ Stop' : '▶ Play'}
             </button>
-            <PageSelector />
             <div className="master-vol-wrap">
               <Knob value={masterVolume} min={0} max={1.5} label="Vol"
                 onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
@@ -246,16 +308,18 @@ export default function App() {
                 onChange={e => updateBpm(parseInt(e.target.value))} />
               <span className="bpm-val">{bpm}</span>
             </div>
-            <div className="scale-selects">
-              <select className="scale-select" value={rootNote}
-                onChange={e => setRootNote(parseInt(e.target.value))}>
-                {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-              </select>
-              <select className="scale-select" value={scale}
-                onChange={e => setScale(e.target.value as ScaleType)}>
-                {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-            </div>
+            {viewSection === 'track' && (
+              <div className="scale-selects">
+                <select className="scale-select" value={rootNote}
+                  onChange={e => setRootNote(parseInt(e.target.value))}>
+                  {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+                </select>
+                <select className="scale-select" value={scale}
+                  onChange={e => setScale(e.target.value as ScaleType)}>
+                  {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </div>
+            )}
             <SaveLoad songs={songs}
               onSave={name => save(name, captureState())}
               onLoad={loadSong} onDelete={remove} />
@@ -268,47 +332,64 @@ export default function App() {
             </div>
           )}
 
-          <PageSelector />
+          <TrackTabs />
 
-          <PianoRoll
-            steps={steps} visibleNotes={visibleNotes}
-            rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-            currentStep={currentStep}
-            onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
-            onSetProbability={setProbability}
-            onScrollUp={scrollUp} onScrollDown={scrollDown}
-          />
+          {viewSection === 'track' ? (
+            <>
+              <PianoRoll
+                steps={steps} visibleNotes={visibleNotes}
+                rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
+                currentStep={currentStep}
+                onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+                onSetProbability={setProbability}
+                onScrollUp={scrollUp} onScrollDown={scrollDown}
+              />
 
-          <div className="waveform-section">
-            <div className="master-vol-wrap">
-              <Knob value={masterVolume} min={0} max={1.5} label="Vol"
-                onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
-            </div>
-            <WaveformMeter />
-          </div>
+              <RingsControls
+                trackId={activeTrack}
+                model={active.model} params={active.params} lfo={active.lfo}
+                onModelChange={m => updateActiveParams(p => ({ ...p, model: m }))}
+                onParamChange={(i, v) => updateActiveParams(p => { const n = [...p.params] as [number,number,number,number]; n[i]=v; return { ...p, params: n }; })}
+                onLfoChange={(i, u) => updateActiveParams(p => ({ ...p, lfo: p.lfo.map((l, idx) => idx===i ? {...l,...u} : l) }))}
+              />
 
-          <RingsControls
-            model={model} params={params} lfo={lfo}
-            onModelChange={m => setModel(m)}
-            onParamChange={(i, v) => setParams(prev => { const n = [...prev] as [number,number,number,number]; n[i]=v; return n; })}
-            onLfoChange={(i, u) => setLfo(prev => prev.map((l, idx) => idx===i ? {...l,...u} : l))}
-          />
+              <div className="send-row">
+                <div className="knob-row">
+                  <label>Sends</label>
+                  <Knob value={active.delaySend} min={0} max={1} label="Delay"
+                    onChange={v => { updateActiveParams(p => ({ ...p, delaySend: v })); Engine.setTrackSend(activeTrack, 'delay', v); }} />
+                  <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
+                    onChange={v => { updateActiveParams(p => ({ ...p, reverbSend: v })); Engine.setTrackSend(activeTrack, 'reverb', v); }} />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="waveform-section">
+                <div className="master-vol-wrap">
+                  <Knob value={masterVolume} min={0} max={1.5} label="Vol"
+                    onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
+                </div>
+                <WaveformMeter />
+              </div>
 
-          <div className="fx-row">
-            <DelayControls
-              bpm={bpm} division={delayDivision} mix={delayMix}
-              feedback={delayFeedback} filter={delayFilter}
-              onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
-              onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
-            />
-            <ReverbControls
-              activeType={reverbType} wet={reverbMix}
-              decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
-              onTypeChange={setReverbType} onWetChange={setReverbMix}
-              onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
-              onToneChange={setReverbTone}
-            />
-          </div>
+              <div className="fx-row">
+                <DelayControls
+                  bpm={bpm} division={delayDivision} mix={delayMix}
+                  feedback={delayFeedback} filter={delayFilter}
+                  onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
+                  onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
+                />
+                <ReverbControls
+                  activeType={reverbType} wet={reverbMix}
+                  decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
+                  onTypeChange={setReverbType} onWetChange={setReverbMix}
+                  onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
+                  onToneChange={setReverbTone}
+                />
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

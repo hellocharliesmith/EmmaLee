@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
-import { triggerNote } from '../audio/engine';
+import { triggerNote, type RingsTrackId } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
+export type TrackId = RingsTrackId; // widen to include 'plaits' | 'drums' in later phases
 
 export interface StepData {
   notes: number[];
@@ -13,8 +14,10 @@ export type StepValue = StepData | null;
 export const MAX_NOTES_PER_STEP = 4;
 export const STEP_COUNT   = 32;
 export const VISIBLE_ROWS = 12;
-export const NUM_PAGES    = 4;
 export const PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
+
+export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB'];
+export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B' };
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
@@ -31,7 +34,7 @@ export function noteName(midi: number): string {
 export function buildNotes(root: number, scale: ScaleType): number[] {
   const intervals = SCALE_INTERVALS[scale];
   const notes: number[] = [];
-  for (let oct = 3; oct <= 6; oct++) {   // ← now 4 octaves: C3–B6
+  for (let oct = 3; oct <= 6; oct++) {   // 4 octaves: C3–B6
     for (const iv of intervals) {
       const midi = 12 * (oct + 1) + root + iv;
       if (midi >= 0 && midi <= 127) notes.push(midi);
@@ -42,8 +45,10 @@ export function buildNotes(root: number, scale: ScaleType): number[] {
 
 function note(midi: number): StepData { return { notes: [midi], strumDown: false }; }
 
-function makeDefaultSteps(): StepValue[] {
-  const s: StepValue[] = Array(STEP_COUNT).fill(null);
+function makeEmptySteps(): StepValue[] { return Array(STEP_COUNT).fill(null); }
+
+function makeDefaultRingsASteps(): StepValue[] {
+  const s = makeEmptySteps();
   s[0]  = note(64); // E4
   s[8]  = note(71); // B4
   s[14] = note(69); // A4
@@ -52,59 +57,62 @@ function makeDefaultSteps(): StepValue[] {
   return s;
 }
 
-function makeEmptyPage(): StepValue[] { return Array(STEP_COUNT).fill(null); }
+export interface TrackSeqState {
+  steps: StepValue[];
+  scale: ScaleType;
+  rootNote: number;
+  scrollRow: number;
+}
+
+function makeDefaultTrackState(id: TrackId): TrackSeqState {
+  return {
+    steps: id === 'ringsA' ? makeDefaultRingsASteps() : makeEmptySteps(),
+    scale: 'major',
+    rootNote: 0,
+    scrollRow: 7, // B5–E4 default view
+  };
+}
 
 export function useSequencer() {
-  // ── Per-page step data ────────────────────────────────────────────────
-  const [pageSteps, setPageSteps] = useState<StepValue[][]>(() => [
-    makeDefaultSteps(),
-    makeEmptyPage(),
-    makeEmptyPage(),
-    makeEmptyPage(),
-  ]);
-  const [enabledPages, setEnabledPages] = useState<boolean[]>([true, false, false, false]);
-  const [viewPage, setViewPage] = useState(0);
+  const [tracks, setTracksState] = useState<Record<TrackId, TrackSeqState>>(() => {
+    const init = {} as Record<TrackId, TrackSeqState>;
+    for (const id of TRACK_IDS) init[id] = makeDefaultTrackState(id);
+    return init;
+  });
+  const [activeTrack, setActiveTrackState] = useState<TrackId>('ringsA');
 
-  // ── Playback state ─────────────────────────────────────────────────────
-  const [scale, setScaleState]       = useState<ScaleType>('major');
-  const [rootNote, setRootNoteState] = useState(0);
-  const [scrollRow, setScrollRow]    = useState(7); // B5–E4 default view
-  const [bpm, setBpm]                = useState(72);
-  const [isPlaying, setIsPlaying]    = useState(false);
-  const [currentStep, setCurrentStep]  = useState(-1);
-  const [playingPage, setPlayingPage]  = useState(-1); // absolute page 0–3 during playback
+  const [isPlaying, setIsPlaying]     = useState(false);
+  const [bpm, setBpm]                 = useState(72);
+  const [currentStep, setCurrentStep] = useState(-1);
 
-  const sequenceRef  = useRef<Tone.Sequence | null>(null);
-  const pageStepsRef = useRef(pageSteps);
-  const enabledRef   = useRef(enabledPages);
-  // Keep refs in sync with state
-  useEffect(() => { pageStepsRef.current = pageSteps; }, [pageSteps]);
-  useEffect(() => { enabledRef.current = enabledPages; }, [enabledPages]);
+  const tracksRef = useRef(tracks);
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
 
-  // Keep refs in sync
-  const updatePageSteps = (fn: (prev: StepValue[][]) => StepValue[][]) => {
-    setPageSteps(prev => {
-      const next = fn(prev);
-      pageStepsRef.current = next;
+  const updateTrack = (id: TrackId, fn: (prev: TrackSeqState) => TrackSeqState) => {
+    setTracksState(prev => {
+      const next = { ...prev, [id]: fn(prev[id]) };
+      tracksRef.current = next;
       return next;
     });
   };
 
-  // ── Derived: current page's visible steps ────────────────────────────
-  const steps = pageSteps[viewPage];
+  const setActiveTrack = useCallback((id: TrackId) => setActiveTrackState(id), []);
 
-  const allNotes     = buildNotes(rootNote, scale);
+  // ── Derived: active track's visible steps ────────────────────────────
+  const track = tracks[activeTrack];
+  const steps = track.steps;
+
+  const allNotes     = buildNotes(track.rootNote, track.scale);
   const reversed     = useMemo(() => [...allNotes].reverse(), [allNotes]);
   const maxScroll    = Math.max(0, reversed.length - VISIBLE_ROWS);
-  const scroll       = Math.min(scrollRow, maxScroll);
+  const scroll       = Math.min(track.scrollRow, maxScroll);
   const visibleNotes = reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
-  // ── Step editing ──────────────────────────────────────────────────────
+  // ── Step editing (always targets activeTrack) ────────────────────────
   const toggleNote = useCallback((col: number, midi: number) => {
-    updatePageSteps(prev => {
-      const page  = prev[viewPage];
-      const step  = page[col];
-      const cur   = step?.notes ?? [];
+    updateTrack(activeTrack, prev => {
+      const step = prev.steps[col];
+      const cur  = step?.notes ?? [];
       let newNotes: number[];
 
       if (cur.includes(midi)) {
@@ -114,133 +122,93 @@ export function useSequencer() {
         newNotes = [...cur, midi].sort((a, b) => a - b);
       }
 
-      const newPage = [...page];
-      newPage[col]  = newNotes.length === 0
-        ? null : { notes: newNotes, strumDown: step?.strumDown ?? false };
-      const next = [...prev];
-      next[viewPage] = newPage;
-      return next;
+      const newSteps = [...prev.steps];
+      newSteps[col]  = newNotes.length === 0
+        ? null : { notes: newNotes, strumDown: step?.strumDown ?? false, prob: step?.prob };
+      return { ...prev, steps: newSteps };
     });
-  }, [viewPage]);
+  }, [activeTrack]);
 
   const toggleStrumDir = useCallback((col: number) => {
-    updatePageSteps(prev => {
-      const page = prev[viewPage];
-      const step = page[col];
+    updateTrack(activeTrack, prev => {
+      const step = prev.steps[col];
       if (!step) return prev;
-      const newPage = [...page];
-      newPage[col] = { ...step, strumDown: !step.strumDown };
-      const next = [...prev];
-      next[viewPage] = newPage;
-      return next;
+      const newSteps = [...prev.steps];
+      newSteps[col] = { ...step, strumDown: !step.strumDown };
+      return { ...prev, steps: newSteps };
     });
-  }, [viewPage]);
+  }, [activeTrack]);
 
   const setProbability = useCallback((col: number, prob: number) => {
-    updatePageSteps(prev => {
-      const page = prev[viewPage];
-      const step = page[col];
+    updateTrack(activeTrack, prev => {
+      const step = prev.steps[col];
       if (!step) return prev;
-      const newPage = [...page];
-      newPage[col] = { ...step, prob };
-      const next = [...prev];
-      next[viewPage] = newPage;
-      return next;
+      const newSteps = [...prev.steps];
+      newSteps[col] = { ...step, prob };
+      return { ...prev, steps: newSteps };
     });
-  }, [viewPage]);
+  }, [activeTrack]);
 
-  // ── Page management ───────────────────────────────────────────────────
-  const toggleEnablePage = useCallback((p: number) => {
-    if (p === 0) return; // page 1 always enabled
-    setEnabledPages(prev => {
-      const next = [...prev];
-      next[p] = !next[p];
-      enabledRef.current = next;
-      return next;
-    });
-  }, []);
-
-  const switchViewPage = useCallback((p: number) => {
-    setViewPage(p);
-  }, []);
-
-  // ── Scale / root ──────────────────────────────────────────────────────
+  // ── Scale / root (per active track) ──────────────────────────────────
   const setScale = useCallback((s: ScaleType) => {
-    setScaleState(s);
-    const blank: StepValue[][] = Array(NUM_PAGES).fill(null).map(makeEmptyPage);
-    setPageSteps(blank); pageStepsRef.current = blank;
-    setScrollRow(0);
-  }, []);
+    updateTrack(activeTrack, prev => ({ ...prev, scale: s, steps: makeEmptySteps(), scrollRow: 0 }));
+  }, [activeTrack]);
 
   const setRootNote = useCallback((r: number) => {
-    setRootNoteState(r);
-    const blank: StepValue[][] = Array(NUM_PAGES).fill(null).map(makeEmptyPage);
-    setPageSteps(blank); pageStepsRef.current = blank;
-    setScrollRow(0);
-  }, []);
+    updateTrack(activeTrack, prev => ({ ...prev, rootNote: r, steps: makeEmptySteps(), scrollRow: 0 }));
+  }, [activeTrack]);
 
-  const scrollUp   = useCallback(() => setScrollRow(p => Math.max(0, p - 1)), []);
+  const scrollUp = useCallback(() => {
+    updateTrack(activeTrack, prev => ({ ...prev, scrollRow: Math.max(0, prev.scrollRow - 1) }));
+  }, [activeTrack]);
+
   const scrollDown = useCallback(() => {
-    setScrollRow(p => {
-      const max = Math.max(0, buildNotes(rootNote, scale).length - VISIBLE_ROWS);
-      return Math.min(max, p + 1);
+    updateTrack(activeTrack, prev => {
+      const max = Math.max(0, buildNotes(prev.rootNote, prev.scale).length - VISIBLE_ROWS);
+      return { ...prev, scrollRow: Math.min(max, prev.scrollRow + 1) };
     });
-  }, [rootNote, scale]);
-  const setScrollRowDirect = useCallback((r: number) => setScrollRow(r), []);
+  }, [activeTrack]);
+
+  const setScrollRowDirect = useCallback((r: number) => {
+    updateTrack(activeTrack, prev => ({ ...prev, scrollRow: r }));
+  }, [activeTrack]);
 
   // ── Load (for save/load system) ───────────────────────────────────────
-  const loadAllPages = useCallback((pages: StepValue[][], enabled: boolean[]) => {
-    setPageSteps(pages); pageStepsRef.current = pages;
-    setEnabledPages(enabled); enabledRef.current = enabled;
-    setViewPage(0);
+  const loadTracks = useCallback((next: Record<TrackId, TrackSeqState>) => {
+    setTracksState(next); tracksRef.current = next;
+    setActiveTrackState('ringsA');
   }, []);
 
-  // ── Playback — Tone.Loop reads live refs every tick so page changes take effect immediately ──
-  const globalStepRef = useRef(0);
+  // ── Playback — single shared transport, dispatches per-track ─────────
   const loopRef = useRef<Tone.Loop | null>(null);
+  const stepIdxRef = useRef(0);
 
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
-    globalStepRef.current = 0;
+    stepIdxRef.current = 0;
 
     const loop = new Tone.Loop((time) => {
-      // Read LIVE enabled pages and step data on every tick
-      const enabledIdxs = enabledRef.current
-        .map((e, i) => (e ? i : -1))
-        .filter((i): i is number => i >= 0);
+      const curStep = stepIdxRef.current % STEP_COUNT;
+      stepIdxRef.current++;
 
-      if (enabledIdxs.length === 0) return;
+      Tone.getDraw().schedule(() => setCurrentStep(curStep), time);
 
-      const totalSteps = enabledIdxs.length * STEP_COUNT;
-      const cycleStep  = globalStepRef.current % totalSteps;
-      const pageSlot   = Math.floor(cycleStep / STEP_COUNT);
-      const stepInPage = cycleStep % STEP_COUNT;
-      const absPage    = enabledIdxs[pageSlot] ?? 0;
+      for (const id of TRACK_IDS) {
+        const step = tracksRef.current[id].steps[curStep];
+        if (!step) continue;
 
-      globalStepRef.current++;
+        const prob = step.prob ?? 1;
+        if (prob < 1 && Math.random() > prob) continue;
 
-      Tone.getDraw().schedule(() => {
-        setCurrentStep(stepInPage);
-        setPlayingPage(absPage);
-      }, time);
-
-      const step = pageStepsRef.current[absPage]?.[stepInPage];
-      if (!step) return;
-
-      const prob = step.prob ?? 1;
-      if (prob < 1 && Math.random() > prob) return;
-
-      const ordered = step.strumDown
-        ? [...step.notes].reverse()
-        : [...step.notes];
-
-      if (ordered.length === 1) {
-        Tone.getDraw().schedule(() => triggerNote(ordered[0]), time);
-      } else {
-        const stepSecs = Tone.Time('16n').toSeconds();
-        ordered.forEach((note, i) => {
-          Tone.getDraw().schedule(() => triggerNote(note), time + (i / ordered.length) * stepSecs);
-        });
+        const ordered = step.strumDown ? [...step.notes].reverse() : [...step.notes];
+        if (ordered.length === 1) {
+          Tone.getDraw().schedule(() => triggerNote(id, ordered[0]), time);
+        } else {
+          const stepSecs = Tone.Time('16n').toSeconds();
+          ordered.forEach((n, i) => {
+            Tone.getDraw().schedule(() => triggerNote(id, n), time + (i / ordered.length) * stepSecs);
+          });
+        }
       }
     }, '16n');
 
@@ -254,11 +222,8 @@ export function useSequencer() {
     Tone.getTransport().stop();
     loopRef.current?.dispose();
     loopRef.current = null;
-    sequenceRef.current?.dispose();
-    sequenceRef.current = null;
-    globalStepRef.current = 0;
+    stepIdxRef.current = 0;
     setCurrentStep(-1);
-    setPlayingPage(-1);
     setIsPlaying(false);
   }, []);
 
@@ -268,12 +233,12 @@ export function useSequencer() {
   }, []);
 
   return {
-    steps, pageSteps, enabledPages, viewPage, playingPage,
-    visibleNotes, allNotes, scale, rootNote,
+    tracks, activeTrack, setActiveTrack,
+    steps, visibleNotes, allNotes,
+    scale: track.scale, rootNote: track.rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
     toggleNote, toggleStrumDir, setProbability,
-    toggleEnablePage, switchViewPage,
-    loadAllPages,
+    loadTracks,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,
   };

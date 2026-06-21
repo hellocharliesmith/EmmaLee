@@ -1,4 +1,5 @@
-import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth } from '../audio/engine';
+import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth,
+         type RingsTrackId } from '../audio/engine';
 import { Knob } from './Knob';
 import type { LfoState } from '../types';
 
@@ -24,6 +25,7 @@ const PARAM_DESCS  = [
 const PARAM_LFO_INDEX = [0, 1, 2, 3];
 
 export interface RingsControlsProps {
+  trackId: RingsTrackId;
   model: number;
   params: [number, number, number, number];
   lfo: LfoState[];
@@ -32,7 +34,7 @@ export interface RingsControlsProps {
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
 }
 
-export function RingsControls({ model, params, lfo, onModelChange, onParamChange, onLfoChange }: RingsControlsProps) {
+export function RingsControls({ trackId, model, params, lfo, onModelChange, onParamChange, onLfoChange }: RingsControlsProps) {
   return (
     <div className="rings-controls">
       <div className="knob-row">
@@ -41,7 +43,7 @@ export function RingsControls({ model, params, lfo, onModelChange, onParamChange
           {MODELS.map(m => (
             <button key={m.id}
               className={`reverb-type-btn${model === m.id ? ' active' : ''}`}
-              onClick={() => { onModelChange(m.id); setRingsModel(m.id); }}
+              onClick={() => { onModelChange(m.id); setRingsModel(trackId, m.id); }}
               title={m.description}
             >{m.label}</button>
           ))}
@@ -57,7 +59,7 @@ export function RingsControls({ model, params, lfo, onModelChange, onParamChange
               <label title={PARAM_DESCS[i]}>{PARAM_LABELS[i]}</label>
               <input
                 type="range" min={0} max={1} step={0.01} value={val}
-                onChange={e => { const v = parseFloat(e.target.value); onParamChange(i, v); setRingsParam(i, v); }}
+                onChange={e => { const v = parseFloat(e.target.value); onParamChange(i, v); setRingsParam(trackId, i, v); }}
               />
               {lfoState && (
                 <div className="lfo-inline">
@@ -66,7 +68,7 @@ export function RingsControls({ model, params, lfo, onModelChange, onParamChange
                     onClick={() => {
                       const w = lfoState.wave === 'sine' ? 'random' : 'sine';
                       onLfoChange(lfoIdx, { wave: w });
-                      setLFOWave(lfoIdx, w);
+                      setLFOWave(trackId, lfoIdx, w);
                     }}
                   >{lfoState.wave === 'sine' ? 'Sine' : 'Rnd'}</button>
                   <button
@@ -74,17 +76,17 @@ export function RingsControls({ model, params, lfo, onModelChange, onParamChange
                     onClick={() => {
                       const on = !lfoState.on;
                       onLfoChange(lfoIdx, { on });
-                      setLFOEnabled(lfoIdx, on);
+                      setLFOEnabled(trackId, lfoIdx, on);
                     }}
                   >{lfoState.on ? 'On' : 'Off'}</button>
                   <div style={{ visibility: lfoState.on ? 'visible' : 'hidden', display: 'flex', gap: 4 }}>
                     <Knob
                       value={lfoState.rate} min={0.05} max={8} label="Rate"
-                      onChange={v => { onLfoChange(lfoIdx, { rate: v }); setLFORate(lfoIdx, v); }}
+                      onChange={v => { onLfoChange(lfoIdx, { rate: v }); setLFORate(trackId, lfoIdx, v); }}
                     />
                     <Knob
                       value={lfoState.depth} min={0} max={0.5} label="Depth"
-                      onChange={v => { onLfoChange(lfoIdx, { depth: v }); setLFODepth(lfoIdx, v); }}
+                      onChange={v => { onLfoChange(lfoIdx, { depth: v }); setLFODepth(trackId, lfoIdx, v); }}
                     />
                   </div>
                 </div>

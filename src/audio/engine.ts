@@ -1,23 +1,33 @@
 import * as Tone from 'tone';
 
+export type RingsTrackId = 'ringsA' | 'ringsB';
+export const RINGS_TRACK_IDS: RingsTrackId[] = ['ringsA', 'ringsB'];
+
 let audioCtx: AudioContext | null = null;
-let workletNode: AudioWorkletNode | null = null;
-let wetGain: GainNode | null = null;
-let dryGain: GainNode | null = null;
+let isReady = false;
+
+// ── Master bus ──────────────────────────────────────────────────────────
 let preDelay: DelayNode | null = null;
 let toneFilter: BiquadFilterNode | null = null;
+let delayBusInput: GainNode | null = null;    // sums all tracks' delay sends
+let reverbBusInput: GainNode | null = null;   // sums all tracks' reverb sends
+let wetGain: GainNode | null = null;          // reverb return level
 let delayNode: DelayNode | null = null;
 let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
-let delayMixGain: GainNode | null = null;
+let delayMixGain: GainNode | null = null;     // delay return level
 let masterGain: GainNode | null = null;
 let analyserL: AnalyserNode | null = null;
 let analyserR: AnalyserNode | null = null;
-let dspLoad = 0;
-let isReady = false;
+
+const dspLoadByTrack = new Map<RingsTrackId, number>();
 
 export function getAnalysers(): [AnalyserNode | null, AnalyserNode | null] { return [analyserL, analyserR]; }
-export function getDSPLoad(): number { return dspLoad; }
+export function getDSPLoad(): number {
+  let sum = 0;
+  for (const v of dspLoadByTrack.values()) sum += v;
+  return sum;
+}
 
 export function setMasterVolume(v: number): void {
   if (!masterGain) return;
@@ -58,9 +68,7 @@ function applyDecay(buffer: AudioBuffer, ctx: AudioContext, decay: number): Audi
 }
 
 // ── Algorithmic plate reverb ──────────────────────────────────────────────
-// Algorithmic reverb: ConvolverNode with a generated pink noise IR.
-// ConvolverNode is inherently stable — no feedback possible.
-// Pink noise spectrum is more natural than white noise for reverb.
+// ConvolverNode with a generated pink-noise IR. Inherently stable — no feedback possible.
 function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
   const duration = 2.0; // seconds
   const len = Math.floor(ctx.sampleRate * duration);
@@ -69,9 +77,7 @@ function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
 
   for (let c = 0; c < 2; c++) {
     const d = buffer.getChannelData(c);
-    // Pink noise generator (Voss-McCartney algorithm)
     let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-    // Slightly different coefficients per channel for stereo width
     const spread = c === 0 ? 1.0 : 0.97;
     for (let i = 0; i < len; i++) {
       const w = Math.random() * 2 - 1;
@@ -88,8 +94,6 @@ function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
 }
 
 function getAlgoUnit(ctx: AudioContext, decay: number): ReverbUnit {
-  // Flip so slider right = longer tail (matches other reverb types)
-  // decay 0 → rate 4 (tight), decay 1 → rate 1 (lush 4s tail)
   const ir = buildAlgoIR(ctx, 4.0 - decay * 3.0);
   return makeConvolverUnit(ctx, ir);
 }
@@ -111,9 +115,54 @@ function swapReverb(newUnit: ReverbUnit) {
   reverbUnit = newUnit;
 }
 
-// ── LFO — now lives in AudioWorklet, main thread just sends config ────────
-// baseParams kept here so initAudio can set defaults before worklet is ready
-const baseParams = [0.11, 0.24, 0.44, 0.25];
+// ── Rings track ──────────────────────────────────────────────────────────
+interface RingsTrackNodes {
+  worklet: AudioWorkletNode;
+  dryGain: GainNode;
+  delaySend: GainNode;
+  reverbSend: GainNode;
+}
+const ringsTracks = new Map<RingsTrackId, RingsTrackNodes>();
+
+async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule: WebAssembly.Module): Promise<void> {
+  const worklet = new AudioWorkletNode(ctx, 'rings-processor', {
+    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+  });
+
+  worklet.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
+  await new Promise<void>((resolve, reject) => {
+    worklet.port.onmessage = (e) => {
+      if (e.data.type === 'ready') resolve();
+      if (e.data.type === 'error') reject(new Error(e.data.message));
+    };
+  });
+  worklet.port.onmessage = (e) => {
+    if (e.data.type === 'perf') dspLoadByTrack.set(id, e.data.load);
+  };
+
+  const dryGain    = ctx.createGain(); dryGain.gain.value = 0.85;
+  const delaySend  = ctx.createGain(); delaySend.gain.value = 0.5;
+  const reverbSend = ctx.createGain(); reverbSend.gain.value = 0.5;
+
+  worklet.connect(dryGain);     dryGain.connect(masterGain!);
+  worklet.connect(delaySend);   delaySend.connect(delayBusInput!);
+  worklet.connect(reverbSend);  reverbSend.connect(reverbBusInput!);
+
+  ringsTracks.set(id, { worklet, dryGain, delaySend, reverbSend });
+
+  // Defaults — Structure/Brightness/Damping/Position, Strings model
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.11 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.24 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.44 } });
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.25 } });
+  worklet.port.postMessage({ type: 'set-model', payload: { model: 1 } });
+
+  // Default LFO: Brightness (index 1) — smooth random, on
+  worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'wave',    value: 'random' } });
+  worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'rate',    value: 1.6 } });
+  worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'depth',   value: 0.1 } });
+  worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'enabled', value: true } });
+}
 
 // ── initAudio ─────────────────────────────────────────────────────────────
 export async function initAudio(ctx: AudioContext): Promise<void> {
@@ -124,27 +173,11 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
 
-  workletNode = new AudioWorkletNode(audioCtx, 'rings-processor', {
-    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
-  });
+  // Master bus
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 1.0;
+  masterGain.connect(audioCtx.destination);
 
-  const wasmBytes  = await fetch('/rings.wasm').then(r => r.arrayBuffer());
-  const wasmModule = await WebAssembly.compile(wasmBytes);
-  workletNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
-
-  await new Promise<void>((resolve, reject) => {
-    workletNode!.port.onmessage = (e) => {
-      if (e.data.type === 'ready') resolve();
-      if (e.data.type === 'error') reject(new Error(e.data.message));
-    };
-  });
-
-  // Persistent handler for ongoing messages (perf reports, etc.)
-  workletNode.port.onmessage = (e) => {
-    if (e.data.type === 'perf') dspLoad = e.data.load;
-  };
-
-  // Reverb chain: workletNode → preDelay → toneFilter → [reverb unit] → wetGain → destination
   preDelay = audioCtx.createDelay(0.15);
   preDelay.delayTime.value = 0.02;
 
@@ -155,24 +188,12 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   wetGain = audioCtx.createGain();
   wetGain.gain.value = 0.5;
 
-  dryGain = audioCtx.createGain();
-  dryGain.gain.value = 0.75;
-
-  // Master bus — all audio flows through here
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.0;
-  masterGain.connect(audioCtx.destination);
-
-  workletNode.connect(preDelay);
+  reverbBusInput = audioCtx.createGain();
+  reverbBusInput.gain.value = 1.0;
+  reverbBusInput.connect(preDelay);
   preDelay.connect(toneFilter);
-  workletNode.connect(dryGain);
-  dryGain.connect(masterGain);
-  wetGain.connect(masterGain);
-
-  // Default reverb — algo (no IR loading on init, faster startup)
   swapReverb(getAlgoUnit(audioCtx, currentDecay));
 
-  // Delay chain
   delayNode = audioCtx.createDelay(2.0);
   delayNode.delayTime.value = (60 / 72) / 2; // 1/8 at 72 BPM
 
@@ -186,12 +207,14 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayMixGain = audioCtx.createGain();
   delayMixGain.gain.value = 0.2;
 
+  delayBusInput = audioCtx.createGain();
+  delayBusInput.gain.value = 1.0;
+  delayBusInput.connect(delayNode);
   delayNode.connect(delayFeedbackGain);
   delayFeedbackGain.connect(delayFeedbackFilter);
   delayFeedbackFilter.connect(delayNode);
   delayNode.connect(delayMixGain);
   delayMixGain.connect(masterGain);
-  workletNode.connect(delayNode);
 
   // Stereo metering — split master bus into L/R analysers
   const splitter = audioCtx.createChannelSplitter(2);
@@ -205,94 +228,63 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   splitter.connect(analyserL, 0);
   splitter.connect(analyserR, 1);
 
+  // Rings tracks — compile WASM once, instantiate per track
+  const wasmBytes  = await fetch('/rings.wasm').then(r => r.arrayBuffer());
+  const wasmModule = await WebAssembly.compile(wasmBytes);
+  for (const id of RINGS_TRACK_IDS) {
+    await createRingsTrack(audioCtx, id, wasmModule);
+  }
+
   isReady = true;
-
-  // Default Rings params
-  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.11 } }); // Structure
-  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.24 } }); // Brightness
-  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.44 } }); // Damping
-  workletNode!.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.25 } }); // Position
-  workletNode!.port.postMessage({ type: 'set-model', payload: { model: 1 } });               // Strings
-
-  // Default LFO: Brightness (index 1) — smooth random, on
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'wave',    value: 'random' } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'rate',    value: 1.6 } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'depth',   value: 0.1 } });
-  workletNode!.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'enabled', value: true } });
 }
 
-// ── Rings params — forward to worklet, worklet manages LFO centre values ──
-export function setRingsParam(param: number, value: number): void {
-  baseParams[param] = value;
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-param', payload: { param, value } });
+// ── Per-track controls ────────────────────────────────────────────────────
+export function setRingsParam(trackId: RingsTrackId, param: number, value: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-param', payload: { param, value } });
 }
 
-export function setRingsModel(model: number): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-model', payload: { model } });
+export function setRingsModel(trackId: RingsTrackId, model: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-model', payload: { model } });
 }
 
-export function triggerNote(midiNote: number): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'trigger', payload: { note: midiNote } });
+export function triggerNote(trackId: RingsTrackId, midiNote: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote } });
 }
 
-// ── LFO — config forwarded to AudioWorklet ────────────────────────────────
-export function setRingsReverbEnabled(enabled: boolean, restoreWet = 0.5): void {
-  if (!workletNode) return;
-  workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled } });
-
-  // setTargetAtTime is more reliable than ramp — no cancel/hold edge cases
-  const tau = 0.025; // 25ms time constant, smooth but fast
-  if (wetGain) {
-    const ctx = wetGain.context as AudioContext;
-    const t = ctx.currentTime;
-    wetGain.gain.cancelScheduledValues(t);
-    wetGain.gain.setValueAtTime(wetGain.gain.value, t); // anchor current value
-    wetGain.gain.setTargetAtTime(enabled ? 0 : restoreWet, t, tau);
-  }
-  if (dryGain) {
-    const ctx = dryGain.context as AudioContext;
-    const t = ctx.currentTime;
-    const dryTarget = enabled ? 1 : Math.max(0, 1 - restoreWet * 0.5);
-    dryGain.gain.cancelScheduledValues(t);
-    dryGain.gain.setValueAtTime(dryGain.gain.value, t);
-    dryGain.gain.setTargetAtTime(dryTarget, t, tau);
-  }
+export function setLFOEnabled(trackId: RingsTrackId, i: number, enabled: boolean): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'enabled', value: enabled } });
+}
+export function setLFOWave(trackId: RingsTrackId, i: number, wave: string): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'wave', value: wave } });
+}
+export function setLFORate(trackId: RingsTrackId, i: number, rate: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'rate', value: rate } });
+}
+export function setLFODepth(trackId: RingsTrackId, i: number, depth: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
 }
 
-// Emergency restore — call if audio disappears unexpectedly
-export function restoreGains(wet = 0.5): void {
-  if (wetGain) wetGain.gain.value = wet;
-  if (dryGain) dryGain.gain.value = Math.max(0, 1 - wet * 0.5);
-  if (masterGain) masterGain.gain.value = 1;
-  if (workletNode) workletNode.port.postMessage({ type: 'rings-reverb-enable', payload: { enabled: false } });
+export function setTrackSend(trackId: RingsTrackId, kind: 'delay' | 'reverb', value: number): void {
+  const t = ringsTracks.get(trackId);
+  if (!t) return;
+  (kind === 'delay' ? t.delaySend : t.reverbSend).gain.value = value;
 }
 
-export function setRingsReverbParams(amount: number, time: number, lp: number): void {
-  if (!workletNode) return;
-  workletNode.port.postMessage({ type: 'rings-reverb-set', payload: { amount, time, lp } });
-}
-
-export function setLFOEnabled(i: number, enabled: boolean): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'enabled', value: enabled } });
-}
-export function setLFOWave(i: number, wave: string): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'wave', value: wave } });
-}
-export function setLFORate(i: number, rate: number): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'rate', value: rate } });
-}
-export function setLFODepth(i: number, depth: number): void {
-  if (!workletNode || !isReady) return;
-  workletNode.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
-}
-
-// ── Reverb ────────────────────────────────────────────────────────────────
+// ── Master reverb ────────────────────────────────────────────────────────
 export async function setReverbType(name: string): Promise<void> {
   if (!audioCtx) return;
   currentIRName = name;
@@ -311,7 +303,6 @@ export async function setReverbDecay(value: number): Promise<void> {
   currentDecay = value;
   if (!audioCtx) return;
   if (currentIRName === 'algo') {
-    // Regenerate the algo IR with new decay — swap in smoothly
     swapReverb(getAlgoUnit(audioCtx, value));
     return;
   }
@@ -331,12 +322,11 @@ export function setReverbTone(hz: number): void {
 }
 
 export function setReverbWet(value: number): void {
-  if (!wetGain || !dryGain) return;
+  if (!wetGain) return;
   wetGain.gain.value = value;
-  dryGain.gain.value = Math.max(0, 1 - value * 0.5);
 }
 
-// ── Delay ─────────────────────────────────────────────────────────────────
+// ── Master delay ──────────────────────────────────────────────────────────
 export function setDelayTime(seconds: number): void {
   if (!delayNode) return;
   delayNode.delayTime.value = Math.min(Math.max(seconds, 0.01), 2.0);
