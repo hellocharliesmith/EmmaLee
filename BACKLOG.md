@@ -24,6 +24,8 @@ first if you're new to the codebase. This file is just queued ideas.
   engines (Virtual Analog, FM, String, Modal, Six-Op, String Machine) — see AGENTS.md
   "Multitrack architecture" for the engine-index correction (hardware registration
   order, not header declaration order) and the WASM export-letter discovery process.
+- **2026-06-21** — Added LPG Colour to Plaits (the hardware's hold-button-A +
+  Timbre secondary function, exposed as a regular 5th slider instead of a gesture).
 - (Already in place before this round, in case it looks unimplemented) — Save/load
   patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
 
