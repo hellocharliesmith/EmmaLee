@@ -37,6 +37,12 @@ interface Props {
   maxScroll: number;
   currentStep: number;
   kidsMode?: boolean;
+  // Fixed row names (e.g. drum voices) instead of chromatic note names — also hides
+  // piano keys, root-note highlighting, and the scroll buttons (nothing to scroll).
+  rowLabels?: string[];
+  // Hides the strum-direction row — for tracks where simultaneous multi-row hits
+  // don't get staggered (e.g. drums fire all active voices together).
+  noStrum?: boolean;
   onToggleNote: (col: number, midi: number) => void;
   onToggleStrumDir: (col: number) => void;
   onSetProbability: (col: number, prob: number) => void;
@@ -46,7 +52,7 @@ interface Props {
 
 export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
-  currentStep, kidsMode, onToggleNote, onToggleStrumDir, onSetProbability, onScrollUp, onScrollDown,
+  currentStep, kidsMode, rowLabels, noStrum, onToggleNote, onToggleStrumDir, onSetProbability, onScrollUp, onScrollDown,
 }: Props) {
 
   const handleCell = useCallback((col: number, midi: number) => {
@@ -62,15 +68,17 @@ export function PianoRoll({
     <div className={`piano-roll-wrap${kidsMode ? ' kids-piano-roll' : ''}`}>
 
       {/* Scroll up */}
-      <div className="pr-scroll-row">
-        <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
-          onClick={onScrollUp} disabled={scroll === 0}>▲</button>
-      </div>
+      {!rowLabels && (
+        <div className="pr-scroll-row">
+          <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
+            onClick={onScrollUp} disabled={scroll === 0}>▲</button>
+        </div>
+      )}
 
       {/* Piano keys | labels | grid */}
       <div className="pr-row">
 
-        {!kidsMode && (
+        {!kidsMode && !rowLabels && (
           <div className="pr-piano-col" style={{ height: gridH }}>
             {visibleNotes.map((midi, i) => (
               <PianoKey key={i} midi={midi} rootNote={rootNote} />
@@ -81,8 +89,8 @@ export function PianoRoll({
         {!kidsMode && (
           <div className="pr-labels-list" style={{ height: gridH }}>
             {visibleNotes.map((midi, row) => (
-              <div key={row} className={`pr-label${midi % 12 === rootNote ? ' root' : ''}`}>
-                {noteName(midi)}
+              <div key={row} className={`pr-label${!rowLabels && midi % 12 === rootNote ? ' root' : ''}`}>
+                {rowLabels ? rowLabels[row] : noteName(midi)}
               </div>
             ))}
           </div>
@@ -156,25 +164,27 @@ export function PianoRoll({
           </div>
 
           {/* Strum direction row */}
-          <div className="pr-strum-row">
-            {Array.from({ length: STEP_COUNT }, (_, i) => {
-              const step = steps[i];
-              const multi = step && step.notes.length > 1;
-              return (
-                <div key={i} className="pr-strum-cell">
-                  {multi && (
-                    <button
-                      className={`pr-strum-btn${step.strumDown ? ' down' : ''}`}
-                      onClick={() => onToggleStrumDir(i)}
-                      title={step.strumDown ? 'Strum down — click to flip' : 'Strum up — click to flip'}
-                    >
-                      {step.strumDown ? '↓' : '↑'}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {!noStrum && (
+            <div className="pr-strum-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                const multi = step && step.notes.length > 1;
+                return (
+                  <div key={i} className="pr-strum-cell">
+                    {multi && (
+                      <button
+                        className={`pr-strum-btn${step.strumDown ? ' down' : ''}`}
+                        onClick={() => onToggleStrumDir(i)}
+                        title={step.strumDown ? 'Strum down — click to flip' : 'Strum up — click to flip'}
+                      >
+                        {step.strumDown ? '↓' : '↑'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Probability row */}
           <div className="pr-prob-row">
@@ -203,10 +213,12 @@ export function PianoRoll({
       </div>
 
       {/* Scroll down */}
-      <div className="pr-scroll-row">
-        <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
-          onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
-      </div>
+      {!rowLabels && (
+        <div className="pr-scroll-row">
+          <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
+            onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
+        </div>
+      )}
 
     </div>
   );

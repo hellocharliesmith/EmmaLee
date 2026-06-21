@@ -36,6 +36,11 @@ export interface PlaitsTrackState extends BaseTrackState {
   lpgColour: number;
 }
 
+// Drums: scale/rootNote are unused (fixed 3 rows, not a chromatic grid) but kept
+// for shape uniformity with BaseTrackState. volume/delaySend/reverbSend apply to
+// all 3 drum voices uniformly (broadcast) — see App.tsx.
+export type DrumTrackState = BaseTrackState;
+
 export interface SongState {
   version: 2;
   bpm: number;
@@ -43,6 +48,7 @@ export interface SongState {
     ringsA: RingsTrackState;
     ringsB: RingsTrackState;
     plaits: PlaitsTrackState;
+    drums: DrumTrackState;
   };
   // Master
   delayDivision: string;

@@ -2,10 +2,16 @@ import * as Tone from 'tone';
 
 export type RingsTrackId = 'ringsA' | 'ringsB';
 export type PlaitsTrackId = 'plaits';
-export type TrackId = RingsTrackId | PlaitsTrackId;
+// Drum voices use Plaits' own drum engines (bass_drum/snare_drum/hi_hat — indices
+// 21/22/23 in hardware registration order, see voice.cc) via 3 independent worklets
+// so they can overlap on the same step, unlike the monophonic melodic tracks.
+export type DrumVoiceId = 'drumHihat' | 'drumSnare' | 'drumKick';
+export type TrackId = RingsTrackId | PlaitsTrackId | DrumVoiceId;
 export const RINGS_TRACK_IDS: RingsTrackId[] = ['ringsA', 'ringsB'];
 export const PLAITS_TRACK_ID: PlaitsTrackId = 'plaits';
-export const ALL_TRACK_IDS: TrackId[] = [...RINGS_TRACK_IDS, PLAITS_TRACK_ID];
+// Order matches the drum grid's row order (top to bottom) — row index === StepData note value.
+export const DRUM_VOICE_IDS: DrumVoiceId[] = ['drumHihat', 'drumSnare', 'drumKick'];
+export const ALL_TRACK_IDS: TrackId[] = [...RINGS_TRACK_IDS, PLAITS_TRACK_ID, ...DRUM_VOICE_IDS];
 
 let audioCtx: AudioContext | null = null;
 let isReady = false;
@@ -186,6 +192,28 @@ async function createPlaitsTrack(ctx: AudioContext, wasmModule: WebAssembly.Modu
   worklet.port.postMessage({ type: 'set-model', payload: { model: 8 } });
 }
 
+// Fixed engine + sensible defaults per drum voice. Each is its own tiny Plaits
+// instance (same WASM binary, reused from the melodic track's already-compiled
+// module) locked to one drum engine — no model/tone picker exposed in v1, this
+// is meant to be a simple kit, not a 3rd full synth voice.
+const DRUM_VOICE_CONFIG: Record<DrumVoiceId, { engine: number; note: number; decay: number }> = {
+  drumKick:  { engine: 21, note: 36, decay: 0.5 },
+  drumSnare: { engine: 22, note: 51, decay: 0.45 },
+  drumHihat: { engine: 23, note: 60, decay: 0.25 },
+};
+
+async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmModule: WebAssembly.Module): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, id, 'plaits-processor', wasmModule);
+  const cfg = DRUM_VOICE_CONFIG[id];
+
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });        // harmonics
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });        // timbre
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.5 } });        // morph
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: cfg.decay } });  // decay
+  worklet.port.postMessage({ type: 'set-model', payload: { model: cfg.engine } });
+  worklet.port.postMessage({ type: 'set-note', payload: { note: cfg.note } });
+}
+
 // ── initAudio ─────────────────────────────────────────────────────────────
 export async function initAudio(ctx: AudioContext): Promise<void> {
   audioCtx = ctx;
@@ -258,16 +286,20 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
     await createRingsTrack(audioCtx, id, ringsModule);
   }
 
-  // Plaits track
+  // Plaits track + drum voices — same compiled WASM module reused for all 4
   const plaitsBytes  = await fetch('/plaits.wasm').then(r => r.arrayBuffer());
   const plaitsModule = await WebAssembly.compile(plaitsBytes);
   await createPlaitsTrack(audioCtx, plaitsModule);
+  for (const id of DRUM_VOICE_IDS) {
+    await createDrumTrack(audioCtx, id, plaitsModule);
+  }
 
   isReady = true;
 }
 
 // ── Generic per-track controls (any track type) ────────────────────────────
-export function triggerNote(trackId: TrackId, midiNote: number): void {
+// midiNote is omitted for drum voices — each has a fixed note set once at creation.
+export function triggerNote(trackId: TrackId, midiNote?: number): void {
   const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote } });

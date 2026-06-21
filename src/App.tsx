@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
-import { RINGS_TRACK_IDS, type RingsTrackId } from './audio/engine';
+import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer, TRACK_IDS, TRACK_LABELS,
+import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
@@ -13,7 +13,7 @@ import { PlaitsControls } from './components/PlaitsControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
-import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, LegacySongStateV1 } from './types';
+import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -60,7 +60,14 @@ interface PlaitsParamsState {
   reverbSend: number;
 }
 
-type AnyTrackParams = RingsParamsState | PlaitsParamsState;
+interface DrumParamsState {
+  kind: 'drums';
+  volume: number;
+  delaySend: number;
+  reverbSend: number;
+}
+
+type AnyTrackParams = RingsParamsState | PlaitsParamsState | DrumParamsState;
 
 function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
@@ -68,8 +75,13 @@ function defaultRingsParams(): RingsParamsState {
 function defaultPlaitsParams(): PlaitsParamsState {
   return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
+function defaultDrumParams(): DrumParamsState {
+  return { kind: 'drums', volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+}
 function defaultParamsFor(id: TrackId): AnyTrackParams {
-  return id === 'plaits' ? defaultPlaitsParams() : defaultRingsParams();
+  if (id === 'plaits') return defaultPlaitsParams();
+  if (id === 'drums') return defaultDrumParams();
+  return defaultRingsParams();
 }
 
 type ViewSection = 'track' | 'master';
@@ -108,6 +120,18 @@ export default function App() {
     updateTrackParamsFor(activeTrack, fn);
   }
 
+  // Drums is one UI tab but 3 separate engine.ts tracks — volume/sends broadcast to all 3.
+  function setVolumeFor(id: TrackId, v: number) {
+    updateTrackParamsFor(id, p => ({ ...p, volume: v }));
+    if (id === 'drums') DRUM_VOICE_IDS.forEach(vid => Engine.setTrackVolume(vid, v));
+    else Engine.setTrackVolume(id, v);
+  }
+  function setSendFor(id: TrackId, kind: 'delay' | 'reverb', v: number) {
+    updateTrackParamsFor(id, p => kind === 'delay' ? ({ ...p, delaySend: v }) : ({ ...p, reverbSend: v }));
+    if (id === 'drums') DRUM_VOICE_IDS.forEach(vid => Engine.setTrackSend(vid, kind, v));
+    else Engine.setTrackSend(id, kind, v);
+  }
+
   // ── Delay (master) ───────────────────────────────────────────────────
   const [delayDivision, setDelayDivision] = useState('1/8');
   const [delayMix,      setDelayMix]      = useState(0.2);
@@ -136,6 +160,7 @@ export default function App() {
     const ringsAP = trackParams.ringsA as RingsParamsState;
     const ringsBP = trackParams.ringsB as RingsParamsState;
     const plaitsP = trackParams.plaits as PlaitsParamsState;
+    const drumsP  = trackParams.drums as DrumParamsState;
 
     const ringsA: RingsTrackState = {
       steps: tracks.ringsA.steps, scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
@@ -155,9 +180,13 @@ export default function App() {
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
     };
+    const drums: DrumTrackState = {
+      steps: tracks.drums.steps, scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
+      volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
+    };
 
     return {
-      version: 2, bpm, tracks: { ringsA, ringsB, plaits },
+      version: 2, bpm, tracks: { ringsA, ringsB, plaits, drums },
       delayDivision, delayMix, delayFeedback, delayFilter,
       reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone,
     };
@@ -183,8 +212,12 @@ export default function App() {
       engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5, lpgColour: 0.5,
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
+    const drums: DrumTrackState = {
+      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+    };
     return {
-      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB, plaits },
+      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB, plaits, drums },
       delayDivision: old.delayDivision, delayMix: old.delayMix,
       delayFeedback: old.delayFeedback, delayFilter: old.delayFilter,
       reverbType: old.reverbType === 'rings' ? 'algo' : old.reverbType,
@@ -198,11 +231,18 @@ export default function App() {
     const state: SongState = ('version' in raw && raw.version === 2)
       ? raw as SongState
       : migrateLegacy(raw as LegacySongStateV1);
+    // Saves made between Phase 3 (Plaits) and Phase 4 (drums) shipping are version 2
+    // but predate the drums track — fall back to a fresh empty one.
+    const drumsState: DrumTrackState = state.tracks.drums ?? {
+      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+    };
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
       ringsA: { steps: state.tracks.ringsA.steps, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
       ringsB: { steps: state.tracks.ringsB.steps, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
       plaits: { steps: state.tracks.plaits.steps, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
+      drums:  { steps: drumsState.steps, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: {
@@ -222,6 +262,7 @@ export default function App() {
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
       },
+      drums: { kind: 'drums', volume: drumsState.volume, delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend },
     };
 
     loadTracks(nextTracks);
@@ -266,6 +307,13 @@ export default function App() {
       Engine.setTrackVolume('plaits', pp.volume);
       Engine.setTrackSend('plaits', 'delay', pp.delaySend);
       Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
+
+      const dp = nextParams.drums as DrumParamsState;
+      DRUM_VOICE_IDS.forEach(vid => {
+        Engine.setTrackVolume(vid, dp.volume);
+        Engine.setTrackSend(vid, 'delay', dp.delaySend);
+        Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
+      });
 
       Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));
       Engine.setDelayMix(state.delayMix);
@@ -355,7 +403,7 @@ export default function App() {
                 onChange={e => updateBpm(parseInt(e.target.value))} />
               <span className="bpm-val">{bpm}</span>
             </div>
-            {viewSection === 'track' && (
+            {viewSection === 'track' && activeTrack !== 'drums' && (
               <div className="scale-selects">
                 <select className="scale-select" value={rootNote}
                   onChange={e => setRootNote(parseInt(e.target.value))}>
@@ -398,12 +446,14 @@ export default function App() {
                 steps={steps} visibleNotes={visibleNotes}
                 rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
                 currentStep={currentStep}
+                rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
+                noStrum={activeTrack === 'drums'}
                 onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
                 onSetProbability={setProbability}
                 onScrollUp={scrollUp} onScrollDown={scrollDown}
               />
 
-              {active.kind === 'rings' ? (
+              {active.kind === 'rings' && (
                 <RingsControls
                   trackId={activeTrack as RingsTrackId}
                   model={active.model} params={active.params} lfo={active.lfo}
@@ -416,7 +466,8 @@ export default function App() {
                   onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'rings'
                     ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
                 />
-              ) : (
+              )}
+              {active.kind === 'plaits' && (
                 <PlaitsControls
                   engine={active.engine} params={active.params}
                   onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
@@ -432,11 +483,11 @@ export default function App() {
                 <div className="knob-row">
                   <label>Sends</label>
                   <Knob value={active.volume} min={0} max={1.5} label="Volume"
-                    onChange={v => { updateActiveParams(p => ({ ...p, volume: v })); Engine.setTrackVolume(activeTrack, v); }} />
+                    onChange={v => setVolumeFor(activeTrack, v)} />
                   <Knob value={active.delaySend} min={0} max={1} label="Delay"
-                    onChange={v => { updateActiveParams(p => ({ ...p, delaySend: v })); Engine.setTrackSend(activeTrack, 'delay', v); }} />
+                    onChange={v => setSendFor(activeTrack, 'delay', v)} />
                   <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
-                    onChange={v => { updateActiveParams(p => ({ ...p, reverbSend: v })); Engine.setTrackSend(activeTrack, 'reverb', v); }} />
+                    onChange={v => setSendFor(activeTrack, 'reverb', v)} />
                 </div>
               </div>
             </>
@@ -455,7 +506,7 @@ export default function App() {
                   <label>Mixer</label>
                   {TRACK_IDS.map(id => (
                     <Knob key={id} value={trackParams[id].volume} min={0} max={1.5} label={TRACK_LABELS[id]}
-                      onChange={v => { updateTrackParamsFor(id, p => ({ ...p, volume: v })); Engine.setTrackVolume(id, v); }} />
+                      onChange={v => setVolumeFor(id, v)} />
                   ))}
                 </div>
               </div>

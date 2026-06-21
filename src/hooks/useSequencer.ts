@@ -1,9 +1,13 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
-import { triggerNote, type TrackId as EngineTrackId } from '../audio/engine';
+import { triggerNote, DRUM_VOICE_IDS } from '../audio/engine';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
-export type TrackId = EngineTrackId; // widen to include drum voices in a later phase
+// UI/tab-level track id — distinct from engine.ts's TrackId (which addresses 6
+// individual worklets). The Drums tab is ONE tab/grid here but maps to 3 separate
+// engine.ts tracks (drumHihat/drumSnare/drumKick) — see the playback loop below.
+export type TrackId = 'ringsA' | 'ringsB' | 'plaits' | 'drums';
+export const DRUM_ROW_LABELS = ['Hi-Hat', 'Snare', 'Kick']; // top to bottom, matches DRUM_VOICE_IDS order
 
 export interface StepData {
   notes: number[];
@@ -16,8 +20,8 @@ export const STEP_COUNT   = 32;
 export const VISIBLE_ROWS = 12;
 export const PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
 
-export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits'];
-export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits' };
+export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'drums'];
+export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits', drums: 'Drums' };
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
@@ -101,12 +105,15 @@ export function useSequencer() {
   // ── Derived: active track's visible steps ────────────────────────────
   const track = tracks[activeTrack];
   const steps = track.steps;
+  const isDrums = activeTrack === 'drums';
 
-  const allNotes     = buildNotes(track.rootNote, track.scale);
-  const reversed     = useMemo(() => [...allNotes].reverse(), [allNotes]);
-  const maxScroll    = Math.max(0, reversed.length - VISIBLE_ROWS);
-  const scroll       = Math.min(track.scrollRow, maxScroll);
-  const visibleNotes = reversed.slice(scroll, scroll + VISIBLE_ROWS);
+  // Drums: fixed 3 rows (Hi-Hat/Snare/Kick), no scale/scroll — the "note" value
+  // stored in StepData is a row index (0/1/2), not a MIDI pitch.
+  const allNotes     = isDrums ? DRUM_VOICE_IDS.map((_, i) => i) : buildNotes(track.rootNote, track.scale);
+  const reversed     = useMemo(() => isDrums ? allNotes : [...allNotes].reverse(), [allNotes, isDrums]);
+  const maxScroll    = isDrums ? 0 : Math.max(0, reversed.length - VISIBLE_ROWS);
+  const scroll       = isDrums ? 0 : Math.min(track.scrollRow, maxScroll);
+  const visibleNotes = isDrums ? reversed : reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
   // ── Step editing (always targets activeTrack) ────────────────────────
   const toggleNote = useCallback((col: number, midi: number) => {
@@ -199,6 +206,15 @@ export function useSequencer() {
 
         const prob = step.prob ?? 1;
         if (prob < 1 && Math.random() > prob) continue;
+
+        if (id === 'drums') {
+          // Each active row is an independent voice — fire together, no strum/stagger.
+          for (const voiceIdx of step.notes) {
+            const voiceId = DRUM_VOICE_IDS[voiceIdx];
+            if (voiceId) Tone.getDraw().schedule(() => triggerNote(voiceId), time);
+          }
+          continue;
+        }
 
         const ordered = step.strumDown ? [...step.notes].reverse() : [...step.notes];
         if (ordered.length === 1) {

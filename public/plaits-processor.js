@@ -34,6 +34,10 @@ class PlaitsProcessor extends AudioWorkletProcessor {
           this.pendingTrigger = true;
           break;
 
+        case 'set-note':
+          this._setNote?.(payload.note);
+          break;
+
         case 'set-param':
           this._setParam?.(payload.param, payload.value);
           break;
