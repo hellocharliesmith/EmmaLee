@@ -2,6 +2,19 @@
 
 Ideas and improvements to work through. Roughly ordered by priority within each section.
 
+See [AGENTS.md](AGENTS.md) for architecture, deploy steps, and key decisions — read that
+first if you're new to the codebase. This file is just queued ideas.
+
+## Recently shipped (remove from here once stale)
+
+- **2026-06-20/21** — Kids Mode cleanup: muted "bedtime" color palette, fluid grid
+  (no horizontal scroll, fits any screen width), fixed a bug where invisible extra
+  grid rows were clickable and triggered phantom notes.
+- **2026-06-20/21** — Step probability: each step cycles through 100/75/66/50/33/25%
+  via a small button row under the grid. Backward-compatible with old saves.
+- (Already in place before this round, in case it looks unimplemented) — Save/load
+  patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
+
 ---
 
 ## Visual & Performance
@@ -43,12 +56,6 @@ Ideas and improvements to work through. Roughly ordered by priority within each 
 ### Randomise button
 - Generate a random pattern in the current scale. Hold for variations.
 
-### Save/load patterns
-- Serialize grid state to URL hash or localStorage. Share a pattern via link.
-
-### Step probability
-- Each cell has a % chance of firing. Creates generative variation.
-
 ### Swing/groove
 - Push every other step slightly late. Classic groove control.
 
@@ -87,7 +94,9 @@ Ideas and improvements to work through. Roughly ordered by priority within each 
 
 ## Notes
 
-- When starting a new session, read this file first
-- Add new ideas here rather than implementing immediately  
-- `npx wrangler deploy` to push to live after `npm run build`
-- Git push after every deploy — GitHub keeps history
+- When starting a new session, read [AGENTS.md](AGENTS.md) first, then this file
+- Add new ideas here rather than implementing immediately
+- Remove items from here once shipped — log them under "Recently shipped" above,
+  then prune that section once it's no longer useful context
+- Deploy = `npm run build` → `npx wrangler deploy` → `git commit` + `git push`,
+  every time, all three steps (see AGENTS.md for why)
