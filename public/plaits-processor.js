@@ -20,6 +20,7 @@ class PlaitsProcessor extends AudioWorkletProcessor {
 
     this.pendingTrigger = false;
     this.pendingNote    = undefined;
+    this.velocity       = 1.0; // scales output; updated on trigger, sticky until next one
 
     this.port.onmessage = async (e) => {
       const { type, payload } = e.data;
@@ -31,6 +32,7 @@ class PlaitsProcessor extends AudioWorkletProcessor {
 
         case 'trigger':
           if (payload.note !== undefined) this.pendingNote = payload.note;
+          if (payload.velocity !== undefined) this.velocity = payload.velocity;
           this.pendingTrigger = true;
           break;
 
@@ -106,9 +108,10 @@ class PlaitsProcessor extends AudioWorkletProcessor {
 
     const heap = this.heapF32;
     const base = this.base;
+    const vel  = this.velocity;
     for (let i = 0; i < left.length; i++) {
-      left[i]  = heap[base + i * 2];
-      right[i] = heap[base + i * 2 + 1];
+      left[i]  = heap[base + i * 2] * vel;
+      right[i] = heap[base + i * 2 + 1] * vel;
     }
 
     return true;

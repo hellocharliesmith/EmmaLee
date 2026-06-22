@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
-import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId } from './audio/engine';
+import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
 import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
@@ -10,6 +10,7 @@ import { Knob } from './components/Knob';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
+import { DrumControls, type DrumVoiceParams } from './components/DrumControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
@@ -62,6 +63,7 @@ interface PlaitsParamsState {
 
 interface DrumParamsState {
   kind: 'drums';
+  voices: Record<DrumVoiceId, DrumVoiceParams>;
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -75,8 +77,17 @@ function defaultRingsParams(): RingsParamsState {
 function defaultPlaitsParams(): PlaitsParamsState {
   return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
+// Decay defaults match engine.ts's DRUM_VOICE_CONFIG so the knobs reflect what's
+// actually set on the worklet at creation time.
+function defaultDrumVoices(): Record<DrumVoiceId, DrumVoiceParams> {
+  return {
+    drumHihat: { tone: 0.5, decay: 0.25 },
+    drumSnare: { tone: 0.5, decay: 0.45 },
+    drumKick:  { tone: 0.5, decay: 0.5 },
+  };
+}
 function defaultDrumParams(): DrumParamsState {
-  return { kind: 'drums', volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+  return { kind: 'drums', voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
 }
 function defaultParamsFor(id: TrackId): AnyTrackParams {
   if (id === 'plaits') return defaultPlaitsParams();
@@ -97,7 +108,7 @@ export default function App() {
     tracks, activeTrack, setActiveTrack,
     steps, visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir, setProbability,
+    toggleNote, toggleStrumDir, setProbability, setVelocity,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown,
     start, stop, updateBpm,
@@ -182,7 +193,7 @@ export default function App() {
     };
     const drums: DrumTrackState = {
       steps: tracks.drums.steps, scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
-      volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
+      voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
     };
 
     return {
@@ -214,7 +225,7 @@ export default function App() {
     };
     const drums: DrumTrackState = {
       steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
-      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+      voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     return {
       version: 2, bpm: old.bpm, tracks: { ringsA, ringsB, plaits, drums },
@@ -232,11 +243,13 @@ export default function App() {
       ? raw as SongState
       : migrateLegacy(raw as LegacySongStateV1);
     // Saves made between Phase 3 (Plaits) and Phase 4 (drums) shipping are version 2
-    // but predate the drums track — fall back to a fresh empty one.
+    // but predate the drums track — fall back to a fresh empty one. Saves made after
+    // drums shipped but before per-voice tone controls existed are missing `voices`.
     const drumsState: DrumTrackState = state.tracks.drums ?? {
       steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
-      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+      voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
+    const drumVoices = drumsState.voices ?? defaultDrumVoices();
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
       ringsA: { steps: state.tracks.ringsA.steps, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
@@ -262,7 +275,7 @@ export default function App() {
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
       },
-      drums: { kind: 'drums', volume: drumsState.volume, delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend },
+      drums: { kind: 'drums', voices: drumVoices, volume: drumsState.volume, delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend },
     };
 
     loadTracks(nextTracks);
@@ -313,6 +326,8 @@ export default function App() {
         Engine.setTrackVolume(vid, dp.volume);
         Engine.setTrackSend(vid, 'delay', dp.delaySend);
         Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
+        Engine.setDrumParam(vid, 0, dp.voices[vid].tone);
+        Engine.setDrumParam(vid, 3, dp.voices[vid].decay);
       });
 
       Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));
@@ -448,8 +463,10 @@ export default function App() {
                 currentStep={currentStep}
                 rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
                 noStrum={activeTrack === 'drums'}
+                showVelocity={activeTrack === 'drums'}
                 onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
                 onSetProbability={setProbability}
+                onSetVelocity={setVelocity}
                 onScrollUp={scrollUp} onScrollDown={scrollDown}
               />
 
@@ -476,6 +493,14 @@ export default function App() {
                     const n = [...p.params] as [number,number,number,number,number]; n[i] = v;
                     return { ...p, params: n };
                   })}
+                />
+              )}
+              {active.kind === 'drums' && (
+                <DrumControls
+                  voices={active.voices}
+                  onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
+                    ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
+                    : p)}
                 />
               )}
 

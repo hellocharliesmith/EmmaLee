@@ -12,13 +12,15 @@ export const DRUM_ROW_LABELS = ['Hi-Hat', 'Snare', 'Kick']; // top to bottom, ma
 export interface StepData {
   notes: number[];
   strumDown: boolean;
-  prob?: number; // 0–1, default 1 (100%)
+  prob?: number;     // 0–1, default 1 (100%)
+  velocity?: number; // 0–1, default 1 (100%) — currently only applied for drums
 }
 export type StepValue = StepData | null;
 export const MAX_NOTES_PER_STEP = 4;
 export const STEP_COUNT   = 32;
 export const VISIBLE_ROWS = 12;
-export const PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
+export const PROB_OPTIONS     = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
+export const VELOCITY_OPTIONS = [1, 0.75, 0.5, 0.25] as const;
 
 export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'drums'];
 export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits', drums: 'Drums' };
@@ -156,6 +158,16 @@ export function useSequencer() {
     });
   }, [activeTrack]);
 
+  const setVelocity = useCallback((col: number, velocity: number) => {
+    updateTrack(activeTrack, prev => {
+      const step = prev.steps[col];
+      if (!step) return prev;
+      const newSteps = [...prev.steps];
+      newSteps[col] = { ...step, velocity };
+      return { ...prev, steps: newSteps };
+    });
+  }, [activeTrack]);
+
   // ── Scale / root (per active track) ──────────────────────────────────
   const setScale = useCallback((s: ScaleType) => {
     updateTrack(activeTrack, prev => ({ ...prev, scale: s, steps: makeEmptySteps(), scrollRow: 0 }));
@@ -209,9 +221,11 @@ export function useSequencer() {
 
         if (id === 'drums') {
           // Each active row is an independent voice — fire together, no strum/stagger.
+          // Velocity is per-step (this column), applied to every active voice in it.
+          const velocity = step.velocity ?? 1;
           for (const voiceIdx of step.notes) {
             const voiceId = DRUM_VOICE_IDS[voiceIdx];
-            if (voiceId) Tone.getDraw().schedule(() => triggerNote(voiceId), time);
+            if (voiceId) Tone.getDraw().schedule(() => triggerNote(voiceId, undefined, velocity), time);
           }
           continue;
         }
@@ -253,7 +267,7 @@ export function useSequencer() {
     steps, visibleNotes, allNotes,
     scale: track.scale, rootNote: track.rootNote,
     scroll, maxScroll, bpm, isPlaying, currentStep,
-    toggleNote, toggleStrumDir, setProbability,
+    toggleNote, toggleStrumDir, setProbability, setVelocity,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     start, stop, updateBpm,

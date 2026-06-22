@@ -838,6 +838,39 @@
 .pr-prob-btn:hover     { border-color: #c4849a; color: #c4849a; }
 .pr-prob-btn.active    { color: #c4849a; border-color: rgba(196,132,154,0.5); background: rgba(196,132,154,0.08); }
 .pr-prob-btn.active:hover { background: rgba(196,132,154,0.15); }
+
+/* Velocity row (drums) — amber accent, distinct from probability's pink */
+.pr-velocity-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 14px;
+}
+.pr-velocity-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-velocity-btn {
+  background: none;
+  border: 1px solid #2e3040;
+  color: #3a3d4a;
+  font-size: 8px;
+  width: 22px;
+  height: 13px;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.pr-velocity-btn:hover        { border-color: #c4954a; color: #c4954a; }
+.pr-velocity-btn.active       { color: #c4954a; border-color: rgba(196,149,74,0.5); background: rgba(196,149,74,0.08); }
+.pr-velocity-btn.active:hover { background: rgba(196,149,74,0.15); }
 .pr-strum-cell {
   width: 26px;
   flex-shrink: 0;

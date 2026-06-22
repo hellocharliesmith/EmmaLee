@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
-import { noteName, STEP_COUNT, PROB_OPTIONS,
+import { noteName, STEP_COUNT, PROB_OPTIONS, VELOCITY_OPTIONS,
          type StepValue } from '../hooks/useSequencer';
 
 const PROB_LABELS: Record<number, string> = {
   1: '', 0.75: '75', 0.66: '66', 0.5: '50', 0.33: '33', 0.25: '25',
+};
+const VELOCITY_LABELS: Record<number, string> = {
+  1: '', 0.75: '75', 0.5: '50', 0.25: '25',
 };
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
@@ -43,16 +46,21 @@ interface Props {
   // Hides the strum-direction row — for tracks where simultaneous multi-row hits
   // don't get staggered (e.g. drums fire all active voices together).
   noStrum?: boolean;
+  // Shows a per-step velocity row (100/75/50/25%) below probability — currently
+  // only meaningful for drums.
+  showVelocity?: boolean;
   onToggleNote: (col: number, midi: number) => void;
   onToggleStrumDir: (col: number) => void;
   onSetProbability: (col: number, prob: number) => void;
+  onSetVelocity?: (col: number, velocity: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
 }
 
 export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
-  currentStep, kidsMode, rowLabels, noStrum, onToggleNote, onToggleStrumDir, onSetProbability, onScrollUp, onScrollDown,
+  currentStep, kidsMode, rowLabels, noStrum, showVelocity,
+  onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onScrollUp, onScrollDown,
 }: Props) {
 
   const handleCell = useCallback((col: number, midi: number) => {
@@ -208,6 +216,31 @@ export function PianoRoll({
               );
             })}
           </div>
+
+          {/* Velocity row (drums only) */}
+          {showVelocity && (
+            <div className="pr-velocity-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                if (!step) return <div key={i} className="pr-velocity-cell" />;
+                const vel   = step.velocity ?? 1;
+                const label = VELOCITY_LABELS[vel] ?? String(Math.round(vel * 100));
+                const idx   = VELOCITY_OPTIONS.indexOf(vel as typeof VELOCITY_OPTIONS[number]);
+                const next  = VELOCITY_OPTIONS[(idx === -1 ? 0 : (idx + 1) % VELOCITY_OPTIONS.length)];
+                return (
+                  <div key={i} className="pr-velocity-cell">
+                    <button
+                      className={`pr-velocity-btn${vel < 1 ? ' active' : ''}`}
+                      onClick={() => onSetVelocity?.(i, next)}
+                      title={`Velocity: ${Math.round(vel * 100)}% — click to change`}
+                    >
+                      {vel < 1 ? label : '·'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>

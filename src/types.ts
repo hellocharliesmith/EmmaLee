@@ -38,8 +38,11 @@ export interface PlaitsTrackState extends BaseTrackState {
 
 // Drums: scale/rootNote are unused (fixed 3 rows, not a chromatic grid) but kept
 // for shape uniformity with BaseTrackState. volume/delaySend/reverbSend apply to
-// all 3 drum voices uniformly (broadcast) — see App.tsx.
-export type DrumTrackState = BaseTrackState;
+// all 3 drum voices uniformly (broadcast) — see App.tsx. `voices` holds independent
+// tone/decay per drum (each is its own Plaits instance under the hood).
+export interface DrumTrackState extends BaseTrackState {
+  voices: Record<'drumHihat' | 'drumSnare' | 'drumKick', { tone: number; decay: number }>;
+}
 
 export interface SongState {
   version: 2;

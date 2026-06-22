@@ -299,10 +299,12 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
 // ── Generic per-track controls (any track type) ────────────────────────────
 // midiNote is omitted for drum voices — each has a fixed note set once at creation.
-export function triggerNote(trackId: TrackId, midiNote?: number): void {
+// velocity (0-1, default 1) scales the worklet's output for this hit — currently
+// only sent for drum voices; melodic tracks never pass it, so it's a no-op there.
+export function triggerNote(trackId: TrackId, midiNote?: number, velocity?: number): void {
   const t = tracks.get(trackId);
   if (!t || !isReady) return;
-  t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote } });
+  t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote, velocity } });
 }
 
 export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb', value: number): void {
@@ -363,6 +365,15 @@ export function setPlaitsModel(engine: number): void {
   const t = tracks.get(PLAITS_TRACK_ID);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-model', payload: { model: engine } });
+}
+
+// ── Drum voice controls ────────────────────────────────────────────────────
+// param: 0=harmonics ("Tone") 1=timbre 2=morph 3=decay 4=lpg_colour — each drum
+// voice is its own Plaits instance with independent patch state.
+export function setDrumParam(voiceId: DrumVoiceId, param: number, value: number): void {
+  const t = tracks.get(voiceId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-param', payload: { param, value } });
 }
 
 // ── Master reverb ────────────────────────────────────────────────────────
