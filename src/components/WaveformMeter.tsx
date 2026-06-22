@@ -9,6 +9,16 @@ function dspColor(load: number) {
   return '#6b7280';
 }
 
+// Canvas fillStyle/strokeStyle can't read CSS custom properties directly —
+// resolve --accent to actual RGB once per draw so the waveform follows the
+// active track's color.
+function accentRgb(el: HTMLElement): [number, number, number] {
+  const hex = getComputedStyle(el).getPropertyValue('--accent').trim();
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return [196, 132, 154]; // fallback: original rose accent
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
 function peakOf(data: Float32Array<ArrayBuffer>) {
   let mn = 0, mx = 0;
   for (let i = 0; i < data.length; i++) {
@@ -75,8 +85,8 @@ export function WaveformMeter() {
         if (hist.length > cw) hist.shift();
       }
 
-      // Background
-      ctx.fillStyle = '#0d0f12';
+      // Background (matches --neutral-dark-950)
+      ctx.fillStyle = '#131211';
       ctx.fillRect(0, 0, dw, H * dpr);
 
       ctx.save();
@@ -102,6 +112,7 @@ export function WaveformMeter() {
       });
 
       const hist = historyRef.current;
+      const [ar, ag, ab] = accentRgb(wrap!);
 
       const c = ctx; // non-null alias for use inside inner functions
       function drawChannel(
@@ -109,22 +120,22 @@ export function WaveformMeter() {
         getBot: (f: Frame) => number,
         yOffset: number
       ) {
-        c.fillStyle = 'rgba(196, 132, 154, 0.1)';
+        c.fillStyle = `rgba(${ar}, ${ag}, ${ab}, 0.1)`;
         for (let i = 0; i < hist.length; i++) {
           const t = getTop(hist[i]) * 1.05;
           const b = getBot(hist[i]) * 1.05;
           c.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
         }
         const grad = c.createLinearGradient(0, yOffset, 0, yOffset + hh);
-        grad.addColorStop(0, 'rgba(196, 132, 154, 0.9)');
-        grad.addColorStop(1, 'rgba(196, 132, 154, 0.4)');
+        grad.addColorStop(0, `rgba(${ar}, ${ag}, ${ab}, 0.9)`);
+        grad.addColorStop(1, `rgba(${ar}, ${ag}, ${ab}, 0.4)`);
         c.fillStyle = grad;
         for (let i = 0; i < hist.length; i++) {
           const t = getTop(hist[i]);
           const b = getBot(hist[i]);
           c.fillRect(i, yOffset + t, 1, Math.max(1, b - t));
         }
-        c.strokeStyle = 'rgba(228, 180, 196, 0.6)';
+        c.strokeStyle = `rgba(${Math.min(255, ar + 32)}, ${Math.min(255, ag + 48)}, ${Math.min(255, ab + 42)}, 0.6)`;
         c.lineWidth = 1;
         c.beginPath();
         for (let i = 0; i < hist.length; i++) {

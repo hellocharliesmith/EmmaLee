@@ -360,8 +360,17 @@ export default function App() {
 
   const kidsNotes = kidsMode ? visibleNotes.slice(0, KIDS_ROWS) : visibleNotes;
 
+  // Per-track accent color (CSS vars set in App.css) — Kids Mode is always pinned
+  // to ringsA so it just gets the default Rose, no class needed. Master isn't a
+  // track, so it gets a neutral highlight instead of any track's hue.
+  const trackColorClass = kidsMode ? '' : viewSection === 'master' ? ' track-master'
+    : activeTrack === 'ringsB' ? ' track-rings-b'
+    : activeTrack === 'plaits' ? ' track-plaits'
+    : activeTrack === 'drums'  ? ' track-drums'
+    : '';
+
   return (
-    <div className={`app${kidsMode ? ' kids-mode' : ''}`}>
+    <div className={`app${kidsMode ? ' kids-mode' : ''}${trackColorClass}`}>
 
       {/* ── Header ── */}
       <div className="app-header">

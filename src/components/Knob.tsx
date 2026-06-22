@@ -60,15 +60,15 @@ export function Knob({ value, min, max, label, onChange }: KnobProps) {
     >
       <svg width="36" height="36" viewBox="0 0 36 36">
         {/* Track */}
-        <path d={arc(MIN_ANG, MAX_ANG)} fill="none" stroke="#2e3040" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={arc(MIN_ANG, MAX_ANG)} fill="none" style={{ stroke: 'var(--border)' }} strokeWidth="2.5" strokeLinecap="round" />
         {/* Value */}
         {norm > 0.005 && (
-          <path d={arc(MIN_ANG, angle)} fill="none" stroke="#c4849a" strokeWidth="2.5" strokeLinecap="round" />
+          <path d={arc(MIN_ANG, angle)} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="2.5" strokeLinecap="round" />
         )}
         {/* Dot */}
-        <circle cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r="2.5" fill="#e8cad2" />
+        <circle cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r="2.5" style={{ fill: 'var(--accent-light)' }} />
         {/* Hub */}
-        <circle cx={CX} cy={CY} r="5" fill="#1e2028" stroke="#3a3d4a" strokeWidth="1" />
+        <circle cx={CX} cy={CY} r="5" style={{ fill: 'var(--bg-input)', stroke: 'var(--border-disabled)' }} strokeWidth="1" />
       </svg>
       <div className="knob-label">{label}</div>
     </div>
