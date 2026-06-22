@@ -210,9 +210,25 @@ tool during this work — synthetic clicks there don't carry real `navigator.use
 Every phase (1: 2 Rings, 3: +Plaits, 4: +3 drum voices) was deployed to the live site
 and reviewed carefully by static inspection instead, with the user confirming actual
 audio playback in a real browser after each phase. If you're picking up further work
-on this (e.g. per-voice drum tone shaping, or a new track type), the same constraint
-applies — you likely can't verify real audio in an automated preview tool either;
-deploy and ask the user to confirm.
+on this (e.g. a new track type), the same constraint applies — you likely can't
+verify real audio in an automated preview tool either; deploy and ask the user to confirm.
+
+**Drum velocity (added 2026-06-21)**: per-step (per-column, not per-voice),
+100/75/50/25%, applied to every active voice in that step. Implemented entirely in
+`plaits-processor.js` as a sticky output-sample multiplier (`this.velocity`, default
+1.0, updated whenever a 'trigger' message includes one) — deliberately NOT routed
+through the WASM/C++ `accent` parameter, to avoid any risk to the already-confirmed
+melodic Plaits sound (which never sends a velocity, so its multiplier never moves).
+If you need true accent/dynamics response from the Plaits engines themselves later
+(richer than a flat volume scale), that would mean setting `modulations.level_patched
+= true` and wiring level through the wrapper — but only for drum-voice instances,
+since each track is a separate WASM instance with independent statics.
+
+**React Fast Refresh can produce a false-positive "Rules of Hooks" console error**
+after many rapid edits to a hook file (e.g. `useSequencer.ts`) without a full reload —
+the error compares hook call order across HMR-patched renders, not real renders. If
+you see this, do a full dev-server restart (not just `location.reload()`) before
+concluding there's a real bug — confirmed during this session's work.
 
 ## Key decisions worth knowing before you change things
 

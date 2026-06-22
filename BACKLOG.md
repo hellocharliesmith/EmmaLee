@@ -30,8 +30,11 @@ first if you're new to the codebase. This file is just queued ideas.
   (Hi-Hat/Snare/Kick), each a tiny Plaits instance reusing the already-compiled
   binary, locked to Plaits' bass_drum(21)/snare_drum(22)/hi_hat(23) engines. Unlike
   the melodic tracks, the 3 drum voices are independent so they can overlap on the
-  same step. No per-voice tone controls in v1 (kept deliberately simple) — see
-  "Per-voice drum tone shaping" below if that's wanted later.
+  same step.
+- **2026-06-21** — Per-voice drum tone controls (Tone + Decay knob per voice) and
+  per-step velocity (100/75/50/25%, drums only) — both same-day follow-ups to Phase 4.
+  Velocity is applied in plaits-processor.js as an output-sample multiplier, not via
+  WASM — zero recompile, zero risk to the already-confirmed melodic Plaits sound.
 - (Already in place before this round, in case it looks unimplemented) — Save/load
   patterns to localStorage with named slots (`useSavedSongs.ts` + `SaveLoad.tsx`).
 
@@ -39,23 +42,13 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Multitrack expansion — COMPLETE (2026-06-21)
 
-All 4 phases shipped same-day: 2x Rings + 1x Plaits melodic + 1x Drums (3 voices),
+All 4 phases plus same-day follow-ups (volume knobs, per-voice drum tone, step
+velocity) shipped in one day: 2x Rings + 1x Plaits melodic + 1x Drums (3 voices),
 master bus with shared delay/reverb fed by per-track sends, track tabs, Master mixer.
 Full architecture writeup lives in AGENTS.md "Multitrack architecture" — read that
 before changing any of this, especially the Plaits engine-index table (hardware
 registration order, not header declaration order — easy to get wrong, already was
 once this session) and the WASM export-letter discovery process for wrapper changes.
-
-### Per-voice drum tone shaping (possible fast-follow)
-- v1 ships with NO per-voice controls on the Drums tab — just the grid + one shared
-  Sends row (Volume/Delay/Reverb broadcasts to all 3 voices identically). Each drum
-  voice already has independent `harmonics`/`timbre`/`morph`/`decay` patch state
-  under the hood (separate Plaits instances) — only the UI is missing.
-- If wanted: add a small 2-knob pair per row (e.g. "Tone" = harmonics, "Decay") —
-  needs a new `setDrumParam(voiceId, param, value)` in engine.ts (trivial, mirrors
-  setPlaitsParam) and a 3-row mini-panel in App.tsx/a new DrumControls.tsx.
-- Was deliberately deferred — "simple drum track" was the explicit ask, and 3 lots
-  of tone knobs felt like more complexity than that called for on the first pass.
 
 ---
 
