@@ -326,8 +326,8 @@ export default function App() {
         Engine.setTrackVolume(vid, dp.volume);
         Engine.setTrackSend(vid, 'delay', dp.delaySend);
         Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
-        Engine.setDrumParam(vid, 0, dp.voices[vid].tone);
-        Engine.setDrumParam(vid, 3, dp.voices[vid].decay);
+        Engine.setDrumParam(vid, 1, dp.voices[vid].tone);  // timbre
+        Engine.setDrumParam(vid, 2, dp.voices[vid].decay); // morph
       });
 
       Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));

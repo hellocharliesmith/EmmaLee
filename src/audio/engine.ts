@@ -206,10 +206,17 @@ async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmModule: W
   const worklet = await createTrackWorklet(ctx, id, 'plaits-processor', wasmModule);
   const cfg = DRUM_VOICE_CONFIG[id];
 
-  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });        // harmonics
-  worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });        // timbre
-  worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.5 } });        // morph
-  worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: cfg.decay } });  // decay
+  // For Plaits' drum engines specifically (bass_drum/snare_drum/hi_hat), the
+  // underlying DSP (analog_bass_drum.h, analog_snare_drum.h, hi_hat.h) all share
+  // the same param mapping, confirmed directly in their Render() signatures:
+  //   param 0 (harmonics) = drive/snappy/noisiness (secondary character, not exposed)
+  //   param 1 (timbre)    = "tone" — a bandpass/lowpass filter cutoff
+  //   param 2 (morph)     = "decay" — the actual envelope decay time
+  // patch.decay (param 3) does NOT affect these engines — Voice bypasses its own
+  // envelope for "already_enveloped" engines (see voice.cc RegisterInstance calls).
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });        // harmonics (unexposed)
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });        // timbre ("Tone")
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: cfg.decay } });  // morph ("Decay")
   worklet.port.postMessage({ type: 'set-model', payload: { model: cfg.engine } });
   worklet.port.postMessage({ type: 'set-note', payload: { note: cfg.note } });
 }
@@ -368,8 +375,12 @@ export function setPlaitsModel(engine: number): void {
 }
 
 // ── Drum voice controls ────────────────────────────────────────────────────
-// param: 0=harmonics ("Tone") 1=timbre 2=morph 3=decay 4=lpg_colour — each drum
-// voice is its own Plaits instance with independent patch state.
+// IMPORTANT: the param mapping here is DIFFERENT from melodic Plaits. For the
+// drum engines (bass_drum/snare_drum/hi_hat), patch.decay (param 3) is unused —
+// Voice bypasses its own envelope for them. Their actual decay is param 2 (morph),
+// and "tone" is param 1 (timbre) — confirmed in their DSP source (see
+// createDrumTrack's comment above). Each drum voice is its own Plaits instance
+// with independent patch state.
 export function setDrumParam(voiceId: DrumVoiceId, param: number, value: number): void {
   const t = tracks.get(voiceId);
   if (!t || !isReady) return;

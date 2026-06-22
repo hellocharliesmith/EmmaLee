@@ -13,7 +13,10 @@ export interface DrumControlsProps {
   onVoiceChange: (voice: DrumVoiceId, field: 'tone' | 'decay', value: number) => void;
 }
 
-// param: 0=harmonics ("Tone") 3=decay — see engine.ts setDrumParam
+// Plaits' drum engines (bass_drum/snare_drum/hi_hat) all use the same mapping in
+// their underlying DSP (confirmed in analog_bass_drum.h / analog_snare_drum.h /
+// hi_hat.h Render() signatures): param 1 (timbre) = tone filter, param 2 (morph)
+// = decay time. patch.decay (param 3) does nothing for these — see engine.ts.
 export function DrumControls({ voices, onVoiceChange }: DrumControlsProps) {
   return (
     <div className="rings-controls">
@@ -21,9 +24,9 @@ export function DrumControls({ voices, onVoiceChange }: DrumControlsProps) {
         <div key={voice} className="knob-row">
           <label>{VOICE_LABELS[voice]}</label>
           <Knob value={voices[voice].tone} min={0} max={1} label="Tone"
-            onChange={v => { onVoiceChange(voice, 'tone', v); setDrumParam(voice, 0, v); }} />
+            onChange={v => { onVoiceChange(voice, 'tone', v); setDrumParam(voice, 1, v); }} />
           <Knob value={voices[voice].decay} min={0} max={1} label="Decay"
-            onChange={v => { onVoiceChange(voice, 'decay', v); setDrumParam(voice, 3, v); }} />
+            onChange={v => { onVoiceChange(voice, 'decay', v); setDrumParam(voice, 2, v); }} />
         </div>
       ))}
     </div>
