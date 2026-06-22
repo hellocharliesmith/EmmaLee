@@ -263,6 +263,23 @@ concluding there's a real bug — confirmed during this session's work.
 
 ## Key decisions worth knowing before you change things
 
+- **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)
+  define the raw palette (rose/teal/sage/slate/neutral-dark — Butter and Neutral
+  Sand exist in the source palette but are intentionally not wired in). Per-track
+  accent is `--accent`/`--accent-dark`/`--accent-light`, switched via a
+  `.app.track-rings-b` / `.track-plaits` / `.track-drums` / `.track-master`
+  modifier class set in App.tsx based on `activeTrack`/`viewSection` — default
+  (no class) is Rose for Rings A. **If you add a new track type, add its accent
+  override here and a corresponding class branch in App.tsx**, following the same
+  pattern. Two places can't read CSS vars directly and need special handling:
+  `Knob.tsx`'s SVG (`style={{ stroke: 'var(--accent)' }}` works; the bare SVG
+  `stroke="..."` attribute form does NOT reliably read custom properties) and
+  `WaveformMeter.tsx`'s canvas drawing (resolves `--accent` via `getComputedStyle`
+  once per frame, converts to RGB, builds `rgba()` strings manually — canvas
+  fillStyle/strokeStyle can never read `var()`). Kids Mode's own muted "bedtime"
+  per-row palette (`KIDS_COLORS` in PianoRoll.tsx) and the drum velocity row's
+  fixed amber accent are both deliberately NOT part of this system — don't fold
+  them in without asking, they're separate, intentional design choices.
 - **WASM loading**: bytes are fetched on the main thread, then transferred to the
   worklet via a transferable `postMessage` (`WebAssembly.compile` + the worklet calls
   `WebAssembly.instantiate`). Don't try `importScripts` inside the worklet — it's not
