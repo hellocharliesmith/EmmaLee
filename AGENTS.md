@@ -213,6 +213,23 @@ audio playback in a real browser after each phase. If you're picking up further 
 on this (e.g. a new track type), the same constraint applies — you likely can't
 verify real audio in an automated preview tool either; deploy and ask the user to confirm.
 
+**Drum engine param mapping is DIFFERENT from melodic Plaits — `patch.decay`
+(param 3) does nothing for drums.** Plaits' bass_drum/snare_drum/hi_hat engines are
+registered in `voice.cc` as `already_enveloped = true`, so `Voice` bypasses its own
+decay envelope/LPG for them entirely. Confirmed directly in their DSP source
+(`analog_bass_drum.h`, `analog_snare_drum.h`, `hi_hat.h` — all three `Render()`
+signatures use identical param names): for these 3 engines specifically,
+**param 1 (timbre) = "tone"** (filter cutoff) and **param 2 (morph) = "decay"**
+(envelope time); param 0 (harmonics) is a secondary character control (drive/
+snappy/noisiness depending on engine, not currently exposed in the UI). This bit a
+real session — Decay was originally wired to `patch.decay` (silently did nothing)
+and Tone was wired to harmonics instead of timbre (caused the Hi-Hat to sound
+clangy/FM-ish, since harmonics there is actually a noise-mixing amount, not a tone
+filter). If you add more drum controls or new drum-capable engines later, check the
+engine's actual `Render()` signature in `rings-source/plaits/dsp/drums/` before
+assuming the melodic harmonics/timbre/morph/decay mapping applies — it doesn't,
+for any engine registered `already_enveloped` in `voice.cc`.
+
 **Drum velocity (added 2026-06-21)**: per-step (per-column, not per-voice),
 100/75/50/25%, applied to every active voice in that step. Implemented entirely in
 `plaits-processor.js` as a sticky output-sample multiplier (`this.velocity`, default
