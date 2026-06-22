@@ -160,6 +160,20 @@ the (single, shared) delay and reverb chains, whose wet return level is controll
 the Master tab's existing Mix knobs — same role as before, just now fed by multiple
 tracks instead of one.
 
+**Bug (introduced in the original Phase 1 refactor, found and fixed 2026-06-21
+during drum-tone debugging): `wetGain` — the final node in the reverb chain
+(`reverbBusInput → preDelay → toneFilter → reverbUnit → wetGain`) — was never
+connected onward to `masterGain`.** The delay chain had the equivalent connection
+(`delayMixGain.connect(masterGain)`); the matching line for `wetGain` was missing.
+This meant reverb was completely silent for ALL tracks (not just drums) for the
+entire multitrack era — the reverb Mix knob, per-track reverb sends, and reverb
+type selector all visibly worked but produced zero audible reverb, since the whole
+wet signal path dead-ended before reaching the speakers. **If you ever rebuild or
+significantly restructure the master bus again, explicitly verify every terminal
+node in a chain actually connects to `masterGain`** — this class of bug (a complete,
+silent dead-end at the very last node) is easy to miss in code review since
+everything UPSTREAM looks correct.
+
 **Removed**: the "Rings" reverb-type option (toggled one worklet's own internal FDN
 reverb directly, bypassing the master chain) doesn't generalize to a shared master
 effect across multiple Rings tracks — it was tied 1:1 to a single worklet. Dropped
