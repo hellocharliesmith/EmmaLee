@@ -245,6 +245,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   wetGain = audioCtx.createGain();
   wetGain.gain.value = 0.5;
+  wetGain.connect(masterGain);
 
   reverbBusInput = audioCtx.createGain();
   reverbBusInput.gain.value = 1.0;
