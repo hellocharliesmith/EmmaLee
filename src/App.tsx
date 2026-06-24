@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import * as Engine from './audio/engine';
 import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS,
+import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { PianoRoll } from './components/PianoRoll';
@@ -14,7 +14,7 @@ import { DrumControls, type DrumVoiceParams } from './components/DrumControls';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
-import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1 } from './types';
+import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -108,9 +108,11 @@ export default function App() {
     tracks, activeTrack, setActiveTrack,
     steps, visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
+    currentPage, enabledPages, currentPagePlaying,
     toggleNote, toggleStrumDir, setProbability, setVelocity,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown,
+    setCurrentPage, togglePageEnabled,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -174,33 +176,42 @@ export default function App() {
     const drumsP  = trackParams.drums as DrumParamsState;
 
     const ringsA: RingsTrackState = {
-      steps: tracks.ringsA.steps, scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
+      pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages,
+      scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
       damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo,
       volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend,
     };
     const ringsB: RingsTrackState = {
-      steps: tracks.ringsB.steps, scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
+      pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages,
+      scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
       damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo,
       volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend,
     };
     const plaits: PlaitsTrackState = {
-      steps: tracks.plaits.steps, scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
+      pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages,
+      scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
     };
     const drums: DrumTrackState = {
-      steps: tracks.drums.steps, scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
+      pages: tracks.drums.pages, enabledPages: tracks.drums.enabledPages,
+      scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
       voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
     };
 
     return {
-      version: 2, bpm, tracks: { ringsA, ringsB, plaits, drums },
+      version: 3, bpm, tracks: { ringsA, ringsB, plaits, drums },
       delayDivision, delayMix, delayFeedback, delayFilter,
       reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone,
     };
+  }
+
+  function stepsToPages(steps: StepValue[]): { pages: StepValue[][], enabledPages: boolean[] } {
+    const pages = [steps, ...Array.from({ length: PAGE_COUNT - 1 }, () => Array(32).fill(null) as StepValue[])];
+    return { pages, enabledPages: [true, false, false, false] };
   }
 
   function migrateLegacy(old: LegacySongStateV1): SongState {
@@ -208,27 +219,27 @@ export default function App() {
       ? (old.steps as unknown as StepValue[][])[0]
       : (old.steps as StepValue[]);
     const ringsA: RingsTrackState = {
-      steps: oldSteps, scale: old.scale, rootNote: old.rootNote, scrollRow: old.scrollRow,
+      ...stepsToPages(oldSteps), scale: old.scale, rootNote: old.rootNote, scrollRow: old.scrollRow,
       model: old.model, structure: old.structure, brightness: old.brightness,
       damping: old.damping, position: old.position, lfo: old.lfo,
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const ringsB: RingsTrackState = {
-      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       model: 1, structure: 0.11, brightness: 0.24, damping: 0.44, position: 0.25,
       lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const plaits: PlaitsTrackState = {
-      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5, lpgColour: 0.5,
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const drums: DrumTrackState = {
-      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     return {
-      version: 2, bpm: old.bpm, tracks: { ringsA, ringsB, plaits, drums },
+      version: 3, bpm: old.bpm, tracks: { ringsA, ringsB, plaits, drums },
       delayDivision: old.delayDivision, delayMix: old.delayMix,
       delayFeedback: old.delayFeedback, delayFilter: old.delayFilter,
       reverbType: old.reverbType === 'rings' ? 'algo' : old.reverbType,
@@ -237,25 +248,54 @@ export default function App() {
     };
   }
 
+  function migrateV2toV3(v2: LegacySongStateV2): SongState {
+    const emptyDrumsV3: DrumTrackState = {
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
+      voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+    };
+    const drumsV2 = v2.tracks.drums;
+    const drumsV3: DrumTrackState = drumsV2 ? {
+      ...stepsToPages(drumsV2.steps), scale: drumsV2.scale, rootNote: drumsV2.rootNote, scrollRow: drumsV2.scrollRow,
+      voices: (drumsV2.voices as DrumTrackState['voices']) ?? defaultDrumVoices(),
+      volume: drumsV2.volume, delaySend: drumsV2.delaySend, reverbSend: drumsV2.reverbSend,
+    } : emptyDrumsV3;
+
+    return {
+      version: 3, bpm: v2.bpm,
+      tracks: {
+        ringsA: { ...stepsToPages(v2.tracks.ringsA.steps), scale: v2.tracks.ringsA.scale, rootNote: v2.tracks.ringsA.rootNote, scrollRow: v2.tracks.ringsA.scrollRow, model: v2.tracks.ringsA.model, structure: v2.tracks.ringsA.structure, brightness: v2.tracks.ringsA.brightness, damping: v2.tracks.ringsA.damping, position: v2.tracks.ringsA.position, lfo: v2.tracks.ringsA.lfo, volume: v2.tracks.ringsA.volume, delaySend: v2.tracks.ringsA.delaySend, reverbSend: v2.tracks.ringsA.reverbSend },
+        ringsB: { ...stepsToPages(v2.tracks.ringsB.steps), scale: v2.tracks.ringsB.scale, rootNote: v2.tracks.ringsB.rootNote, scrollRow: v2.tracks.ringsB.scrollRow, model: v2.tracks.ringsB.model, structure: v2.tracks.ringsB.structure, brightness: v2.tracks.ringsB.brightness, damping: v2.tracks.ringsB.damping, position: v2.tracks.ringsB.position, lfo: v2.tracks.ringsB.lfo, volume: v2.tracks.ringsB.volume, delaySend: v2.tracks.ringsB.delaySend, reverbSend: v2.tracks.ringsB.reverbSend },
+        plaits: { ...stepsToPages(v2.tracks.plaits.steps), scale: v2.tracks.plaits.scale, rootNote: v2.tracks.plaits.rootNote, scrollRow: v2.tracks.plaits.scrollRow, engine: v2.tracks.plaits.engine, harmonics: v2.tracks.plaits.harmonics, timbre: v2.tracks.plaits.timbre, morph: v2.tracks.plaits.morph, decay: v2.tracks.plaits.decay, lpgColour: v2.tracks.plaits.lpgColour ?? 0.5, volume: v2.tracks.plaits.volume, delaySend: v2.tracks.plaits.delaySend, reverbSend: v2.tracks.plaits.reverbSend },
+        drums: drumsV3,
+      },
+      delayDivision: v2.delayDivision, delayMix: v2.delayMix, delayFeedback: v2.delayFeedback, delayFilter: v2.delayFilter,
+      reverbType: v2.reverbType, reverbMix: v2.reverbMix, reverbDecay: v2.reverbDecay, reverbPreDelay: v2.reverbPreDelay, reverbTone: v2.reverbTone,
+    };
+  }
+
   function loadSong(song: SavedSong) {
     const raw = song.state;
-    const state: SongState = ('version' in raw && raw.version === 2)
-      ? raw as SongState
-      : migrateLegacy(raw as LegacySongStateV1);
-    // Saves made between Phase 3 (Plaits) and Phase 4 (drums) shipping are version 2
-    // but predate the drums track — fall back to a fresh empty one. Saves made after
-    // drums shipped but before per-voice tone controls existed are missing `voices`.
+    let state: SongState;
+    if ('version' in raw && raw.version === 3) {
+      state = raw as SongState;
+    } else if ('version' in raw && raw.version === 2) {
+      state = migrateV2toV3(raw as LegacySongStateV2);
+    } else {
+      state = migrateLegacy(raw as LegacySongStateV1);
+    }
+
+    // Saves missing the drums track entirely get a fresh default.
     const drumsState: DrumTrackState = state.tracks.drums ?? {
-      steps: Array(32).fill(null), scale: 'major', rootNote: 0, scrollRow: 7,
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const drumVoices = drumsState.voices ?? defaultDrumVoices();
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { steps: state.tracks.ringsA.steps, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
-      ringsB: { steps: state.tracks.ringsB.steps, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
-      plaits: { steps: state.tracks.plaits.steps, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
-      drums:  { steps: drumsState.steps, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
+      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
+      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
+      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
+      drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: {
@@ -464,12 +504,33 @@ export default function App() {
             >Master</button>
           </div>
 
+          {viewSection === 'track' && (
+            <div className="page-buttons">
+              {Array.from({ length: PAGE_COUNT }, (_, i) => {
+                const isPageViewing = currentPage === i;
+                const isPageEnabled = enabledPages[i];
+                const isPagePlaying = isPlaying && currentPagePlaying[activeTrack] === i;
+                const cls = ['page-btn',
+                  isPageViewing  ? 'viewing' : '',
+                  isPageEnabled  ? 'enabled' : '',
+                  isPagePlaying  ? 'playing' : '',
+                ].filter(Boolean).join(' ');
+                return (
+                  <button key={i} className={cls}
+                    onClick={() => isPageViewing ? togglePageEnabled(i) : setCurrentPage(i)}
+                    title={isPageViewing ? (isPageEnabled ? 'Click to remove from loop' : 'Click to add to loop') : `Go to page ${i + 1}`}
+                  >{i + 1}</button>
+                );
+              })}
+            </div>
+          )}
+
           {viewSection === 'track' ? (
             <>
               <PianoRoll
                 steps={steps} visibleNotes={visibleNotes}
                 rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-                currentStep={currentStep}
+                currentStep={isPlaying && currentPagePlaying[activeTrack] === currentPage ? currentStep : -1}
                 rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
                 noStrum={activeTrack === 'drums'}
                 showVelocity={activeTrack === 'drums'}

@@ -502,6 +502,13 @@
 .page-btn.viewing  { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .page-btn.playing  { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 
+/* 4-page buttons shown below the track tabs when a track is active */
+.page-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 /* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.) */
 .track-tab {
   width: auto;
