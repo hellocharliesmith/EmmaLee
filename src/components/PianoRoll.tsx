@@ -40,14 +40,8 @@ interface Props {
   maxScroll: number;
   currentStep: number;
   kidsMode?: boolean;
-  // Fixed row names (e.g. drum voices) instead of chromatic note names — also hides
-  // piano keys, root-note highlighting, and the scroll buttons (nothing to scroll).
   rowLabels?: string[];
-  // Hides the strum-direction row — for tracks where simultaneous multi-row hits
-  // don't get staggered (e.g. drums fire all active voices together).
   noStrum?: boolean;
-  // Shows a per-step velocity row (100/75/50/25%) below probability — currently
-  // only meaningful for drums.
   showVelocity?: boolean;
   onToggleNote: (col: number, midi: number) => void;
   onToggleStrumDir: (col: number) => void;
@@ -72,10 +66,15 @@ export function PianoRoll({
   const GAP   = kidsMode ? 6  : 2;
   const gridH = rows * ROW_H + (rows - 1) * GAP;
 
+  // Width of the left-side label area in meta rows — must match the left offset of
+  // pr-grid-col inside pr-row. Normal: piano(22)+gap(4)+labels(36)+gap(4)=66.
+  // Drums: no piano col → labels(36)+gap(4)=40.
+  const metaLblWidth = rowLabels ? 40 : 66;
+
   return (
     <div className={`piano-roll-wrap${kidsMode ? ' kids-piano-roll' : ''}`}>
 
-      {/* Scroll up */}
+      {/* Scroll up — narrow, aligned with piano+label area only */}
       {!rowLabels && (
         <div className="pr-scroll-row">
           <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
@@ -83,96 +82,104 @@ export function PianoRoll({
         </div>
       )}
 
-      {/* Piano keys | labels | grid */}
-      <div className="pr-row">
+      {/* Scrollable content — all rows share one horizontal scroll */}
+      <div className="piano-roll-scroll">
 
-        {!kidsMode && !rowLabels && (
-          <div className="pr-piano-col" style={{ height: gridH }}>
-            {visibleNotes.map((midi, i) => (
-              <PianoKey key={i} midi={midi} rootNote={rootNote} />
-            ))}
+        {/* Piano keys | labels | grid */}
+        <div className="pr-row">
+
+          {!kidsMode && !rowLabels && (
+            <div className="pr-piano-col" style={{ height: gridH }}>
+              {visibleNotes.map((midi, i) => (
+                <PianoKey key={i} midi={midi} rootNote={rootNote} />
+              ))}
+            </div>
+          )}
+
+          {!kidsMode && (
+            <div className="pr-labels-list" style={{ height: gridH }}>
+              {visibleNotes.map((midi, row) => (
+                <div key={row} className={`pr-label${!rowLabels && midi % 12 === rootNote ? ' root' : ''}`}>
+                  {rowLabels ? rowLabels[row] : noteName(midi)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="pr-grid-col">
+            <div
+              className="pr-grid"
+              style={kidsMode ? {
+                gridTemplateColumns: `repeat(${STEP_COUNT}, minmax(0, 1fr))`,
+              } : {
+                gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
+                gridTemplateRows: `repeat(${rows}, ${ROW_H}px)`,
+              }}
+            >
+              {Array.from({ length: rows }, (_, row) =>
+                Array.from({ length: STEP_COUNT }, (_, col) => {
+                  const midi      = visibleNotes[row];
+                  const step      = steps[col];
+                  const isActive  = !!step?.notes.includes(midi);
+                  const noteCount = step?.notes.length ?? 0;
+                  const noteIdx   = isActive ? step!.notes.indexOf(midi) : -1;
+                  const isFirst   = noteIdx === 0;
+                  const isLast    = noteIdx === noteCount - 1;
+                  const playing   = col === currentStep;
+                  const barStart  = col % 8 === 0;
+                  const beatStart = col % 4 === 0 && !barStart;
+                  const oddGroup  = Math.floor(col / 4) % 2 === 1;
+                  const isMulti   = noteCount > 1;
+                  const stepProb  = step?.prob ?? 1;
+                  const probReduced = isActive && stepProb < 1;
+                  const rowColor  = kidsMode ? KIDS_COLORS[row % KIDS_COLORS.length] : undefined;
+                  const cellStyle = kidsMode ? {
+                    background: (isActive || isFirst)
+                      ? rowColor
+                      : playing ? `${rowColor}28` : undefined,
+                    boxShadow: (isActive || isFirst)
+                      ? `0 0 16px ${rowColor}aa` : undefined,
+                    opacity: probReduced ? 0.55 : undefined,
+                  } : undefined;
+                  return (
+                    <div
+                      key={`${row}-${col}`}
+                      className={[
+                        'pr-cell',
+                        kidsMode    ? 'kids-cell'    : '',
+                        isActive    ? 'active'       : '',
+                        probReduced ? 'prob-reduced' : '',
+                        isMulti && isActive && isFirst ? 'strum-first' : '',
+                        isMulti && isActive && isLast  ? 'strum-last'  : '',
+                        playing   ? 'playhead'   : '',
+                        barStart  ? 'bar-start'  : '',
+                        beatStart ? 'beat-start' : '',
+                        oddGroup  ? 'group-odd'  : '',
+                      ].filter(Boolean).join(' ')}
+                      style={cellStyle}
+                      onClick={() => handleCell(col, midi)}
+                    />
+                  );
+                })
+              )}
+            </div>
+
+            {/* Step numbers */}
+            <div className="pr-step-nums">
+              {Array.from({ length: STEP_COUNT }, (_, i) => (
+                <div key={i} className={`pr-step-num${i % 8 === 0 ? ' bar' : ''}`}>
+                  {i % 8 === 0 ? i / 8 + 1 : ''}
+                </div>
+              ))}
+            </div>
           </div>
-        )}
 
-        {!kidsMode && (
-          <div className="pr-labels-list" style={{ height: gridH }}>
-            {visibleNotes.map((midi, row) => (
-              <div key={row} className={`pr-label${!rowLabels && midi % 12 === rootNote ? ' root' : ''}`}>
-                {rowLabels ? rowLabels[row] : noteName(midi)}
-              </div>
-            ))}
-          </div>
-        )}
+        </div>{/* end pr-row */}
 
-        <div className="pr-grid-col">
-          <div
-            className="pr-grid"
-            style={kidsMode ? {
-              gridTemplateColumns: `repeat(${STEP_COUNT}, minmax(0, 1fr))`,
-            } : {
-              gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
-              gridTemplateRows: `repeat(${rows}, ${ROW_H}px)`,
-            }}
-          >
-            {Array.from({ length: rows }, (_, row) =>
-              Array.from({ length: STEP_COUNT }, (_, col) => {
-                const midi      = visibleNotes[row];
-                const step      = steps[col];
-                const isActive  = !!step?.notes.includes(midi);
-                const noteCount = step?.notes.length ?? 0;
-                const noteIdx   = isActive ? step!.notes.indexOf(midi) : -1;
-                const isFirst   = noteIdx === 0;
-                const isLast    = noteIdx === noteCount - 1;
-                const playing   = col === currentStep;
-                const barStart  = col % 8 === 0;
-                const beatStart = col % 4 === 0 && !barStart;
-                const oddGroup  = Math.floor(col / 4) % 2 === 1;
-                const isMulti   = noteCount > 1;
-                const stepProb  = step?.prob ?? 1;
-                const probReduced = isActive && stepProb < 1;
-                const rowColor  = kidsMode ? KIDS_COLORS[row % KIDS_COLORS.length] : undefined;
-                const cellStyle = kidsMode ? {
-                  background: (isActive || isFirst)
-                    ? rowColor
-                    : playing ? `${rowColor}28` : undefined,
-                  boxShadow: (isActive || isFirst)
-                    ? `0 0 16px ${rowColor}aa` : undefined,
-                  opacity: probReduced ? 0.55 : undefined,
-                } : undefined;
-                return (
-                  <div
-                    key={`${row}-${col}`}
-                    className={[
-                      'pr-cell',
-                      kidsMode    ? 'kids-cell'    : '',
-                      isActive    ? 'active'       : '',
-                      probReduced ? 'prob-reduced' : '',
-                      isMulti && isActive && isFirst ? 'strum-first' : '',
-                      isMulti && isActive && isLast  ? 'strum-last'  : '',
-                      playing   ? 'playhead'   : '',
-                      barStart  ? 'bar-start'  : '',
-                      beatStart ? 'beat-start' : '',
-                      oddGroup  ? 'group-odd'  : '',
-                    ].filter(Boolean).join(' ')}
-                    style={cellStyle}
-                    onClick={() => handleCell(col, midi)}
-                  />
-                );
-              })
-            )}
-          </div>
-
-          {/* Step numbers */}
-          <div className="pr-step-nums">
-            {Array.from({ length: STEP_COUNT }, (_, i) => (
-              <div key={i} className={`pr-step-num${i % 8 === 0 ? ' bar' : ''}`}>
-                {i % 8 === 0 ? i / 8 + 1 : ''}
-              </div>
-            ))}
-          </div>
-
-          {/* Strum direction row */}
-          {!noStrum && (
+        {/* Strum direction row with label */}
+        {!kidsMode && !noStrum && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Strum</div>
             <div className="pr-strum-row">
               {Array.from({ length: STEP_COUNT }, (_, i) => {
                 const step = steps[i];
@@ -192,33 +199,41 @@ export function PianoRoll({
                 );
               })}
             </div>
-          )}
-
-          {/* Probability row */}
-          <div className="pr-prob-row">
-            {Array.from({ length: STEP_COUNT }, (_, i) => {
-              const step = steps[i];
-              if (!step) return <div key={i} className="pr-prob-cell" />;
-              const prob  = step.prob ?? 1;
-              const label = PROB_LABELS[prob] ?? String(Math.round(prob * 100));
-              const idx   = PROB_OPTIONS.indexOf(prob as typeof PROB_OPTIONS[number]);
-              const next  = PROB_OPTIONS[(idx === -1 ? 0 : (idx + 1) % PROB_OPTIONS.length)];
-              return (
-                <div key={i} className="pr-prob-cell">
-                  <button
-                    className={`pr-prob-btn${prob < 1 ? ' active' : ''}`}
-                    onClick={() => onSetProbability(i, next)}
-                    title={`Probability: ${Math.round(prob * 100)}% — click to change`}
-                  >
-                    {prob < 1 ? label : '·'}
-                  </button>
-                </div>
-              );
-            })}
           </div>
+        )}
 
-          {/* Velocity row (drums only) */}
-          {showVelocity && (
+        {/* Probability row with label */}
+        {!kidsMode && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Prob</div>
+            <div className="pr-prob-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                if (!step) return <div key={i} className="pr-prob-cell" />;
+                const prob  = step.prob ?? 1;
+                const label = PROB_LABELS[prob] ?? String(Math.round(prob * 100));
+                const idx   = PROB_OPTIONS.indexOf(prob as typeof PROB_OPTIONS[number]);
+                const next  = PROB_OPTIONS[(idx === -1 ? 0 : (idx + 1) % PROB_OPTIONS.length)];
+                return (
+                  <div key={i} className="pr-prob-cell">
+                    <button
+                      className={`pr-prob-btn${prob < 1 ? ' active' : ''}`}
+                      onClick={() => onSetProbability(i, next)}
+                      title={`Probability: ${Math.round(prob * 100)}% — click to change`}
+                    >
+                      {prob < 1 ? label : '·'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Velocity row with label (drums only) */}
+        {!kidsMode && showVelocity && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Vel</div>
             <div className="pr-velocity-row">
               {Array.from({ length: STEP_COUNT }, (_, i) => {
                 const step = steps[i];
@@ -240,10 +255,10 @@ export function PianoRoll({
                 );
               })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-      </div>
+      </div>{/* end piano-roll-scroll */}
 
       {/* Scroll down */}
       {!rowLabels && (

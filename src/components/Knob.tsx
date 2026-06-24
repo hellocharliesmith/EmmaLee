@@ -10,7 +10,7 @@ interface KnobProps {
 
 const MIN_ANG = -135;
 const MAX_ANG =  135;
-const CX = 18, CY = 18, R = 13;
+const CX = 27, CY = 27, R = 19;
 
 function polar(angleDeg: number) {
   const rad = (angleDeg - 90) * Math.PI / 180;
@@ -58,17 +58,17 @@ export function Knob({ value, min, max, label, onChange }: KnobProps) {
       onTouchStart={e => { e.preventDefault(); startDrag(e.touches[0].clientY); }}
       title={`${label}: ${value.toFixed(2)}`}
     >
-      <svg width="36" height="36" viewBox="0 0 36 36">
+      <svg width="54" height="54" viewBox="0 0 54 54">
         {/* Track */}
-        <path d={arc(MIN_ANG, MAX_ANG)} fill="none" style={{ stroke: 'var(--border)' }} strokeWidth="2.5" strokeLinecap="round" />
+        <path d={arc(MIN_ANG, MAX_ANG)} fill="none" style={{ stroke: 'var(--border)' }} strokeWidth="3.5" strokeLinecap="round" />
         {/* Value */}
         {norm > 0.005 && (
-          <path d={arc(MIN_ANG, angle)} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="2.5" strokeLinecap="round" />
+          <path d={arc(MIN_ANG, angle)} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="3.5" strokeLinecap="round" />
         )}
         {/* Dot */}
-        <circle cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r="2.5" style={{ fill: 'var(--accent-light)' }} />
+        <circle cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r="3.5" style={{ fill: 'var(--accent-light)' }} />
         {/* Hub */}
-        <circle cx={CX} cy={CY} r="5" style={{ fill: 'var(--bg-input)', stroke: 'var(--border-disabled)' }} strokeWidth="1" />
+        <circle cx={CX} cy={CY} r="7" style={{ fill: 'var(--bg-input)', stroke: 'var(--border-disabled)' }} strokeWidth="1.5" />
       </svg>
       <div className="knob-label">{label}</div>
     </div>

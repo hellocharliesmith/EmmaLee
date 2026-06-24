@@ -24,6 +24,13 @@ const SCALE_OPTIONS: { id: ScaleType; label: string }[] = [
   { id: 'chromatic',     label: 'Chromatic' },
 ];
 
+const TRACK_FADER_COLORS: Record<TrackId, [string, string]> = {
+  ringsA: ['var(--rose-400)',   'var(--rose-500)'],
+  ringsB: ['var(--teal-400)',   'var(--teal-500)'],
+  plaits: ['var(--sage-400)',   'var(--sage-500)'],
+  drums:  ['var(--slate-400)',  'var(--slate-500)'],
+};
+
 function checkSupport(): string | null {
   if (typeof AudioContext === 'undefined' && typeof (window as any).webkitAudioContext === 'undefined')
     return 'Web Audio API not supported in this browser.';
@@ -590,26 +597,12 @@ export default function App() {
               </div>
             </>
           ) : (
-            <>
-              <div className="waveform-section">
-                <div className="master-vol-wrap">
-                  <Knob value={masterVolume} min={0} max={1.5} label="Vol"
-                    onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }} />
+            <div className="master-layout">
+              {/* Left: waveform meter + FX controls stacked */}
+              <div className="master-fx-col">
+                <div className="waveform-section">
+                  <WaveformMeter />
                 </div>
-                <WaveformMeter />
-              </div>
-
-              <div className="mixer-row">
-                <div className="knob-row">
-                  <label>Mixer</label>
-                  {TRACK_IDS.map(id => (
-                    <Knob key={id} value={trackParams[id].volume} min={0} max={1.5} label={TRACK_LABELS[id]}
-                      onChange={v => setVolumeFor(id, v)} />
-                  ))}
-                </div>
-              </div>
-
-              <div className="fx-row">
                 <DelayControls
                   bpm={bpm} division={delayDivision} mix={delayMix}
                   feedback={delayFeedback} filter={delayFilter}
@@ -624,7 +617,45 @@ export default function App() {
                   onToneChange={setReverbTone}
                 />
               </div>
-            </>
+
+              {/* Right: vertical mixer faders */}
+              <div className="master-mixer-col">
+                <div className="mixer-section-label">Mixer</div>
+                <div className="mixer-faders">
+                  {/* Master volume — taller, neutral style */}
+                  <div className="mixer-fader-wrap">
+                    <input
+                      type="range"                      className="v-fader v-fader-master"
+                      min={0} max={1.5} step={0.01}
+                      value={masterVolume}
+                      onChange={e => { const v = parseFloat(e.target.value); setMasterVolume(v); Engine.setMasterVolume(v); }}
+                    />
+                    <div className="mixer-fader-label mixer-fader-label-master">Master</div>
+                  </div>
+
+                  <div className="mixer-v-divider" />
+
+                  {/* Per-track faders, color-coded */}
+                  {TRACK_IDS.map(id => (
+                    <div key={id} className="mixer-fader-wrap">
+                      <input
+                        type="range"                        className="v-fader"
+                        style={{
+                          '--fader-color':      TRACK_FADER_COLORS[id][0],
+                          '--fader-color-dark': TRACK_FADER_COLORS[id][1],
+                        } as React.CSSProperties}
+                        min={0} max={1.5} step={0.01}
+                        value={trackParams[id].volume}
+                        onChange={e => setVolumeFor(id, parseFloat(e.target.value))}
+                      />
+                      <div className="mixer-fader-label" style={{ color: TRACK_FADER_COLORS[id][0] }}>
+                        {TRACK_LABELS[id]}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </>
       )}

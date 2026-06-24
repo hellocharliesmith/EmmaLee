@@ -580,9 +580,36 @@
 .piano-roll-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   width: fit-content;
   margin: 0 auto;
+}
+
+/* Inner scroll container — all grid rows scroll together horizontally */
+.piano-roll-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+/* Meta rows (strum / prob / vel) with left label */
+.pr-meta-row {
+  display: flex;
+  align-items: center;
+}
+.pr-meta-lbl {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 8px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  height: 16px;
+  white-space: nowrap;
 }
 
 .pr-controls {
@@ -608,10 +635,9 @@
 
 .pr-root-btns { flex-wrap: wrap; }
 
-/* Scroll buttons above/below — offset to align with grid start */
+/* Scroll buttons above/below — narrow, aligned with piano+label area only */
 .pr-scroll-row {
   display: flex;
-  padding-left: 70px;
 }
 
 /* Main row: piano | labels | grid */
@@ -668,10 +694,10 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 10px;
   cursor: pointer;
-  padding: 4px 8px;
-  width: 100%;
+  padding: 2px 0;
+  width: 62px;
   transition: color 0.12s, border-color 0.12s;
   touch-action: manipulation;
 }
@@ -690,9 +716,8 @@
 }
 .pr-label.root { color: var(--accent); }
 
-/* Grid column — scrolls horizontally if needed */
+/* Grid column — overflow handled by parent piano-roll-scroll */
 .pr-grid-col {
-  overflow-x: auto;
   flex: 1;
   min-width: 0;
 }
@@ -712,7 +737,7 @@
   min-height: 30px;
 }
 .pr-cell:hover { background: var(--bg-hover); }
-.pr-cell.group-odd { background: var(--neutral-dark-950); }
+.pr-cell.group-odd { background: color-mix(in srgb, var(--neutral-dark-950) 40%, var(--bg-input)); }
 .pr-cell.group-odd:hover { background: var(--bg-hover); }
 .pr-cell.beat-start { border-left-color: var(--border); }
 .pr-cell.bar-start  { border-left-color: var(--border-disabled); }
@@ -1000,28 +1025,128 @@
 }
 .knob svg { display: block; }
 .knob-label {
-  font-size: 8px;
+  font-size: 9px;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-top: 1px;
+  margin-top: 2px;
   text-align: center;
 }
 
-/* ── Waveform section (knob + meter side by side) ── */
-.waveform-section {
+/* ── Master page two-column layout ── */
+.master-layout {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 32px;
+  align-items: flex-start;
   width: 100%;
   max-width: 960px;
 }
-
-.master-vol-wrap {
+.master-fx-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+}
+.master-mixer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   flex-shrink: 0;
+  align-items: flex-start;
+}
+.mixer-section-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mixer-faders {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.mixer-fader-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 6px;
+}
+.mixer-fader-label {
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+}
+.mixer-fader-label-master {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.mixer-v-divider {
+  width: 1px;
+  height: 120px;
+  background: var(--border);
+  flex-shrink: 0;
+  align-self: center;
+}
+/* Vertical fader */
+.v-fader {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 120px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+}
+.v-fader::-webkit-slider-runnable-track {
+  background: transparent;
+}
+.v-fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--fader-color, var(--neutral-dark-300));
+  border: 1.5px solid var(--fader-color-dark, var(--neutral-dark-400));
+  cursor: grab;
+}
+.v-fader::-moz-range-thumb {
+  width: 28px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--fader-color, var(--neutral-dark-300));
+  border: 1.5px solid var(--fader-color-dark, var(--neutral-dark-400));
+  cursor: grab;
+  box-shadow: none;
+}
+.v-fader-master {
+  height: 140px;
+  width: 26px;
+  border-color: var(--border-disabled);
+}
+.v-fader-master::-webkit-slider-thumb {
+  background: var(--neutral-dark-300);
+  border-color: var(--neutral-dark-400);
+  width: 32px;
+  height: 12px;
+  border-radius: 3px;
+}
+.v-fader-master::-moz-range-thumb {
+  background: var(--neutral-dark-300);
+  border-color: var(--neutral-dark-400);
+  width: 32px;
+  height: 12px;
+  border-radius: 3px;
 }
 
 /* ── Waveform meter ── */
@@ -1080,7 +1205,7 @@
   display: block;
 }
 
-/* ── FX row (delay + reverb side by side) ── */
+/* ── FX row (legacy: delay + reverb side by side) ── */
 .fx-row {
   display: flex;
   gap: 24px;
@@ -1089,6 +1214,14 @@
   max-width: 680px;
 }
 .fx-row > * { flex: 1; min-width: 0; }
+
+/* ── Waveform section (meter inside master-fx-col) ── */
+.waveform-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
 
 /* ── Sequencer (old, kept for reference) ── */
 .sequencer {
