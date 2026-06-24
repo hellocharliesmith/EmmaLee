@@ -497,10 +497,10 @@
   align-items: center;
   justify-content: center;
 }
+.page-btn:hover    { border-color: var(--border-hover); color: var(--text-tertiary); }
 .page-btn.enabled  { border-color: var(--border-disabled); color: var(--text-tertiary); }
 .page-btn.viewing  { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .page-btn.playing  { background: color-mix(in srgb, var(--accent) 15%, transparent); }
-.page-btn:hover    { border-color: var(--border-hover); color: var(--text-tertiary); }
 
 /* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.) */
 .track-tab {
@@ -513,10 +513,17 @@
   font-size: 0.7rem;
 }
 
-/* Sends knob row, below the per-track instrument controls */
-.send-row {
+/* Voice controls + sends on the same horizontal band, aligned to piano roll width */
+.track-controls-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   width: 100%;
   max-width: 960px;
+  gap: 24px;
+}
+.send-row {
+  flex-shrink: 0;
 }
 .send-row .knob-row {
   gap: 16px;
@@ -1174,6 +1181,11 @@
   color: var(--text-tertiary);
 }
 .reverb-type-btn.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.reverb-type-btn.active:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-color: var(--accent);
   color: var(--accent);

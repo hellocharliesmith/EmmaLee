@@ -479,49 +479,52 @@ export default function App() {
                 onScrollUp={scrollUp} onScrollDown={scrollDown}
               />
 
-              {active.kind === 'rings' && (
-                <RingsControls
-                  trackId={activeTrack as RingsTrackId}
-                  model={active.model} params={active.params} lfo={active.lfo}
-                  onModelChange={m => updateActiveParams(p => p.kind === 'rings' ? ({ ...p, model: m }) : p)}
-                  onParamChange={(i, v) => updateActiveParams(p => {
-                    if (p.kind !== 'rings') return p;
-                    const n = [...p.params] as [number,number,number,number]; n[i] = v;
-                    return { ...p, params: n };
-                  })}
-                  onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'rings'
-                    ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
-                />
-              )}
-              {active.kind === 'plaits' && (
-                <PlaitsControls
-                  engine={active.engine} params={active.params}
-                  onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
-                  onParamChange={(i, v) => updateActiveParams(p => {
-                    if (p.kind !== 'plaits') return p;
-                    const n = [...p.params] as [number,number,number,number,number]; n[i] = v;
-                    return { ...p, params: n };
-                  })}
-                />
-              )}
-              {active.kind === 'drums' && (
-                <DrumControls
-                  voices={active.voices}
-                  onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
-                    ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
-                    : p)}
-                />
-              )}
-
-              <div className="send-row">
-                <div className="knob-row">
-                  <label>Sends</label>
-                  <Knob value={active.volume} min={0} max={1.5} label="Volume"
-                    onChange={v => setVolumeFor(activeTrack, v)} />
-                  <Knob value={active.delaySend} min={0} max={1} label="Delay"
-                    onChange={v => setSendFor(activeTrack, 'delay', v)} />
-                  <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
-                    onChange={v => setSendFor(activeTrack, 'reverb', v)} />
+              <div className="track-controls-row">
+                <div>
+                  {active.kind === 'rings' && (
+                    <RingsControls
+                      trackId={activeTrack as RingsTrackId}
+                      model={active.model} params={active.params} lfo={active.lfo}
+                      onModelChange={m => updateActiveParams(p => p.kind === 'rings' ? ({ ...p, model: m }) : p)}
+                      onParamChange={(i, v) => updateActiveParams(p => {
+                        if (p.kind !== 'rings') return p;
+                        const n = [...p.params] as [number,number,number,number]; n[i] = v;
+                        return { ...p, params: n };
+                      })}
+                      onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'rings'
+                        ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
+                    />
+                  )}
+                  {active.kind === 'plaits' && (
+                    <PlaitsControls
+                      engine={active.engine} params={active.params}
+                      onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
+                      onParamChange={(i, v) => updateActiveParams(p => {
+                        if (p.kind !== 'plaits') return p;
+                        const n = [...p.params] as [number,number,number,number,number]; n[i] = v;
+                        return { ...p, params: n };
+                      })}
+                    />
+                  )}
+                  {active.kind === 'drums' && (
+                    <DrumControls
+                      voices={active.voices}
+                      onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
+                        ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
+                        : p)}
+                    />
+                  )}
+                </div>
+                <div className="send-row">
+                  <div className="knob-row">
+                    <label>Sends</label>
+                    <Knob value={active.volume} min={0} max={1.5} label="Volume"
+                      onChange={v => setVolumeFor(activeTrack, v)} />
+                    <Knob value={active.delaySend} min={0} max={1} label="Delay"
+                      onChange={v => setSendFor(activeTrack, 'delay', v)} />
+                    <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
+                      onChange={v => setSendFor(activeTrack, 'reverb', v)} />
+                  </div>
                 </div>
               </div>
             </>
