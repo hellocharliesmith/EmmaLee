@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as Tone from 'tone';
 import * as Engine from './audio/engine';
 import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
@@ -405,9 +406,12 @@ export default function App() {
     setAudioError(null);
     if (!audioStarted) {
       const ctx = new AudioContext();
-      // Resume synchronously within the gesture handler so Chrome's autoplay
-      // policy grants permission. initAudio awaits the same promise later.
-      void ctx.resume();
+      // Give Tone our AudioContext synchronously (before any await) so that
+      // Tone.start() resumes OUR context inside the user-gesture stack frame.
+      // This prevents Chrome from creating a second suspended context and
+      // ensures the Transport's ConstantSourceNode starts on a running context.
+      Tone.setContext(new Tone.Context(ctx));
+      await Tone.start();
       try {
         await Engine.initAudio(ctx);
         setAudioStarted(true);

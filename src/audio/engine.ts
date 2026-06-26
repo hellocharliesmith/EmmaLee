@@ -1,4 +1,3 @@
-import * as Tone from 'tone';
 
 export type RingsTrackId = 'ringsA' | 'ringsB';
 export type PlaitsTrackId = 'plaits';
@@ -225,8 +224,6 @@ async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmModule: W
 export async function initAudio(ctx: AudioContext): Promise<void> {
   audioCtx = ctx;
   await audioCtx.resume();
-  Tone.setContext(audioCtx);
-  await Tone.start();
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
   await audioCtx.audioWorklet.addModule('/plaits-processor.js');
