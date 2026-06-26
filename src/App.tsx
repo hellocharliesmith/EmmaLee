@@ -340,53 +340,64 @@ export default function App() {
     setReverbTone(state.reverbTone);
 
     if (Engine.isAudioReady()) {
-      for (const id of RINGS_TRACK_IDS) {
-        const p = nextParams[id] as RingsParamsState;
-        Engine.setRingsParam(id, 0, p.params[0]);
-        Engine.setRingsParam(id, 1, p.params[1]);
-        Engine.setRingsParam(id, 2, p.params[2]);
-        Engine.setRingsParam(id, 3, p.params[3]);
-        Engine.setRingsModel(id, p.model);
-        p.lfo.forEach((l, i) => {
-          Engine.setLFOWave(id, i, l.wave);
-          Engine.setLFORate(id, i, l.rate);
-          Engine.setLFODepth(id, i, l.depth);
-          Engine.setLFOEnabled(id, i, l.on);
-        });
-        Engine.setTrackVolume(id, p.volume);
-        Engine.setTrackSend(id, 'delay', p.delaySend);
-        Engine.setTrackSend(id, 'reverb', p.reverbSend);
-      }
-      const pp = nextParams.plaits as PlaitsParamsState;
-      Engine.setPlaitsParam(0, pp.params[0]);
-      Engine.setPlaitsParam(1, pp.params[1]);
-      Engine.setPlaitsParam(2, pp.params[2]);
-      Engine.setPlaitsParam(3, pp.params[3]);
-      Engine.setPlaitsParam(4, pp.params[4]);
-      Engine.setPlaitsModel(pp.engine);
-      Engine.setTrackVolume('plaits', pp.volume);
-      Engine.setTrackSend('plaits', 'delay', pp.delaySend);
-      Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
-
-      const dp = nextParams.drums as DrumParamsState;
-      DRUM_VOICE_IDS.forEach(vid => {
-        Engine.setTrackVolume(vid, dp.volume);
-        Engine.setTrackSend(vid, 'delay', dp.delaySend);
-        Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
-        Engine.setDrumParam(vid, 1, dp.voices[vid].tone);  // timbre
-        Engine.setDrumParam(vid, 2, dp.voices[vid].decay); // morph
-      });
-
-      Engine.setDelayTime(divisionSeconds(state.delayDivision, state.bpm));
-      Engine.setDelayMix(state.delayMix);
-      Engine.setDelayFeedback(state.delayFeedback);
-      Engine.setDelayFilter(state.delayFilter);
-      void Engine.setReverbType(state.reverbType);
-      Engine.setReverbWet(state.reverbMix);
-      Engine.setReverbDecay(state.reverbDecay);
-      Engine.setReverbPreDelay(state.reverbPreDelay);
-      Engine.setReverbTone(state.reverbTone);
+      syncParamsToEngine(nextParams, state.delayDivision, state.bpm,
+        state.delayMix, state.delayFeedback, state.delayFilter,
+        state.reverbType, state.reverbMix, state.reverbDecay, state.reverbPreDelay, state.reverbTone);
     }
+  }
+
+  function syncParamsToEngine(
+    params: Record<TrackId, AnyTrackParams>,
+    delDiv: string, bpmVal: number,
+    dMix: number, dFb: number, dFilt: number,
+    rType: string, rMix: number, rDecay: number, rPre: number, rTone: number,
+  ) {
+    for (const id of RINGS_TRACK_IDS) {
+      const p = params[id] as RingsParamsState;
+      Engine.setRingsParam(id, 0, p.params[0]);
+      Engine.setRingsParam(id, 1, p.params[1]);
+      Engine.setRingsParam(id, 2, p.params[2]);
+      Engine.setRingsParam(id, 3, p.params[3]);
+      Engine.setRingsModel(id, p.model);
+      p.lfo.forEach((l, i) => {
+        Engine.setLFOWave(id, i, l.wave);
+        Engine.setLFORate(id, i, l.rate);
+        Engine.setLFODepth(id, i, l.depth);
+        Engine.setLFOEnabled(id, i, l.on);
+      });
+      Engine.setTrackVolume(id, p.volume);
+      Engine.setTrackSend(id, 'delay', p.delaySend);
+      Engine.setTrackSend(id, 'reverb', p.reverbSend);
+    }
+    const pp = params.plaits as PlaitsParamsState;
+    Engine.setPlaitsParam(0, pp.params[0]);
+    Engine.setPlaitsParam(1, pp.params[1]);
+    Engine.setPlaitsParam(2, pp.params[2]);
+    Engine.setPlaitsParam(3, pp.params[3]);
+    Engine.setPlaitsParam(4, pp.params[4]);
+    Engine.setPlaitsModel(pp.engine);
+    Engine.setTrackVolume('plaits', pp.volume);
+    Engine.setTrackSend('plaits', 'delay', pp.delaySend);
+    Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
+
+    const dp = params.drums as DrumParamsState;
+    DRUM_VOICE_IDS.forEach(vid => {
+      Engine.setTrackVolume(vid, dp.volume);
+      Engine.setTrackSend(vid, 'delay', dp.delaySend);
+      Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
+      Engine.setDrumParam(vid, 1, dp.voices[vid].tone);
+      Engine.setDrumParam(vid, 2, dp.voices[vid].decay);
+    });
+
+    Engine.setDelayTime(divisionSeconds(delDiv, bpmVal));
+    Engine.setDelayMix(dMix);
+    Engine.setDelayFeedback(dFb);
+    Engine.setDelayFilter(dFilt);
+    void Engine.setReverbType(rType);
+    Engine.setReverbWet(rMix);
+    Engine.setReverbDecay(rDecay);
+    Engine.setReverbPreDelay(rPre);
+    Engine.setReverbTone(rTone);
   }
 
   async function handlePlayStop() {
@@ -397,6 +408,9 @@ export default function App() {
       try {
         await Engine.initAudio(ctx);
         setAudioStarted(true);
+        syncParamsToEngine(trackParams, delayDivision, bpm,
+          delayMix, delayFeedback, delayFilter,
+          reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
       } catch (err) {
         setAudioError(`Audio failed to start: ${err instanceof Error ? err.message : String(err)}`);
         return;
