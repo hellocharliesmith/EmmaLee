@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { SavedSong } from '../types';
+import { DEMO_SONGS } from '../demoSongs';
 
 interface Props {
   songs: SavedSong[];
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
-  const [showSave, setShowSave]       = useState(false);
+  const [showSave, setShowSave]         = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -26,37 +27,64 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
   }
 
   const pendingSong = songs.find(s => s.id === pendingDelete);
+  const totalCount  = DEMO_SONGS.length + songs.length;
 
   return (
     <>
       <div className="sl-wrap">
         <button className="sl-btn" onClick={() => setShowSave(true)}>Save</button>
 
-        {songs.length > 0 && (
+        {totalCount > 0 && (
           <div className="sl-dropdown-wrap">
             <button className="sl-btn sl-songs-btn" onClick={() => setShowDropdown(v => !v)}>
-              Songs ({songs.length}) ▾
+              Songs ({totalCount}) ▾
             </button>
             {showDropdown && (
               <>
                 <div className="sl-backdrop" onClick={() => setShowDropdown(false)} />
                 <div className="sl-dropdown">
-                  {songs.map(song => (
-                    <div key={song.id} className="sl-row">
+
+                  {/* ── Demo / example songs — always present, not deletable ── */}
+                  <div className="sl-section-label">Examples</div>
+                  {DEMO_SONGS.map(demo => (
+                    <div key={demo.id} className="sl-row sl-row-demo">
                       <div className="sl-info">
-                        <span className="sl-name">{song.name}</span>
-                        <span className="sl-date">{new Date(song.savedAt).toLocaleDateString()}</span>
+                        <span className="sl-name">{demo.name}</span>
                       </div>
                       <div className="sl-actions">
-                        <button className="sl-load" onClick={() => { onLoad(song); setShowDropdown(false); }}>
+                        <button className="sl-load"
+                          onClick={() => { onLoad({ ...demo, savedAt: 0 }); setShowDropdown(false); }}>
                           Load
-                        </button>
-                        <button className="sl-del" onClick={() => { setPendingDelete(song.id); setShowDropdown(false); }}>
-                          ✕
                         </button>
                       </div>
                     </div>
                   ))}
+
+                  {/* ── User-saved songs ── */}
+                  {songs.length > 0 && (
+                    <>
+                      <div className="sl-section-label">Saved</div>
+                      {songs.map(song => (
+                        <div key={song.id} className="sl-row">
+                          <div className="sl-info">
+                            <span className="sl-name">{song.name}</span>
+                            <span className="sl-date">{new Date(song.savedAt).toLocaleDateString()}</span>
+                          </div>
+                          <div className="sl-actions">
+                            <button className="sl-load"
+                              onClick={() => { onLoad(song); setShowDropdown(false); }}>
+                              Load
+                            </button>
+                            <button className="sl-del"
+                              onClick={() => { setPendingDelete(song.id); setShowDropdown(false); }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
                 </div>
               </>
             )}
@@ -97,7 +125,8 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
             <p className="modal-body">This can't be undone.</p>
             <div className="modal-actions">
               <button className="modal-cancel" onClick={() => setPendingDelete(null)}>Cancel</button>
-              <button className="modal-confirm modal-danger" onClick={() => { onDelete(pendingDelete); setPendingDelete(null); }}>
+              <button className="modal-confirm modal-danger"
+                onClick={() => { onDelete(pendingDelete); setPendingDelete(null); }}>
                 Delete
               </button>
             </div>

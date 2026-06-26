@@ -117,6 +117,16 @@
 }
 .sl-row:last-child { border-bottom: none; }
 .sl-row:hover { background: var(--bg-hover); }
+.sl-row-demo { opacity: 0.85; }
+
+.sl-section-label {
+  padding: 6px 12px 4px;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--border-hover);
+  border-bottom: 1px solid var(--bg-hover);
+}
 
 .sl-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sl-name { font-size: 0.8rem; color: var(--text-primary); truncate: ellipsis; white-space: nowrap; overflow: hidden; }
