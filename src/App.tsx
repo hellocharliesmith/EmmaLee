@@ -405,13 +405,11 @@ export default function App() {
     if (unsupported) return;
     setAudioError(null);
     if (!audioStarted) {
-      const ctx = new AudioContext();
-      // Give Tone our AudioContext synchronously (before any await) so that
-      // Tone.start() resumes OUR context inside the user-gesture stack frame.
-      // This prevents Chrome from creating a second suspended context and
-      // ensures the Transport's ConstantSourceNode starts on a running context.
-      Tone.setContext(new Tone.Context(ctx));
+      // Resume Tone's own AudioContext (the one it created at module load) from
+      // within the gesture frame. Then use that same context for the engine so
+      // Tone's Transport and our audio graph share one running AudioContext.
       await Tone.start();
+      const ctx = Tone.getContext().rawContext as AudioContext;
       try {
         await Engine.initAudio(ctx);
         setAudioStarted(true);
