@@ -405,12 +405,15 @@ export default function App() {
     if (unsupported) return;
     setAudioError(null);
     if (!audioStarted) {
-      // Resume Tone's own AudioContext (the one it created at module load) from
-      // within the gesture frame. Then use that same context for the engine so
-      // Tone's Transport and our audio graph share one running AudioContext.
-      await Tone.start();
-      const ctx = Tone.getContext().rawContext as AudioContext;
+      const ctx = new AudioContext();
+      // Call resume() synchronously as the very first gesture-frame operation,
+      // before Tone.setContext creates its Ticker Web Worker (which may consume
+      // the transient user activation). Chrome approves the resume synchronously
+      // at the point of the call; we await the actual state change after.
+      const resumePromise = ctx.resume();
       try {
+        Tone.setContext(ctx);    // configure Tone to use our ctx (creates Worker after resume approved)
+        await resumePromise;     // ctx is now "running"
         await Engine.initAudio(ctx);
         setAudioStarted(true);
       } catch (err) {
