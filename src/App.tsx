@@ -405,15 +405,16 @@ export default function App() {
     if (unsupported) return;
     setAudioError(null);
     if (!audioStarted) {
-      const ctx = new AudioContext();
-      // Call resume() synchronously as the very first gesture-frame operation,
-      // before Tone.setContext creates its Ticker Web Worker (which may consume
-      // the transient user activation). Chrome approves the resume synchronously
-      // at the point of the call; we await the actual state change after.
-      const resumePromise = ctx.resume();
       try {
-        Tone.setContext(ctx);    // configure Tone to use our ctx (creates Worker after resume approved)
-        await resumePromise;     // ctx is now "running"
+        // Use Tone's own documented start() — resumes the AudioContext it already
+        // owns (created at module load) from within the gesture frame.
+        await Tone.start();
+        // Access the native AudioContext Tone holds internally.
+        // rawContext is the public getter but has been unreliable in the bundle;
+        // _context is the backing field and is not mangled by esbuild.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = ((Tone.getContext() as any)._context ?? (Tone.getContext() as any).rawContext) as AudioContext;
+        console.log('[Emma Lee] ctx after Tone.start():', ctx?.constructor?.name, ctx?.state);
         await Engine.initAudio(ctx);
         setAudioStarted(true);
       } catch (err) {
