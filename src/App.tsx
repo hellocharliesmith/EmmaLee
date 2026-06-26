@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as Tone from 'tone';
 import * as Engine from './audio/engine';
 import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
@@ -404,6 +405,10 @@ export default function App() {
     if (unsupported) return;
     setAudioError(null);
     if (!audioStarted) {
+      // Tone.start() must be called before any await to stay within Chrome's
+      // user gesture context — otherwise Tone's lazy AudioContext init gets
+      // blocked by the autoplay policy.
+      await Tone.start();
       const ctx = new AudioContext();
       try {
         await Engine.initAudio(ctx);
