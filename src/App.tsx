@@ -408,13 +408,13 @@ export default function App() {
       try {
         await Engine.initAudio(ctx);
         setAudioStarted(true);
-        syncParamsToEngine(trackParams, delayDivision, bpm,
-          delayMix, delayFeedback, delayFilter,
-          reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
       } catch (err) {
         setAudioError(`Audio failed to start: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
+      syncParamsToEngine(trackParams, delayDivision, bpm,
+        delayMix, delayFeedback, delayFilter,
+        reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
     }
     if (isPlaying) stop(); else start();
   }
