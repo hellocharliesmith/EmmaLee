@@ -119,7 +119,7 @@ export default function App() {
     toggleNote, toggleStrumDir, setProbability, setVelocity,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown,
-    setCurrentPage, togglePageEnabled,
+    switchToPage, togglePageEnabled,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -524,8 +524,8 @@ export default function App() {
                 ].filter(Boolean).join(' ');
                 return (
                   <button key={i} className={cls}
-                    onClick={() => isPageViewing ? togglePageEnabled(i) : setCurrentPage(i)}
-                    title={isPageViewing ? (isPageEnabled ? 'Click to remove from loop' : 'Click to add to loop') : `Go to page ${i + 1}`}
+                    onClick={() => isPageViewing ? togglePageEnabled(i) : switchToPage(i)}
+                    title={isPageViewing ? (isPageEnabled ? 'Click to remove from loop' : 'Click to add to loop') : `Switch to page ${i + 1} (enables it)`}
                   >{i + 1}</button>
                 );
               })}

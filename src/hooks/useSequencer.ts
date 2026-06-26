@@ -134,6 +134,16 @@ export function useSequencer() {
   const visibleNotes = isDrums ? reversed : reversed.slice(scroll, scroll + VISIBLE_ROWS);
 
   // ── Page navigation ────────────────────────────────────────────────
+
+  // Switch to a page and auto-enable it for playback in one atomic update.
+  const switchToPage = useCallback((pageIdx: number) => {
+    updateTrack(activeTrack, prev => {
+      const enabled = [...prev.enabledPages];
+      enabled[pageIdx] = true;
+      return { ...prev, currentPage: pageIdx, enabledPages: enabled };
+    });
+  }, [activeTrack]);
+
   const setCurrentPage = useCallback((pageIdx: number) => {
     updateTrack(activeTrack, prev => ({ ...prev, currentPage: pageIdx }));
   }, [activeTrack]);
@@ -330,7 +340,7 @@ export function useSequencer() {
     toggleNote, toggleStrumDir, setProbability, setVelocity,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
-    setCurrentPage, togglePageEnabled,
+    switchToPage, setCurrentPage, togglePageEnabled,
     start, stop, updateBpm,
   };
 }
