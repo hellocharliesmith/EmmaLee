@@ -412,11 +412,6 @@ export default function App() {
         setAudioError(`Audio failed to start: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
-      try {
-        syncParamsToEngine(trackParams, delayDivision, bpm,
-          delayMix, delayFeedback, delayFilter,
-          reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
-      } catch { /* non-critical — defaults are acceptable if sync fails */ }
     }
     if (isPlaying) stop(); else start();
   }
