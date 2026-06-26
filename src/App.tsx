@@ -406,15 +406,16 @@ export default function App() {
     setAudioError(null);
     if (!audioStarted) {
       try {
-        // Use Tone's own documented start() — resumes the AudioContext it already
-        // owns (created at module load) from within the gesture frame.
+        // Tone.start() resumes Tone's own AudioContext from within the gesture
+        // frame, which marks this page as "user-activated" in Chrome (hasBeenActive).
+        // Chrome 71+ then allows AudioContext.resume() anywhere on the page for the
+        // remainder of the session — so we can safely create a native ctx after the
+        // await and resume it without being inside the gesture stack frame.
         await Tone.start();
-        // Access the native AudioContext Tone holds internally.
-        // rawContext is the public getter but has been unreliable in the bundle;
-        // _context is the backing field and is not mangled by esbuild.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = ((Tone.getContext() as any)._context ?? (Tone.getContext() as any).rawContext) as AudioContext;
-        console.log('[Emma Lee] ctx after Tone.start():', ctx?.constructor?.name, ctx?.state);
+        const ctx = new AudioContext();
+        await ctx.resume();
+        console.log('[Emma Lee] native ctx state:', ctx.state);
+        Tone.setContext(ctx);
         await Engine.initAudio(ctx);
         setAudioStarted(true);
       } catch (err) {
