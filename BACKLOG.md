@@ -7,6 +7,19 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-07-01** — Grids drum pattern generator: hand-ported `pattern_generator.cc`
+  to plain TS (`src/audio/grids.ts`), no WASM needed (pure control logic, runs once
+  per click). "Generate Pattern" panel on the Drums tab (X/Y + per-voice density +
+  randomness) fills the current page's 32 steps for all 3 drum voices at once. See
+  AGENTS.md "Grids pattern generator" for the full writeup.
+- **2026-07-01** — Clouds granular effect: compiled `clouds::GranularProcessor` to
+  WASM (`rings-dsp/clouds_wrapper.cpp`, `build-clouds-wasm.sh`) and wired it in as a
+  new master-bus send (alongside delay/reverb), with its own AudioWorklet
+  (`public/clouds-processor.js`) that resamples around the DSP's hardcoded 32kHz
+  internal rate. New Master-tab panel (`CloudsControls.tsx`): Freeze, Mix, Position/
+  Size/Pitch/Density/Texture/Feedback/Reverb. See AGENTS.md "Clouds granular effect"
+  for the full writeup, including what's NOT done yet (per-track Send knob, params
+  not saved, spectral mode untested) — those are broken out as separate entries below.
 - **2026-06-20/21** — Kids Mode cleanup: muted "bedtime" color palette, fluid grid
   (no horizontal scroll, fits any screen width), fixed a bug where invisible extra
   grid rows were clickable and triggered phantom notes.
@@ -114,10 +127,51 @@ once this session) and the WASM export-letter discovery process for wrapper chan
 - Design options: white noise burst (percussive), bowed noise (sustained), mic input.
 - Needs a simple ADSR envelope. Lots of sound design to work out — plan before building.
 
-### Clouds granular processor
-- MI Clouds/Beads compiled to WASM as a second AudioWorklet — feeds into or alongside Rings.
-- Very complex. Source in eurorack repo (`clouds/` directory).
-- Long-term project. Do noise source first.
+### Clouds Send knob per track
+- Clouds (shipped 2026-07-01, see AGENTS.md "Clouds granular effect") currently takes
+  every track's signal at one fixed level (`cloudsSend.gain.value = 0.4` in
+  `createTrackWorklet`) — there's no per-track knob to control how much of each track
+  feeds the granulator, unlike Delay/Reverb Sends which already have one.
+- Architecturally ready: `TrackNodes.cloudsSend` and `setTrackSend(id, 'clouds', v)`
+  already exist, mirroring `delaySend`/`reverbSend` exactly. Just needs a 3rd knob
+  added to each track panel's Sends row + a `cloudsSend` field added to the
+  per-track save-format types (`RingsParamsState`/`PlaitsParamsState`/
+  `DrumParamsState` in App.tsx) with a version bump + migration, same pattern as
+  the existing `delaySend`/`reverbSend` fields.
+
+### Clouds params not saved
+- `cloudsUi` (Freeze/Mix/Position/Size/Pitch/Density/Texture/Feedback/Reverb) lives
+  in local `App.tsx` state only, not the save format — same for the Grids
+  generator's X/Y/density/randomness inputs (`gridsUi`). Deliberately deferred to
+  keep the save-format surface smaller for this round; add both if wanted, same
+  version-bump + migration pattern as other save fields.
+
+### Clouds spectral / stretch / looping-delay playback modes
+- `clouds_set_playback_mode()` supports all 4 of Clouds' modes (0=granular,
+  1=stretch, 2=looping delay, 3=spectral) and all compile/link fine, but only mode
+  0 (granular) is used by `CloudsControls.tsx` today. Modes 1/2 are plausible
+  same-session follow-ups; mode 3 (spectral) is UNTESTED — verify it produces sane
+  audio (same RMS/peak/NaN check as in AGENTS.md) before exposing it in the UI.
+
+### Clouds resampler quality
+- `public/clouds-processor.js`'s `LinearResampler` (added 2026-07-01, needed because
+  Clouds' DSP is hardcoded to 32kHz internally but the AudioContext runs at
+  44.1/48kHz — see AGENTS.md) is linear interpolation, not a windowed-sinc
+  resampler. Adequate for a granular texture effect but introduces some aliasing.
+  Worth revisiting with a proper resampler if the wet signal sounds gritty even at
+  low density/texture.
+
+### Beads (Mutable Instruments' newer granular/resonator module) — needs firmware source
+- Checked 2026-07-01: `rings-source/` (the `pichenettes/eurorack` clone in this repo)
+  does NOT contain Beads. `git -C rings-source log --oneline -5` shows the clone's
+  HEAD predates Beads' existence as a module; `git -C rings-source ls-tree -r HEAD
+  --name-only | grep -i beads` and `find rings-source -iname '*beads*'` both come up
+  empty, and there's no other branch/tag in the clone with different content
+  (`git -C rings-source branch -a` shows only `master`). Real Beads firmware source
+  needs to be added to `rings-source/` (a newer clone/fetch of `pichenettes/eurorack`,
+  or Beads' own repo if it's separate) before this is attemptable — do NOT
+  reimplement it from scratch without real source, that produces something that
+  "sounds kind of similar" but isn't actually Beads.
 
 ---
 
