@@ -16,6 +16,7 @@ import { GridsControls, type GridsUiState } from './components/GridsControls';
 import { generateGridsPattern, GRIDS_INSTRUMENT_BD, GRIDS_INSTRUMENT_SD, GRIDS_INSTRUMENT_HH } from './audio/grids';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
+import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
 import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
@@ -170,6 +171,13 @@ export default function App() {
 
   // ── Master volume ────────────────────────────────────────────────────
   const [masterVolume, setMasterVolume] = useState(1.0);
+
+  // ── Clouds (master granular effect) ──────────────────────────────────
+  // Session-only, like gridsUi above — not part of the save format yet.
+  const [cloudsUi, setCloudsUi] = useState<CloudsUiState>({
+    position: 0.5, size: 0.5, pitch: 0.5, density: 0.65, texture: 0.5,
+    feedback: 0.0, reverb: 0.25, mix: 0.5, freeze: false,
+  });
 
   // ── Grids drum pattern generator (Drums tab only) ────────────────────
   // Local, session-only state (not part of the save format — it's a one-shot
@@ -682,6 +690,10 @@ export default function App() {
                   onTypeChange={setReverbType} onWetChange={setReverbMix}
                   onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
                   onToneChange={setReverbTone}
+                />
+                <CloudsControls
+                  state={cloudsUi}
+                  onChange={next => setCloudsUi(prev => ({ ...prev, ...next }))}
                 />
               </div>
 
