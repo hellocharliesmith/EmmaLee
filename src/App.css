@@ -1358,6 +1358,67 @@
   gap: 10px;
 }
 
+/* ── Grids pattern generator (Drums tab) ── */
+.grids-controls {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.xy-pad-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 94px;
+}
+
+.xy-pad-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xy-pad-label {
+  width: 14px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.xy-pad-field input[type='range'] {
+  width: 220px;
+  flex-shrink: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  outline: none;
+}
+
+.grids-generate-btn {
+  margin-left: 94px;
+  margin-top: 4px;
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.grids-generate-btn:hover {
+  background: var(--accent-dark);
+}
+
 .knob-row {
   display: flex;
   align-items: center;

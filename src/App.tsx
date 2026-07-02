@@ -12,6 +12,8 @@ import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
 import { DrumControls, type DrumVoiceParams } from './components/DrumControls';
+import { GridsControls, type GridsUiState } from './components/GridsControls';
+import { generateGridsPattern, GRIDS_INSTRUMENT_BD, GRIDS_INSTRUMENT_SD, GRIDS_INSTRUMENT_HH } from './audio/grids';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { SaveLoad } from './components/SaveLoad';
@@ -117,7 +119,7 @@ export default function App() {
     steps, visibleNotes, scale, rootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
     currentPage, enabledPages, currentPagePlaying,
-    toggleNote, toggleStrumDir, setProbability, setVelocity,
+    toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps,
     loadTracks,
     setScale, setRootNote, scrollUp, scrollDown,
     switchToPage, togglePageEnabled,
@@ -168,6 +170,43 @@ export default function App() {
 
   // ── Master volume ────────────────────────────────────────────────────
   const [masterVolume, setMasterVolume] = useState(1.0);
+
+  // ── Grids drum pattern generator (Drums tab only) ────────────────────
+  // Local, session-only state (not part of the save format — it's a one-shot
+  // generator input, not sequencer state; regenerating just overwrites the
+  // current page's steps like any other manual edit would).
+  const [gridsUi, setGridsUi] = useState<GridsUiState>({
+    x: 0.5, y: 0.5, densityHH: 0.7, densitySD: 0.55, densityBD: 0.65, randomness: 0,
+  });
+  function handleGenerateDrums() {
+    const pattern = generateGridsPattern({
+      x: Math.round(gridsUi.x * 255),
+      y: Math.round(gridsUi.y * 255),
+      // Grids' own instrument order is bd/sd/hh — map from the UI's hh/sd/bd knobs.
+      density: [
+        Math.round(gridsUi.densityBD * 255),
+        Math.round(gridsUi.densitySD * 255),
+        Math.round(gridsUi.densityHH * 255),
+      ],
+      randomness: Math.round(gridsUi.randomness * 255),
+    });
+    // App's drum row order (matches DRUM_ROW_LABELS/DRUM_VOICE_IDS, top to
+    // bottom): 0 = Hi-Hat, 1 = Snare, 2 = Kick — different from Grids' own
+    // bd/sd/hh order, so remap per step.
+    const newSteps: StepValue[] = Array.from({ length: 32 }, (_, step) => {
+      const notes: number[] = [];
+      if (pattern.active[GRIDS_INSTRUMENT_HH][step]) notes.push(0);
+      if (pattern.active[GRIDS_INSTRUMENT_SD][step]) notes.push(1);
+      if (pattern.active[GRIDS_INSTRUMENT_BD][step]) notes.push(2);
+      if (notes.length === 0) return null;
+      const accented =
+        (notes.includes(0) && pattern.accent[GRIDS_INSTRUMENT_HH][step]) ||
+        (notes.includes(1) && pattern.accent[GRIDS_INSTRUMENT_SD][step]) ||
+        (notes.includes(2) && pattern.accent[GRIDS_INSTRUMENT_BD][step]);
+      return { notes, strumDown: false, velocity: accented ? 1 : 0.75 };
+    });
+    setPageSteps(newSteps);
+  }
 
   // ── Kids mode ─────────────────────────────────────────────────────────
   const [kidsMode, setKidsMode] = useState(false);
@@ -596,12 +635,19 @@ export default function App() {
                     />
                   )}
                   {active.kind === 'drums' && (
-                    <DrumControls
-                      voices={active.voices}
-                      onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
-                        ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
-                        : p)}
-                    />
+                    <>
+                      <DrumControls
+                        voices={active.voices}
+                        onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
+                          ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
+                          : p)}
+                      />
+                      <GridsControls
+                        state={gridsUi}
+                        onChange={next => setGridsUi(prev => ({ ...prev, ...next }))}
+                        onGenerate={handleGenerateDrums}
+                      />
+                    </>
                   )}
                 </div>
                 <div className="send-row">
