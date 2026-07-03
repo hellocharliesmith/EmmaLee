@@ -1,4 +1,6 @@
 import { setCloudsParam, setCloudsFreeze, setCloudsWet, setCloudsReverbSend } from '../audio/engine';
+import { Slider } from './Slider';
+import { Toggle } from './Toggle';
 import type { TexturePreset } from '../presets';
 
 // Master-bus granular texture effect (Mutable Instruments Clouds' granular
@@ -43,9 +45,8 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
     return (
       <div className="knob-row">
         <label>{label}</label>
-        <input type="range" min={min} max={max} step={0.01} value={value}
-          onChange={e => {
-            const v = parseFloat(e.target.value);
+        <Slider value={value} min={min} max={max}
+          onChange={v => {
             onChange({ [key]: v } as Partial<CloudsUiState>);
             if (key === 'pitch') {
               setCloudsParam(param, (v - 0.5) * 96); // 0-1 -> -48..+48 semitones
@@ -60,6 +61,11 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
   return (
     <div className="rings-controls">
       <div className="section-divider" />
+      <div className="panel-name">
+        Texture
+        <Toggle on={state.freeze} label={state.freeze ? 'Frozen' : 'Freeze'}
+          onChange={next => { onChange({ freeze: next }); setCloudsFreeze(next); }} />
+      </div>
       {presets.length > 0 && (
         <div className="knob-row">
           <label>Preset</label>
@@ -75,16 +81,9 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
         </div>
       )}
       <div className="knob-row">
-        <label>Texture</label>
-        <button
-          className={`reverb-type-btn${state.freeze ? ' active' : ''}`}
-          onClick={() => { const next = !state.freeze; onChange({ freeze: next }); setCloudsFreeze(next); }}
-        >{state.freeze ? 'Frozen' : 'Freeze'}</button>
-      </div>
-      <div className="knob-row">
         <label>Mix</label>
-        <input type="range" min={0} max={1} step={0.01} value={state.mix}
-          onChange={e => { const v = parseFloat(e.target.value); onChange({ mix: v }); setCloudsWet(v); }} />
+        <Slider value={state.mix} min={0} max={1}
+          onChange={v => { onChange({ mix: v }); setCloudsWet(v); }} />
       </div>
       {row('Position', 'position', 0)}
       {row('Size', 'size', 1)}
@@ -94,8 +93,8 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
       {row('Feedback', 'feedback', 7)}
       <div className="knob-row">
         <label>&gt; Reverb</label>
-        <input type="range" min={0} max={1} step={0.01} value={state.reverbSend}
-          onChange={e => { const v = parseFloat(e.target.value); onChange({ reverbSend: v }); setCloudsReverbSend(v); }} />
+        <Slider value={state.reverbSend} min={0} max={1}
+          onChange={v => { onChange({ reverbSend: v }); setCloudsReverbSend(v); }} />
       </div>
     </div>
   );

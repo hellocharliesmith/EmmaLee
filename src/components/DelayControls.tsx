@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { setDelayTime, setDelayFeedback, setDelayMix, setDelayFilter } from '../audio/engine';
 import { divisionSeconds } from '../audio/utils';
+import { Slider } from './Slider';
 
 const DIVISIONS = [
   { id: '1/16', label: '1/16' },
@@ -31,8 +32,8 @@ export function DelayControls({ bpm, division, mix, feedback, filter,
   return (
     <div className="rings-controls">
       <div className="section-divider" />
+      <div className="panel-name">Delay</div>
       <div className="knob-row">
-        <label>Delay</label>
         <div className="reverb-type-btns">
           {DIVISIONS.map(d => (
             <button key={d.id}
@@ -44,18 +45,18 @@ export function DelayControls({ bpm, division, mix, feedback, filter,
       </div>
       <div className="knob-row">
         <label>Mix</label>
-        <input type="range" min={0} max={0.8} step={0.01} value={mix}
-          onChange={e => { const v = parseFloat(e.target.value); onMixChange(v); setDelayMix(v); }} />
+        <Slider value={mix} min={0} max={0.8}
+          onChange={v => { onMixChange(v); setDelayMix(v); }} />
       </div>
       <div className="knob-row">
         <label>Feedback</label>
-        <input type="range" min={0} max={0.92} step={0.01} value={feedback}
-          onChange={e => { const v = parseFloat(e.target.value); onFeedbackChange(v); setDelayFeedback(v); }} />
+        <Slider value={feedback} min={0} max={0.92}
+          onChange={v => { onFeedbackChange(v); setDelayFeedback(v); }} />
       </div>
       <div className="knob-row">
         <label>Filter</label>
-        <input type="range" min={500} max={12000} step={100} value={filter}
-          onChange={e => { const v = parseFloat(e.target.value); onFilterChange(v); setDelayFilter(v); }} />
+        <Slider value={filter} min={500} max={12000} step={100}
+          onChange={v => { onFilterChange(v); setDelayFilter(v); }} />
       </div>
     </div>
   );

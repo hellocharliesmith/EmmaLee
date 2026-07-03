@@ -10,6 +10,7 @@ import { DEMO_SONGS } from './demoSongs';
 import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
+import { Slider } from './components/Slider';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
@@ -645,16 +646,56 @@ export default function App() {
   return (
     <div className={`app${kidsMode ? ' kids-mode' : ''}${trackColorClass}`}>
 
-      {/* ── Header ── */}
+      {/* ── Header — three clusters (transport | file actions | kids),
+          divided by thin vertical rules. Stays identical across every tab —
+          track/scale-specific controls live in the page-selector row below,
+          not here. ── */}
       <div className="app-header">
         <h1>Emma Lee</h1>
-        <button
-          className={`kids-toggle${kidsMode ? ' active' : ''}`}
-          onClick={() => setKidsMode(v => !v)}
-          title={kidsMode ? 'Exit Kids Mode' : 'Kids Mode'}
-        >
-          {kidsMode ? '🎮 Exit Kids' : '🎮 Kids'}
-        </button>
+        {!kidsMode && (
+          <div className="header-clusters">
+            <div className="header-cluster">
+              <button
+                className={`play-btn${isPlaying ? ' playing' : ''}${unsupported ? ' disabled' : ''}`}
+                onClick={handlePlayStop} disabled={!!unsupported}
+              >
+                {isPlaying ? '■ Stop' : '▶ Play'}
+              </button>
+              <div className="bpm-row">
+                <label>BPM</label>
+                <Slider value={bpm} min={40} max={200} step={1}
+                  onChange={v => updateBpm(Math.round(v))} className="bpm-slider" />
+                <span className="bpm-val">{bpm}</span>
+              </div>
+            </div>
+            <div className="header-divider" />
+            <div className="header-cluster">
+              <SaveLoad songs={songs}
+                onSave={name => save(name, captureState())}
+                onLoad={loadSong} onDelete={remove} onNewSong={handleNewSong}
+                onExport={handleExport} onImport={loadSong} />
+            </div>
+            <div className="header-divider" />
+            <div className="header-cluster">
+              <button
+                className={`kids-toggle${kidsMode ? ' active' : ''}`}
+                onClick={() => setKidsMode(v => !v)}
+                title={kidsMode ? 'Exit Kids Mode' : 'Kids Mode'}
+              >
+                {kidsMode ? '🎮 Exit Kids' : '🎮 Kids'}
+              </button>
+            </div>
+          </div>
+        )}
+        {kidsMode && (
+          <button
+            className={`kids-toggle${kidsMode ? ' active' : ''}`}
+            onClick={() => setKidsMode(v => !v)}
+            title="Exit Kids Mode"
+          >
+            🎮 Exit Kids
+          </button>
+        )}
       </div>
 
       {unsupported && <div className="audio-banner error">⚠ {unsupported}</div>}
@@ -686,38 +727,8 @@ export default function App() {
         </>
       ) : (
         <>
-          {/* ── Normal mode layout ── */}
-          <div className="transport">
-            <button
-              className={`play-btn${isPlaying ? ' playing' : ''}${unsupported ? ' disabled' : ''}`}
-              onClick={handlePlayStop} disabled={!!unsupported}
-            >
-              {isPlaying ? '■ Stop' : '▶ Play'}
-            </button>
-            <div className="bpm-row">
-              <label>BPM</label>
-              <input type="range" min={40} max={200} value={bpm}
-                onChange={e => updateBpm(parseInt(e.target.value))} />
-              <span className="bpm-val">{bpm}</span>
-            </div>
-            {viewSection === 'track' && activeTrack !== 'drums' && (
-              <div className="scale-selects">
-                <select className="scale-select" value={rootNote}
-                  onChange={e => setRootNote(parseInt(e.target.value))}>
-                  {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-                </select>
-                <select className="scale-select" value={scale}
-                  onChange={e => setScale(e.target.value as ScaleType)}>
-                  {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </div>
-            )}
-            <SaveLoad songs={songs}
-              onSave={name => save(name, captureState())}
-              onLoad={loadSong} onDelete={remove} onNewSong={handleNewSong}
-              onExport={handleExport} onImport={loadSong} />
-          </div>
-
+          {/* ── Normal mode layout — transport/file actions/kids now live in
+              the header above; this is just the track-specific chrome. ── */}
           {audioError && (
             <div className="audio-banner error">
               ⚠ {audioError}
@@ -740,6 +751,18 @@ export default function App() {
 
           {viewSection === 'track' && (
             <div className="page-buttons">
+              {activeTrack !== 'drums' && (
+                <div className="scale-selects">
+                  <select className="scale-select" value={rootNote}
+                    onChange={e => setRootNote(parseInt(e.target.value))}>
+                    {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+                  </select>
+                  <select className="scale-select" value={scale}
+                    onChange={e => setScale(e.target.value as ScaleType)}>
+                    {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </div>
+              )}
               {Array.from({ length: PAGE_COUNT }, (_, i) => {
                 const isPageViewing = currentPage === i;
                 const isPageEnabled = enabledPages[i];
@@ -831,15 +854,15 @@ export default function App() {
                   )}
                 </div>
                 <div className="send-row">
+                  <div className="panel-name">Sends</div>
                   <div className="knob-row">
-                    <label>Sends</label>
-                    <Knob value={active.volume} min={0} max={1.5} label="Volume"
+                    <Knob value={active.volume} min={0} max={1.5} label="Volume" size={68} percent
                       onChange={v => setVolumeFor(activeTrack, v)} />
-                    <Knob value={active.delaySend} min={0} max={1} label="Delay"
+                    <Knob value={active.delaySend} min={0} max={1} label="Delay" size={68} percent
                       onChange={v => setSendFor(activeTrack, 'delay', v)} />
-                    <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
+                    <Knob value={active.reverbSend} min={0} max={1} label="Reverb" size={68} percent
                       onChange={v => setSendFor(activeTrack, 'reverb', v)} />
-                    <Knob value={active.cloudsSend} min={0} max={1} label="Texture"
+                    <Knob value={active.cloudsSend} min={0} max={1} label="Texture" size={68} percent
                       onChange={v => setSendFor(activeTrack, 'clouds', v)} />
                   </div>
                 </div>
@@ -879,11 +902,10 @@ export default function App() {
                 <div className="mixer-faders">
                   {/* Master volume — taller, neutral style */}
                   <div className="mixer-fader-wrap">
-                    <input
-                      type="range"                      className="v-fader v-fader-master"
+                    <Slider vertical className="v-fader-master"
                       min={0} max={1.5} step={0.01}
                       value={masterVolume}
-                      onChange={e => { const v = parseFloat(e.target.value); setMasterVolume(v); Engine.setMasterVolume(v); }}
+                      onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }}
                     />
                     <div className="mixer-fader-label mixer-fader-label-master">Master</div>
                   </div>
@@ -893,15 +915,11 @@ export default function App() {
                   {/* Per-track faders, color-coded */}
                   {TRACK_IDS.map(id => (
                     <div key={id} className="mixer-fader-wrap">
-                      <input
-                        type="range"                        className="v-fader"
-                        style={{
-                          '--fader-color':      TRACK_FADER_COLORS[id][0],
-                          '--fader-color-dark': TRACK_FADER_COLORS[id][1],
-                        } as React.CSSProperties}
+                      <Slider vertical
+                        accent={TRACK_FADER_COLORS[id][0]}
                         min={0} max={1.5} step={0.01}
                         value={trackParams[id].volume}
-                        onChange={e => setVolumeFor(id, parseFloat(e.target.value))}
+                        onChange={v => setVolumeFor(id, v)}
                       />
                       <div className="mixer-fader-label" style={{ color: TRACK_FADER_COLORS[id][0] }}>
                         {TRACK_LABELS[id]}

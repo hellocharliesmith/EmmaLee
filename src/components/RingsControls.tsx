@@ -1,6 +1,7 @@
 import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth,
          type RingsTrackId } from '../audio/engine';
 import { Knob } from './Knob';
+import { Slider } from './Slider';
 import type { LfoState } from '../types';
 import type { RingsPreset } from '../presets';
 
@@ -24,6 +25,31 @@ const PARAM_DESCS  = [
 
 // LFO index matches param index: 0=Structure, 1=Brightness, 2=Damping, 3=Position
 const PARAM_LFO_INDEX = [0, 1, 2, 3];
+
+// Off -> Sine -> Random -> Off, single button, icon reflects state.
+function lfoIcon(lfo: LfoState) {
+  if (!lfo.on) return <span className="lfo-icon-dash" />;
+  if (lfo.wave === 'sine') {
+    return (
+      <svg width="16" height="10" viewBox="0 0 20 12">
+        <path d="M1,6 C4,0 6,12 9,6 C12,0 14,12 17,6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20">
+      <circle cx="5" cy="5" r="1.4" fill="currentColor" /><circle cx="15" cy="5" r="1.4" fill="currentColor" />
+      <circle cx="10" cy="10" r="1.4" fill="currentColor" /><circle cx="5" cy="15" r="1.4" fill="currentColor" />
+      <circle cx="15" cy="15" r="1.4" fill="currentColor" />
+    </svg>
+  );
+}
+
+function nextLfoState(lfo: LfoState): Partial<LfoState> {
+  if (!lfo.on) return { on: true, wave: 'sine' };
+  if (lfo.wave === 'sine') return { on: true, wave: 'random' };
+  return { on: false };
+}
 
 export interface RingsControlsProps {
   trackId: RingsTrackId;
@@ -56,15 +82,12 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
       )}
       <div className="knob-row">
         <label>Model</label>
-        <div className="reverb-type-btns" style={{ flexWrap: 'wrap' }}>
-          {MODELS.map(m => (
-            <button key={m.id}
-              className={`reverb-type-btn${model === m.id ? ' active' : ''}`}
-              onClick={() => { onModelChange(m.id); setRingsModel(trackId, m.id); }}
-              title={m.description}
-            >{m.label}</button>
-          ))}
-        </div>
+        <select className="preset-select model-select" value={model}
+          onChange={e => { const m = parseInt(e.target.value); onModelChange(m); setRingsModel(trackId, m); }}
+          title={MODELS.find(m => m.id === model)?.description}
+        >
+          {MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
       </div>
 
       {params.map((val, i) => {
@@ -74,38 +97,34 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
           <div key={i}>
             <div className="knob-row param-row">
               <label title={PARAM_DESCS[i]}>{PARAM_LABELS[i]}</label>
-              <input
-                type="range" min={0} max={1} step={0.01} value={val}
-                onChange={e => { const v = parseFloat(e.target.value); onParamChange(i, v); setRingsParam(trackId, i, v); }}
+              <Slider
+                value={val} min={0} max={1}
+                onChange={v => { onParamChange(i, v); setRingsParam(trackId, i, v); }}
               />
               {lfoState && (
                 <div className="lfo-inline">
-                  <button
-                    className={`reverb-type-btn${lfoState.wave === 'random' ? ' active' : ''}`}
-                    onClick={() => {
-                      const w = lfoState.wave === 'sine' ? 'random' : 'sine';
-                      onLfoChange(lfoIdx, { wave: w });
-                      setLFOWave(trackId, lfoIdx, w);
-                    }}
-                  >{lfoState.wave === 'sine' ? 'Sine' : 'Rnd'}</button>
-                  <button
-                    className={`reverb-type-btn${lfoState.on ? ' active' : ''}`}
-                    onClick={() => {
-                      const on = !lfoState.on;
-                      onLfoChange(lfoIdx, { on });
-                      setLFOEnabled(trackId, lfoIdx, on);
-                    }}
-                  >{lfoState.on ? 'On' : 'Off'}</button>
-                  <div style={{ visibility: lfoState.on ? 'visible' : 'hidden', display: 'flex', gap: 4 }}>
-                    <Knob
-                      value={lfoState.rate} min={0.05} max={8} label="Rate"
-                      onChange={v => { onLfoChange(lfoIdx, { rate: v }); setLFORate(trackId, lfoIdx, v); }}
-                    />
-                    <Knob
-                      value={lfoState.depth} min={0} max={0.5} label="Depth"
-                      onChange={v => { onLfoChange(lfoIdx, { depth: v }); setLFODepth(trackId, lfoIdx, v); }}
-                    />
+                  <div className="lfo-cycle-wrap">
+                    <button
+                      className={`lfo-cycle-btn${lfoState.on ? ' on' : ''}`}
+                      onClick={() => {
+                        const next = nextLfoState(lfoState);
+                        onLfoChange(lfoIdx, next);
+                        if ('wave' in next && next.wave) setLFOWave(trackId, lfoIdx, next.wave);
+                        if ('on' in next && next.on !== undefined) setLFOEnabled(trackId, lfoIdx, next.on);
+                      }}
+                    >{lfoIcon(lfoState)}</button>
+                    <div className="cap">shape</div>
                   </div>
+                  <Knob
+                    value={lfoState.rate} min={0.05} max={8} label="Rate" size={48}
+                    disabled={!lfoState.on}
+                    onChange={v => { onLfoChange(lfoIdx, { rate: v }); setLFORate(trackId, lfoIdx, v); }}
+                  />
+                  <Knob
+                    value={lfoState.depth} min={0} max={0.5} label="Depth" size={48}
+                    disabled={!lfoState.on}
+                    onChange={v => { onLfoChange(lfoIdx, { depth: v }); setLFODepth(trackId, lfoIdx, v); }}
+                  />
                 </div>
               )}
             </div>

@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { setReverbType, setReverbWet, setReverbDecay, setReverbPreDelay, setReverbTone } from '../audio/engine';
+import { Slider } from './Slider';
 
 const TYPES = [
   { id: 'plate',   label: 'Plate' },
@@ -40,8 +41,8 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
   return (
     <div className="rings-controls">
       <div className="section-divider" />
+      <div className="panel-name">Reverb</div>
       <div className="knob-row">
-        <label>Reverb</label>
         <div className="reverb-type-btns" style={{ flexWrap: 'wrap' }}>
           {TYPES.map(t => (
             <button key={t.id}
@@ -53,24 +54,24 @@ export function ReverbControls({ activeType, wet, decay, preDelay, tone,
       </div>
       <div className="knob-row">
         <label>Mix</label>
-        <input type="range" min={0} max={1} step={0.01} value={wet}
-          onChange={e => { const v = parseFloat(e.target.value); onWetChange(v); setReverbWet(v); }} />
+        <Slider value={wet} min={0} max={1}
+          onChange={v => { onWetChange(v); setReverbWet(v); }} />
       </div>
       <div className="knob-row">
         <label>Decay</label>
-        <input type="range" min={0.05} max={1} step={0.01} value={decay}
-          onChange={e => handleDecayChange(parseFloat(e.target.value))} />
+        <Slider value={decay} min={0.05} max={1}
+          onChange={v => handleDecayChange(v)} />
       </div>
       <div className="knob-row">
         <label>Pre-delay</label>
-        <input type="range" min={0} max={0.12} step={0.001} value={preDelay}
-          onChange={e => { const v = parseFloat(e.target.value); onPreDelayChange(v); setReverbPreDelay(v); }} />
+        <Slider value={preDelay} min={0} max={0.12} step={0.001}
+          onChange={v => { onPreDelayChange(v); setReverbPreDelay(v); }} />
       </div>
       <div className="knob-row">
         <label>Tone</label>
-        <input type="range" min={0} max={1} step={0.01} value={tone / 20000}
-          onChange={e => {
-            const hz = parseFloat(e.target.value) * 20000;
+        <Slider value={tone / 20000} min={0} max={1}
+          onChange={v => {
+            const hz = v * 20000;
             onToneChange(hz); setReverbTone(hz);
           }} />
       </div>

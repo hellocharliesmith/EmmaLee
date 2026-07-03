@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 
 interface KnobProps {
   value: number;
@@ -6,31 +6,39 @@ interface KnobProps {
   max: number;
   label: string;
   onChange: (v: number) => void;
+  size?: number;      // outer SVG size in px — 44 default, 48 for Rate/Depth, 68 for Sends
+  disabled?: boolean; // inert: dim ring, no arc, "–" instead of a value
+  percent?: boolean;  // show as a rounded 0-100 readout instead of raw decimal — Sends knobs
 }
 
 const MIN_ANG = -135;
 const MAX_ANG =  135;
-const CX = 27, CY = 27, R = 19;
 
-function polar(angleDeg: number) {
+function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (angleDeg - 90) * Math.PI / 180;
-  return { x: CX + R * Math.cos(rad), y: CY + R * Math.sin(rad) };
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-function arc(a1: number, a2: number) {
-  const s = polar(a1), e = polar(a2);
+function arc(cx: number, cy: number, r: number, a1: number, a2: number) {
+  const s = polar(cx, cy, r, a1), e = polar(cx, cy, r, a2);
   const large = (a2 - a1) > 180 ? 1 : 0;
-  return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+  return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
 }
 
-export function Knob({ value, min, max, label, onChange }: KnobProps) {
+export function Knob({ value, min, max, label, onChange, size = 44, disabled = false, percent = false }: KnobProps) {
+  const [dragging, setDragging] = useState(false);
   const norm  = Math.max(0, Math.min(1, (value - min) / (max - min)));
   const angle = MIN_ANG + norm * (MAX_ANG - MIN_ANG);
-  const dot   = polar(angle);
   const drag  = useRef<{ y: number; val: number } | null>(null);
 
+  const cx = size / 2, cy = size / 2;
+  const strokeW = Math.max(3, size * 0.13);
+  const r = size / 2 - strokeW;
+
   const startDrag = useCallback((clientY: number) => {
+    if (disabled) return;
     drag.current = { y: clientY, val: value };
+    setDragging(true);
     const move = (y: number) => {
       if (!drag.current) return;
       const delta = (drag.current.y - y) / 120;
@@ -40,6 +48,7 @@ export function Knob({ value, min, max, label, onChange }: KnobProps) {
     const touchMove = (e: TouchEvent) => { e.preventDefault(); move(e.touches[0].clientY); };
     const end = () => {
       drag.current = null;
+      setDragging(false);
       window.removeEventListener('mousemove', mouseMove);
       window.removeEventListener('mouseup', end);
       window.removeEventListener('touchmove', touchMove);
@@ -49,26 +58,34 @@ export function Knob({ value, min, max, label, onChange }: KnobProps) {
     window.addEventListener('mouseup', end);
     window.addEventListener('touchmove', touchMove, { passive: false });
     window.addEventListener('touchend', end);
-  }, [value, min, max, onChange]);
+  }, [value, min, max, onChange, disabled]);
+
+  // Value text: whole numbers for wide ranges (e.g. sends 0-1 shown as %-ish
+  // "70"), two decimals for narrow 0-1 params — matches the two conventions
+  // already used across the app's knobs before this rewrite.
+  const displayVal = disabled ? '–'
+    : percent ? Math.round(norm * 100).toString()
+    : (max - min > 1.5 ? Math.round(value).toString() : value.toFixed(2));
 
   return (
     <div
-      className="knob"
+      className={`knob${dragging ? ' dragging' : ''}${disabled ? ' disabled' : ''}`}
       onMouseDown={e => { e.preventDefault(); startDrag(e.clientY); }}
       onTouchStart={e => { e.preventDefault(); startDrag(e.touches[0].clientY); }}
-      title={`${label}: ${value.toFixed(2)}`}
+      title={disabled ? label : `${label}: ${value.toFixed(2)}`}
+      style={{ width: size, height: size }}
     >
-      <svg width="54" height="54" viewBox="0 0 54 54">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {/* Track */}
-        <path d={arc(MIN_ANG, MAX_ANG)} fill="none" style={{ stroke: 'var(--border)' }} strokeWidth="3.5" strokeLinecap="round" />
+        <path d={arc(cx, cy, r, MIN_ANG, MAX_ANG)} fill="none" className="knob-track" strokeWidth={strokeW} strokeLinecap="butt" />
         {/* Value */}
-        {norm > 0.005 && (
-          <path d={arc(MIN_ANG, angle)} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="3.5" strokeLinecap="round" />
+        {!disabled && norm > 0.005 && (
+          <path d={arc(cx, cy, r, MIN_ANG, angle)} fill="none" className="knob-arc" strokeWidth={strokeW} strokeLinecap="butt" />
         )}
-        {/* Dot */}
-        <circle cx={dot.x.toFixed(2)} cy={dot.y.toFixed(2)} r="3.5" style={{ fill: 'var(--accent-light)' }} />
-        {/* Hub */}
-        <circle cx={CX} cy={CY} r="7" style={{ fill: 'var(--bg-input)', stroke: 'var(--border-disabled)' }} strokeWidth="1.5" />
+        {/* Value text, inside the ring */}
+        <text x={cx} y={cy + size * 0.07} textAnchor="middle" className="knob-value" style={{ fontSize: size * 0.24 }}>
+          {displayVal}
+        </text>
       </svg>
       <div className="knob-label">{label}</div>
     </div>

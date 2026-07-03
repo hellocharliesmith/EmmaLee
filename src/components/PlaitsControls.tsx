@@ -1,4 +1,5 @@
 import { setPlaitsParam, setPlaitsModel } from '../audio/engine';
+import { Slider } from './Slider';
 import type { PlaitsPreset } from '../presets';
 
 // Engine indices match Plaits' actual hardware registration order (see voice.cc
@@ -65,23 +66,20 @@ export function PlaitsControls({ engine, params, presets, onPresetLoad, onEngine
       )}
       <div className="knob-row">
         <label>Engine</label>
-        <div className="reverb-type-btns" style={{ flexWrap: 'wrap' }}>
-          {ENGINES.map(m => (
-            <button key={m.id}
-              className={`reverb-type-btn${engine === m.id ? ' active' : ''}`}
-              onClick={() => { onEngineChange(m.id); setPlaitsModel(m.id); }}
-              title={m.description}
-            >{m.label}</button>
-          ))}
-        </div>
+        <select className="preset-select model-select" value={engine}
+          onChange={e => { const eg = parseInt(e.target.value); onEngineChange(eg); setPlaitsModel(eg); }}
+          title={ENGINES.find(m => m.id === engine)?.description}
+        >
+          {ENGINES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
       </div>
 
       {params.map((val, i) => (
         <div key={i} className="knob-row param-row">
           <label>{labelFor(i)}</label>
-          <input
-            type="range" min={0} max={1} step={0.01} value={val}
-            onChange={e => { const v = parseFloat(e.target.value); onParamChange(i, v); setPlaitsParam(i, v); }}
+          <Slider
+            value={val} min={0} max={1}
+            onChange={v => { onParamChange(i, v); setPlaitsParam(i, v); }}
           />
         </div>
       ))}

@@ -64,6 +64,8 @@
   letter-spacing: 0.45em;
   text-transform: uppercase;
   color: var(--text-bright);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ── Save / Load ── */
@@ -82,7 +84,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -101,7 +103,7 @@
   z-index: 20;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   min-width: 260px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   overflow: hidden;
@@ -141,7 +143,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 9px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -153,7 +155,7 @@
   color: var(--border-hover);
   font-size: 11px;
   padding: 3px 7px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -174,7 +176,7 @@
 .modal {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 24px 28px;
   min-width: 300px;
   max-width: 420px;
@@ -197,7 +199,7 @@
   width: 100%;
   background: var(--bg-body);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text-primary);
   font-size: 0.9rem;
   font-family: inherit;
@@ -217,7 +219,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 7px 16px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -231,7 +233,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 7px 18px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: background 0.12s;
@@ -247,7 +249,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.78rem;
   letter-spacing: 0.03em;
   max-width: 600px;
@@ -277,10 +279,21 @@
 }
 
 /* Transport row */
-.transport {
+.header-clusters {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 22px;
+}
+.header-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 .play-btn {
@@ -292,7 +305,7 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   transition: background 0.12s;
 }
@@ -317,8 +330,12 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.bpm-row input[type='range'] {
-  width: 100px;
+.bpm-slider {
+  width: 90px;
+  height: 2px;
+  flex: none;
+  border: none;
+  background: var(--border-disabled);
 }
 
 /* Root + Scale dropdowns in transport */
@@ -336,7 +353,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   outline: none;
   appearance: none;
@@ -351,11 +368,12 @@
   font-size: 0.72rem;
   font-family: inherit;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   outline: none;
 }
 .preset-select:focus { border-color: var(--accent); color: var(--text-primary); }
+.model-select { width: 170px; text-transform: uppercase; letter-spacing: 0.04em; }
 .bpm-row .bpm-val {
   color: var(--text-primary);
   width: 30px;
@@ -367,7 +385,7 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  max-width: 960px;
+  max-width: 1120px;
 }
 .app-header h1 { margin: 0; }
 
@@ -509,7 +527,7 @@
   height: 28px;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--border-hover);
   font-size: 0.75rem;
   font-family: inherit;
@@ -522,8 +540,16 @@
 }
 .page-btn:hover    { border-color: var(--border-hover); color: var(--text-tertiary); }
 .page-btn.enabled  { border-color: var(--border-disabled); color: var(--text-tertiary); }
-.page-btn.viewing  { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.page-btn.playing  { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+/* Active = solid accent fill + dark text, not a tint — matches every other
+   segmented-group "active" state in the new system (Model dropdown aside,
+   this is the same visual language as Reverb type / Delay division / etc). */
+.page-btn.viewing  { border-color: var(--accent); color: var(--bg-body); background: var(--accent); }
+.page-btn.playing:not(.viewing) { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
+/* Segmented group border-collapse: shared borders one-to-two-adjacent-cells,
+   flat rectangles, no gap between segments. */
+.page-selector { gap: 0; }
+.page-selector .page-btn:not(:first-child) { border-left: none; }
 
 /* 4-page buttons shown below the track tabs when a track is active */
 .page-buttons {
@@ -531,6 +557,7 @@
   gap: 6px;
   align-items: center;
 }
+.page-buttons .page-btn:not(:first-child) { border-left: none; }
 
 .clear-seq-btn {
   width: auto;
@@ -559,7 +586,7 @@
   align-items: flex-start;
   justify-content: space-between;
   width: 100%;
-  max-width: 960px;
+  max-width: 1120px;
   gap: 24px;
 }
 .send-row {
@@ -572,7 +599,7 @@
 /* Mixer knob row, on the Master page */
 .mixer-row {
   width: 100%;
-  max-width: 960px;
+  max-width: 1120px;
 }
 .mixer-row .knob-row {
   gap: 16px;
@@ -725,7 +752,7 @@
 .pr-scroll-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
@@ -762,7 +789,7 @@
 
 .pr-cell {
   background: var(--bg-input);
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   border: 1px solid transparent;
   transition: background 0.06s;
@@ -802,7 +829,7 @@
     transparent 2px,
     transparent 3px
   );
-  border-radius: 1px;
+  border-radius: 0;
 }
 /* Highlighted column when drawer is open */
 .pr-cell.drawer-col { border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
@@ -811,10 +838,10 @@
 /* ── Sub-step drawer ── */
 .substep-drawer {
   width: 100%;
-  max-width: 960px;
+  max-width: 1120px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -856,7 +883,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 4px 10px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -869,7 +896,7 @@
   color: var(--text-secondary);
   font-size: 12px;
   padding: 4px 8px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -904,7 +931,7 @@
   color: var(--text-secondary);
   font-size: 10px;
   padding: 3px 12px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -940,7 +967,7 @@
   height: 10px;
   flex-shrink: 0;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 0;
   background: transparent;
   position: relative;
   transition: background 0.1s;
@@ -989,7 +1016,7 @@
   font-size: 8px;
   width: 22px;
   height: 13px;
-  border-radius: 2px;
+  border-radius: 0;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -1024,7 +1051,7 @@
   font-size: 8px;
   width: 22px;
   height: 13px;
-  border-radius: 2px;
+  border-radius: 0;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -1049,7 +1076,7 @@
   font-size: 9px;
   width: 22px;
   height: 13px;
-  border-radius: 2px;
+  border-radius: 0;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -1081,12 +1108,44 @@
 .lfo-inline {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   flex-shrink: 0;
   margin-left: 6px;
 }
 
-/* ── Knob ── */
+/* Small caption under an icon-button/knob to line up with "rate"/"depth" */
+.cap {
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* LFO cycle button: Off -> Sine -> Random -> Off. Rate/Depth knobs next to
+   it stay mounted at all times (never unmount) so the layout doesn't jump
+   as the user cycles through states — they just go inert via Knob's
+   `disabled` prop when Off. */
+.lfo-cycle-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.lfo-cycle-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.lfo-cycle-btn:hover { border-color: var(--border-hover); color: var(--text-tertiary); }
+.lfo-cycle-btn.on { background: var(--accent); border-color: var(--accent); color: var(--bg-body); }
+.lfo-icon-dash { width: 11px; height: 1.5px; background: currentColor; display: block; }
+
+/* ── Knob — donut ring, value printed inside, butt-cap arc (hard-corner
+   system extends to stroke ends, not just rectangles) ── */
 .knob {
   display: flex;
   flex-direction: column;
@@ -1095,7 +1154,19 @@
   user-select: none;
   flex-shrink: 0;
 }
-.knob svg { display: block; }
+.knob svg { display: block; overflow: visible; }
+.knob-track { stroke: var(--border); transition: stroke 0.12s; }
+.knob-arc   { stroke: var(--accent); transition: stroke 0.12s; }
+.knob:hover .knob-arc { stroke: color-mix(in srgb, var(--accent) 85%, white); }
+.knob.dragging { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent)); }
+.knob-value {
+  fill: var(--text-bright);
+  font-family: ui-monospace, Menlo, monospace;
+  font-weight: 600;
+}
+.knob.disabled { cursor: default; }
+.knob.disabled .knob-track { stroke: var(--border-disabled); }
+.knob.disabled .knob-value { fill: var(--border-hover); }
 .knob-label {
   font-size: 9px;
   color: var(--text-secondary);
@@ -1104,6 +1175,98 @@
   margin-top: 2px;
   text-align: center;
 }
+.knob.disabled .knob-label { color: var(--border-disabled); }
+
+/* ── Toggle — pill track + circular thumb, the one deliberately-round
+   exception to the hard-corner system (it's a mechanism, not a container) ── */
+.dv-toggle {
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  padding: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+}
+.dv-toggle.on { background: var(--accent); border-color: var(--accent); }
+.dv-toggle-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--border-hover);
+  transition: transform 0.15s, background 0.15s;
+}
+.dv-toggle.on .dv-toggle-thumb {
+  background: var(--bg-body);
+  transform: translateX(16px);
+}
+
+/* ── Slider — flat two-tone bar, no thumb. Muted resting fill, full-accent
+   fill + a thin tick on hover/focus/drag. Wraps a real range input (opacity
+   0, stretched over the full track) so drag/touch/keyboard keep working. ── */
+.dv-slider {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.dv-slider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  pointer-events: none;
+  transition: background 0.12s;
+}
+.dv-slider-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: color-mix(in srgb, var(--accent) 55%, white);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.dv-slider:hover .dv-slider-fill,
+.dv-slider:focus-within .dv-slider-fill,
+.dv-slider:has(input:active) .dv-slider-fill {
+  background: var(--accent);
+}
+.dv-slider:hover .dv-slider-tick,
+.dv-slider:focus-within .dv-slider-tick,
+.dv-slider:has(input:active) .dv-slider-tick {
+  opacity: 1;
+}
+.dv-slider input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dv-slider.disabled { opacity: 0.35; pointer-events: none; }
+
+/* Vertical variant — Master tab mixer faders. Fill grows from the bottom. */
+.dv-slider.vertical {
+  width: 22px;
+  height: 120px;
+  flex: none;
+}
+.dv-slider.vertical .dv-slider-fill { inset: auto 0 0 0; width: 100%; height: 0; }
+.dv-slider.vertical .dv-slider-tick { left: 0; right: 0; top: auto; width: auto; height: 2px; transform: translateY(1px); }
+.dv-slider.vertical input[type='range'] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
 
 /* ── Master page two-column layout ── */
 .master-layout {
@@ -1111,7 +1274,7 @@
   gap: 32px;
   align-items: flex-start;
   width: 100%;
-  max-width: 960px;
+  max-width: 1120px;
 }
 .master-fx-col {
   display: flex;
@@ -1164,62 +1327,9 @@
   flex-shrink: 0;
   align-self: center;
 }
-/* Vertical fader */
-.v-fader {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 120px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  cursor: pointer;
-  outline: none;
-  padding: 0;
-}
-.v-fader::-webkit-slider-runnable-track {
-  background: transparent;
-}
-.v-fader::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 28px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--fader-color, var(--neutral-dark-300));
-  border: 1.5px solid var(--fader-color-dark, var(--neutral-dark-400));
-  cursor: grab;
-}
-.v-fader::-moz-range-thumb {
-  width: 28px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--fader-color, var(--neutral-dark-300));
-  border: 1.5px solid var(--fader-color-dark, var(--neutral-dark-400));
-  cursor: grab;
-  box-shadow: none;
-}
-.v-fader-master {
-  height: 140px;
-  width: 26px;
-  border-color: var(--border-disabled);
-}
-.v-fader-master::-webkit-slider-thumb {
-  background: var(--neutral-dark-300);
-  border-color: var(--neutral-dark-400);
-  width: 32px;
-  height: 12px;
-  border-radius: 3px;
-}
-.v-fader-master::-moz-range-thumb {
-  background: var(--neutral-dark-300);
-  border-color: var(--neutral-dark-400);
-  width: 32px;
-  height: 12px;
-  border-radius: 3px;
-}
+/* Vertical fader — dv-slider(vertical) with a slightly taller/wider variant
+   for Master. Per-track faders get their tint via Slider's `accent` prop. */
+.dv-slider.v-fader-master { width: 26px; height: 140px; border-color: var(--border-disabled); }
 
 /* ── Waveform meter ── */
 .waveform-wrap {
@@ -1227,7 +1337,7 @@
   min-width: 0;
   position: relative;
   width: 100%;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
   border: 1px solid var(--bg-input);
   box-shadow: 0 2px 12px rgba(0,0,0,0.4);
@@ -1255,13 +1365,13 @@
   width: 48px;
   height: 3px;
   background: var(--bg-input);
-  border-radius: 2px;
+  border-radius: 0;
   overflow: hidden;
 }
 
 .dsp-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 0;
   transition: width 0.4s ease, background 0.4s ease;
 }
 
@@ -1315,7 +1425,7 @@
   width: 100%;
   aspect-ratio: 1;
   min-height: 36px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--bg-input);
   border: 1px solid var(--border);
   cursor: pointer;
@@ -1371,8 +1481,9 @@
 
 .reverb-type-btns {
   display: flex;
-  gap: 4px;
+  gap: 0;
 }
+.reverb-type-btns .reverb-type-btn:not(:first-child) { border-left: none; }
 
 .reverb-type-btn {
   background: var(--bg-input);
@@ -1382,7 +1493,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 4px 10px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.12s;
@@ -1392,15 +1503,17 @@
   border-color: var(--border-hover);
   color: var(--text-tertiary);
 }
+/* Active = solid accent fill + dark text (matches the tabs/page-selector
+   active state — one consistent "selected segment" language app-wide). */
 .reverb-type-btn.active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--bg-body);
 }
 .reverb-type-btn.active:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--bg-body);
 }
 .reverb-type-btn:disabled {
   opacity: 0.4;
@@ -1411,6 +1524,20 @@
   height: 1px;
   background: var(--bg-hover);
   margin: 4px 0;
+}
+
+/* Small uppercase section title above a group of controls (Delay/Texture/
+   Reverb/Mixer column headers on Master, etc). */
+.panel-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 /* ── Rings parameter controls ── */
@@ -1470,7 +1597,7 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  border-radius: 6px;
+  border-radius: 0;
   border: none;
   background: var(--accent);
   color: #fff;

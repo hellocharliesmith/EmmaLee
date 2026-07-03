@@ -1,4 +1,5 @@
 import { Knob } from './Knob';
+import { Slider } from './Slider';
 
 // UI for the Grids drum-pattern generator (src/audio/grids.ts — a hand-ported
 // ~490-line TS port of Mutable Instruments Grids' pattern_generator.cc). Lives
@@ -28,19 +29,15 @@ export interface GridsControlsProps {
 export function GridsControls({ state, onChange, onGenerate }: GridsControlsProps) {
   return (
     <div className="rings-controls grids-controls">
-      <div className="knob-row">
-        <label>Pattern Generator</label>
-      </div>
+      <div className="panel-name">Pattern Generator</div>
       <div className="xy-pad-row">
         <div className="xy-pad-field">
           <span className="xy-pad-label">X</span>
-          <input type="range" min={0} max={1} step={0.01} value={state.x}
-            onChange={e => onChange({ x: parseFloat(e.target.value) })} />
+          <Slider value={state.x} min={0} max={1} onChange={v => onChange({ x: v })} />
         </div>
         <div className="xy-pad-field">
           <span className="xy-pad-label">Y</span>
-          <input type="range" min={0} max={1} step={0.01} value={state.y}
-            onChange={e => onChange({ y: parseFloat(e.target.value) })} />
+          <Slider value={state.y} min={0} max={1} onChange={v => onChange({ y: v })} />
         </div>
       </div>
       <div className="knob-row">
