@@ -25,6 +25,9 @@ let delayNode: DelayNode | null = null;
 let delayFeedbackGain: GainNode | null = null;
 let delayFeedbackFilter: BiquadFilterNode | null = null;
 let delayMixGain: GainNode | null = null;     // delay return level
+let cloudsBusInput: GainNode | null = null;   // sums all tracks' clouds sends
+let cloudsNode: AudioWorkletNode | null = null;
+let cloudsWetGain: GainNode | null = null;    // clouds return level ("Mix")
 let masterGain: GainNode | null = null;
 let analyserL: AnalyserNode | null = null;
 let analyserR: AnalyserNode | null = null;
@@ -130,11 +133,14 @@ interface TrackNodes {
   dryGain: GainNode;
   delaySend: GainNode;
   reverbSend: GainNode;
+  cloudsSend: GainNode;
 }
 const tracks = new Map<TrackId, TrackNodes>();
 
-// Builds the worklet, awaits its 'ready' handshake, and wires dry/delaySend/reverbSend
-// into the shared master bus. Caller is responsible for instrument-specific defaults.
+// Builds the worklet, awaits its 'ready' handshake, and wires dry/delaySend/reverbSend/
+// cloudsSend into the shared master bus. Caller is responsible for instrument-specific
+// defaults. Takes raw WASM bytes (not a compiled Module) and compiles inside the worklet —
+// Chrome silently hangs instantiating a Module across the postMessage boundary.
 async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmBytes: ArrayBuffer): Promise<AudioWorkletNode> {
   const worklet = new AudioWorkletNode(ctx, processorName, {
     numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
@@ -154,12 +160,14 @@ async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName:
   const dryGain    = ctx.createGain(); dryGain.gain.value = 0.85;
   const delaySend  = ctx.createGain(); delaySend.gain.value = 0.5;
   const reverbSend = ctx.createGain(); reverbSend.gain.value = 0.5;
+  const cloudsSend = ctx.createGain(); cloudsSend.gain.value = 0.4;
 
   worklet.connect(dryGain);     dryGain.connect(masterGain!);
   worklet.connect(delaySend);   delaySend.connect(delayBusInput!);
   worklet.connect(reverbSend);  reverbSend.connect(reverbBusInput!);
+  worklet.connect(cloudsSend);  cloudsSend.connect(cloudsBusInput!);
 
-  tracks.set(id, { worklet, dryGain, delaySend, reverbSend });
+  tracks.set(id, { worklet, dryGain, delaySend, reverbSend, cloudsSend });
   return worklet;
 }
 
@@ -227,6 +235,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
 
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
   await audioCtx.audioWorklet.addModule('/plaits-processor.js');
+  await audioCtx.audioWorklet.addModule('/clouds-processor.js');
 
   // Master bus
   masterGain = audioCtx.createGain();
@@ -272,6 +281,52 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   delayNode.connect(delayMixGain);
   delayMixGain.connect(masterGain);
 
+  // Clouds granular effect — an insert on its own send bus (like delay/reverb,
+  // NOT tapped from masterGain's output, which would create an audio feedback
+  // loop). cloudsBusInput sums each track's cloudsSend (a fixed-level tap,
+  // wired in createTrackWorklet); cloudsNode is a real audio-input worklet
+  // (unlike Rings/Plaits/drums, which are self-contained voices with no
+  // input) that granulates whatever's fed into it; cloudsWetGain is its
+  // return level ("Mix"), same role as wetGain/delayMixGain above.
+  cloudsBusInput = audioCtx.createGain();
+  cloudsBusInput.gain.value = 1.0;
+
+  const cloudsBytes  = await fetch('/clouds.wasm').then(r => r.arrayBuffer());
+  const cloudsModule = await WebAssembly.compile(cloudsBytes);
+
+  cloudsNode = new AudioWorkletNode(audioCtx, 'clouds-processor', {
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
+  });
+  cloudsNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule: cloudsModule } });
+  await new Promise<void>((resolve, reject) => {
+    cloudsNode!.port.onmessage = (e) => {
+      if (e.data.type === 'ready') resolve();
+      if (e.data.type === 'error') reject(new Error(e.data.message));
+    };
+  });
+
+  cloudsWetGain = audioCtx.createGain();
+  cloudsWetGain.gain.value = 0.5;
+  cloudsBusInput.connect(cloudsNode);
+  cloudsNode.connect(cloudsWetGain);
+  cloudsWetGain.connect(masterGain);
+
+  // Defaults — position/size/pitch/density/texture/dry_wet/stereo_spread/
+  // feedback/reverb (see clouds_wrapper.cpp's clouds_set_param comment for
+  // the param index mapping). dry_wet=1 (fully wet) since the dry path
+  // already reaches masterGain via each track's own dryGain — this send is
+  // purely the granulated texture layered on top, not a dry/wet blend within
+  // itself (the "Mix" knob below controls how much of that layer is audible).
+  setCloudsParam(0, 0.5);  // position
+  setCloudsParam(1, 0.5);  // size
+  setCloudsParam(2, 0.0);  // pitch (semitones)
+  setCloudsParam(3, 0.65); // density (away from the 0.47-0.53 dead zone)
+  setCloudsParam(4, 0.5);  // texture
+  setCloudsParam(5, 1.0);  // dry_wet
+  setCloudsParam(6, 0.0);  // stereo_spread
+  setCloudsParam(7, 0.0);  // feedback
+  setCloudsParam(8, 0.25); // reverb
+
   // Stereo metering — split master bus into L/R analysers
   const splitter = audioCtx.createChannelSplitter(2);
   masterGain.connect(splitter);
@@ -310,10 +365,11 @@ export function triggerNote(trackId: TrackId, midiNote?: number, velocity?: numb
   t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote, velocity } });
 }
 
-export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb', value: number): void {
+export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb' | 'clouds', value: number): void {
   const t = tracks.get(trackId);
   if (!t) return;
-  (kind === 'delay' ? t.delaySend : t.reverbSend).gain.value = value;
+  const node = kind === 'delay' ? t.delaySend : kind === 'reverb' ? t.reverbSend : t.cloudsSend;
+  node.gain.value = value;
 }
 
 export function setTrackVolume(trackId: TrackId, value: number): void {
@@ -441,6 +497,30 @@ export function setDelayMix(value: number): void {
 export function setDelayFilter(hz: number): void {
   if (!delayFeedbackFilter) return;
   delayFeedbackFilter.frequency.value = hz;
+}
+
+// ── Master Clouds granular effect ──────────────────────────────────────────
+// param: 0=position 1=size 2=pitch(semitones) 3=density 4=texture 5=dry_wet
+// 6=stereo_spread 7=feedback 8=reverb — see clouds_wrapper.cpp for details.
+// dry_wet is fixed at 1.0 (see initAudio) — use setCloudsWet for the
+// master-bus-facing "how much of this layer is audible" control instead.
+export function setCloudsParam(param: number, value: number): void {
+  cloudsNode?.port.postMessage({ type: 'set-param', payload: { param, value } });
+}
+
+export function setCloudsFreeze(on: boolean): void {
+  cloudsNode?.port.postMessage({ type: 'set-freeze', payload: { on } });
+}
+
+// mode: 0=granular 1=stretch 2=looping delay 3=spectral (spectral is
+// compiled in but UNTESTED — see AGENTS.md caveat before wiring it into the UI).
+export function setCloudsPlaybackMode(mode: number): void {
+  cloudsNode?.port.postMessage({ type: 'set-playback-mode', payload: { mode } });
+}
+
+export function setCloudsWet(value: number): void {
+  if (!cloudsWetGain) return;
+  cloudsWetGain.gain.value = value;
 }
 
 export function isAudioReady(): boolean { return isReady; }

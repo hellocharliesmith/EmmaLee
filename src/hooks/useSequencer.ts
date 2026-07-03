@@ -229,6 +229,17 @@ export function useSequencer() {
     });
   }, [activeTrack]);
 
+  // Bulk-write the active track's currentPage in one shot (32 StepValues) — used
+  // by the Grids pattern generator (App.tsx) to fill a whole drum page from a
+  // single "Generate" click, instead of 32 individual toggleNote calls.
+  const setPageSteps = useCallback((newSteps: StepValue[]) => {
+    updateTrack(activeTrack, prev => {
+      const p = prev.currentPage;
+      const newPages = prev.pages.map((pg, i) => i === p ? newSteps : pg);
+      return { ...prev, pages: newPages };
+    });
+  }, [activeTrack]);
+
   // ── Scale / root (per active track) — clears all pages ────────────────
   const setScale = useCallback((s: ScaleType) => {
     updateTrack(activeTrack, prev => ({ ...prev, scale: s, pages: makeEmptyPages(), scrollRow: 0 }));
@@ -380,7 +391,7 @@ export function useSequencer() {
     lastStep: track.lastStep,
     enabledPages: track.enabledPages,
     currentPagePlaying,
-    toggleNote, toggleStrumDir, setProbability, setVelocity,
+    toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps,
     loadTracks, clearCurrentPage,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     switchToPage, setCurrentPage, togglePageEnabled,

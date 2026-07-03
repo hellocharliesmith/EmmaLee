@@ -57,17 +57,28 @@ src/
     engine.ts       — the native Web Audio graph: per-track instances (ringsA,
                        ringsB, plaits, drumHihat, drumSnare, drumKick — each its
                        own AudioWorkletNode, 6 total) + a shared master bus owning
-                       delay and reverb. initAudio() builds it once on first user
+                       delay, reverb, and Clouds (see "Clouds granular effect"
+                       below). initAudio() builds it once on first user
                        gesture (browser autoplay rules). A generic `tracks` Map
-                       (TrackId -> {worklet, dryGain, delaySend, reverbSend}) backs
-                       triggerNote/setTrackSend/setTrackVolume for ANY track type.
-                       Instrument-specific setters stay separate:
+                       (TrackId -> {worklet, dryGain, delaySend, reverbSend,
+                       cloudsSend}) backs triggerNote/setTrackSend/setTrackVolume
+                       for ANY track type. Instrument-specific setters stay separate:
                        setRingsParam/setRingsModel(trackId,...) vs
                        setPlaitsParam/setPlaitsModel(...) (Plaits melodic has only
                        one track, so no trackId needed there). Drum voices reuse
                        createTrackWorklet + the 'plaits-processor' processor, just
                        locked to a fixed engine/note via createDrumTrack(). Master
-                       setters (setReverbWet, setDelayTime, etc.) are global, untouched.
+                       setters (setReverbWet, setDelayTime, setCloudsParam, etc.)
+                       are global, untouched.
+    grids.ts         — hand-ported TS port of Mutable Instruments Grids'
+                       pattern_generator.cc (drum output mode only). Pure
+                       control-rate logic (32-step pattern by interpolating 4
+                       corner patterns in an X/Y space) — no WASM, runs once per
+                       "Generate" click on the Drums tab. See "Grids pattern
+                       generator" below.
+    gridsNodeTables.ts — the 25 lookup tables grids.ts interpolates between,
+                       auto-extracted from rings-source/grids/resources.cc — do
+                       not hand-edit, regenerate from resources.cc if it changes.
     utils.ts         — small helpers (e.g. divisionSeconds for BPM-synced delay times)
   hooks/
     useSequencer.ts  — multitrack sequencer state: Record<TrackId, TrackSeqState>,
@@ -97,10 +108,18 @@ src/
     PlaitsControls.tsx — Engine picker (6 curated engines) + Harmonics/Timbre/
                        Morph/Decay/LPG Colour sliders. No trackId prop — only one
                        Plaits melodic track.
-    (No DrumControls.tsx in v1 — the Drums tab has no instrument panel, just the
-                       grid + a shared Sends row. See BACKLOG.md "Per-voice drum
-                       tone shaping" if that's wanted later.)
+    DrumControls.tsx  — per-voice Tone/Decay knobs (Hi-Hat/Snare/Kick).
+    GridsControls.tsx — the Grids "Generate Pattern" panel on the Drums tab:
+                       X/Y sliders, density knob per voice, randomness knob.
+                       Renders below DrumControls when activeTrack==='drums'.
+                       Calls src/audio/grids.ts directly (no engine.ts
+                       involvement — this only writes sequencer step data, no
+                       audio graph changes) then useSequencer's setPageSteps()
+                       to bulk-write the current page's 32 steps in one shot.
     DelayControls.tsx, ReverbControls.tsx — master-only, no per-track concept
+    CloudsControls.tsx — master-only Clouds granular effect panel (Freeze,
+                       Mix, Position/Size/Pitch/Density/Texture/Feedback/
+                       Reverb). See "Clouds granular effect" below.
     Knob.tsx, SaveLoad.tsx, WaveformMeter.tsx
   App.tsx            — track tabs (Rings A / Rings B / Plaits / Drums / Master) +
                        viewSection toggle. `trackParams` is a discriminated union
@@ -120,12 +139,27 @@ public/
                        index. Has a 'set-note' message type (distinct from
                        'trigger') that sets pitch WITHOUT firing — used once at
                        drum-voice creation so they don't sound on page load.
-  Both load WASM via WebAssembly.instantiate directly (importScripts is NOT
+  clouds-processor.js — Clouds granular effect worklet. UNLIKE the other three,
+                       this one has a real audio INPUT (numberOfInputs: 1) — it's
+                       an insert effect on the master bus, not a self-contained
+                       voice. Also does its own sample-rate conversion (a
+                       continuous-phase LinearResampler class defined in this
+                       file) since Clouds' DSP is hardcoded to 32kHz internally
+                       but the AudioContext runs at 44.1/48kHz — see "Clouds
+                       granular effect" below for why that matters.
+  Both/all load WASM via WebAssembly.instantiate directly (importScripts is NOT
   available inside AudioWorklet global scope). Each WASM module is compiled ONCE
   in engine.ts; the same compiled Module is posted to every instance that needs it
-  (2x for Rings, 4x for Plaits) — saves re-compiling per instance.
-  rings.wasm/rings.js, plaits.wasm/plaits.js — compiled output, see "Recompiling
-                       the WASM" below
+  (2x for Rings, 4x for Plaits, 1x for Clouds) — saves re-compiling per instance.
+  rings.wasm/rings.js, plaits.wasm/plaits.js, clouds.wasm/clouds.js — compiled
+                       output, see "Recompiling the WASM" below. NOTE: the
+                       worklets only ever fetch/instantiate the .wasm file
+                       directly — the Emscripten-generated .js glue (MODULARIZE
+                       output) is NOT used at runtime by any worklet (can't run
+                       Emscripten's JS runtime inside AudioWorkletGlobalScope
+                       cleanly); each worklet reimplements the tiny bit of glue
+                       it needs by hand (memory-grow import, direct exports["x"]
+                       calls) — see "Discovering WASM export names" below.
 rings-dsp/
   rings_wrapper.cpp  — thin C wrapper exposing rings_init/set_param/trigger/etc
   plaits_wrapper.cpp — same pattern for Plaits, exposing plaits_init/set_param/
@@ -136,12 +170,27 @@ rings-dsp/
                        the 3 drum voices) just limit which indices get used, not
                        what's in the binary — this is also why drums needed no new
                        WASM compile, just more JS-side worklet instances.
-rings-source/        — full clone of Mutable Instruments' actual firmware source for
-                       both Rings and Plaits
+  clouds_wrapper.cpp — same pattern for Clouds, wrapping clouds::GranularProcessor.
+                       Exposes clouds_init/set_param/set_playback_mode/set_freeze/
+                       set_quality/process. Uses static byte-array buffers sized
+                       WAY beyond real hardware (1MB + 128KB vs ~116KB + ~64KB)
+                       since a browser tab isn't RAM-constrained — gives several
+                       seconds of freeze/loop buffer instead of ~1s. See "Clouds
+                       granular effect" below for the full writeup, including the
+                       sample-rate caveat and what's NOT wired up yet (spectral
+                       playback mode, per-track Clouds Send knob).
+rings-source/        — full clone of Mutable Instruments' actual firmware source
+                       (Rings, Plaits, Grids, Clouds all present — NOT Beads, see
+                       BACKLOG.md's Beads entry for why).
 build-wasm.sh        — the emcc compile command for Rings
 build-plaits-wasm.sh — same for Plaits (longer file list — speech synth, FM,
                        physical modelling, chords all need compiling in since
                        Voice references all engines)
+build-clouds-wasm.sh — same for Clouds (granular_processor.cc + correlator +
+                       mu_law + resources + the pvoc/ phase-vocoder files, which
+                       are unavoidable even though the spectral playback mode
+                       itself isn't exposed in the UI — PhaseVocoder is a plain
+                       member of GranularProcessor, not conditionally compiled).
 ```
 
 ## Multitrack architecture (added 2026-06-21, completed same day)
@@ -261,6 +310,134 @@ the error compares hook call order across HMR-patched renders, not real renders.
 you see this, do a full dev-server restart (not just `location.reload()`) before
 concluding there's a real bug — confirmed during this session's work.
 
+## Grids pattern generator (added 2026-07-01)
+
+`src/audio/grids.ts` is a hand-ported TS port of Mutable Instruments Grids'
+`pattern_generator.cc` (drum output mode only — Euclidean mode isn't ported,
+no UI equivalent). This is pure control-rate logic (a 32-step pattern per
+voice, built by interpolating between 4 corner patterns in a 2D X/Y space
+using the original's 8-bit fixed-point `U8Mix`/`U8U8MulShift8` arithmetic,
+reproduced exactly, not approximated with floats) — no oscillators, no
+sample-rate concerns, so it runs as plain TypeScript rather than WASM. It
+only executes once per "Generate Pattern" click, not per audio sample, so a
+WASM/AudioWorklet round trip would be pure overhead.
+
+`src/audio/gridsNodeTables.ts` holds the 25 lookup tables (`node_0`..`node_24`
+from `rings-source/grids/resources.cc`, 96 bytes each = 3 instruments × 32
+steps) the interpolation reads from — auto-extracted with a small Node
+script, not hand-transcribed. Regenerate it the same way if the upstream
+source ever changes; don't hand-edit.
+
+**Integration**: `src/components/GridsControls.tsx` renders below the
+per-voice Tone/Decay knobs on the Drums tab. X/Y sliders + a density knob per
+voice (Hi-Hat/Snare/Kick) + a randomness knob. "Generate Pattern" calls
+`generateGridsPattern()` then remaps Grids' own instrument order (bd/sd/hh,
+matching the hardware's bit layout) to the app's drum row order (Hi-Hat/
+Snare/Kick, top to bottom — see `GRIDS_INSTRUMENT_BD/SD/HH` constants and the
+remap comment in `App.tsx`'s `handleGenerateDrums`), then calls the new
+`setPageSteps()` on `useSequencer.ts` to bulk-write all 32 steps of the
+current page in one shot (added specifically for this — every other step
+editor there mutates one column at a time). Per-step accent (Grids' own
+"level > 192" concept) maps to the existing per-column velocity system: 100%
+if any active voice that step was accented, 75% otherwise.
+
+**Verified**: logged several X/Y/density combinations via a standalone `tsx`
+script and eyeballed the 32-step patterns — kick on downbeats, density knobs
+visibly changing fill, X=0/Y=0/density=0 producing an empty pattern, no
+crashes across the parameter range. Did NOT verify the "Generate" button
+click in an actual running browser (see "Verification caveat" in the
+Multitrack architecture section above — the same headless-preview
+limitation applies here); traced the data flow through
+`GridsControls.tsx` → `App.tsx`'s `handleGenerateDrums` → `setPageSteps` →
+`useSequencer.ts`'s `updateTrack` → re-render instead. `npm run build`
+passes with no TS errors.
+
+**Not persisted**: the Generate panel's X/Y/density/randomness values live in
+local `App.tsx` state (`gridsUi`), not the save format — regenerating just
+overwrites the current page's steps like any manual edit would, so there was
+no strong need to save the generator inputs themselves. See BACKLOG.md if
+that's wanted later.
+
+## Clouds granular effect (added 2026-07-01)
+
+Clouds is wired in as a **master-bus send effect**, architecturally the same
+pattern as the existing delay/reverb sends (`engine.ts`): each track worklet
+gets a `cloudsSend` gain (currently a fixed default level, no per-track UI
+knob — see BACKLOG.md), summed into a new `cloudsBusInput`, which feeds a new
+`clouds-processor` AudioWorkletNode. Unlike Rings/Plaits/drum worklets (which
+are self-contained voices, `numberOfInputs: 0`), the Clouds worklet has a
+REAL audio input (`numberOfInputs: 1`) — it granulates whatever's actually
+playing on the master bus, then returns through `cloudsWetGain` ("Mix") back
+into `masterGain`. That return is deliberately one-way, NOT tapped from
+`masterGain`'s own output — doing that would create an audio feedback loop
+back into the granulator (the master bus doesn't wrap around into effect
+inputs anywhere else in this app either, for the same reason).
+
+**DSP**: `rings-dsp/clouds_wrapper.cpp` wraps `clouds::GranularProcessor`
+(`rings-source/clouds/dsp/granular_processor.{cc,h}`) with the same
+`extern "C"` shim pattern as the Rings/Plaits wrappers:
+`clouds_init/set_param/set_playback_mode/set_freeze/set_quality/process`.
+Buffer sizes (1MB + 128KB) are much larger than real hardware (~116KB +
+~64KB, see `rings-source/clouds/clouds.cc`'s `block_mem`/`block_ccm`) since a
+browser tab isn't RAM-constrained — gives several seconds of freeze/loop
+buffer instead of ~1s. `build-clouds-wasm.sh` compiles it; needed to link the
+`pvoc/` phase-vocoder files too even though the spectral playback mode isn't
+exposed in the UI, since `PhaseVocoder` is an unconditional member of
+`GranularProcessor`, not compiled in only when spectral mode is selected.
+
+**Sample-rate mismatch (important if you touch this again)**: Clouds' DSP is
+hardcoded to assume 32kHz internally — confirmed via the real firmware's
+`clouds.cc` (`codec.Init(master, 32000)`) and `clouds/test/clouds_test.cc`
+(`kSampleRate = 32000`). This is NOT the same as Rings/Plaits, which both
+assume 48kHz (matching this app's AudioContext natively, see
+`rings-source/plaits/dsp/dsp.h`'s `kSampleRate`). Feeding Clouds audio
+unchanged at 48kHz would make grain duration, the pitch shifter, and the
+built-in reverb all run ~1.5x too fast. `public/clouds-processor.js` handles
+this itself with a small continuous-phase `LinearResampler` class — downsamples
+each block to 32kHz before `clouds_process()`, upsamples the result back to
+context rate before writing to output, carrying fractional phase AND the
+previous block's last sample across calls so there's no click at block
+boundaries. If you ever touch the resampling code, know that it was verified
+(see below) at both 44.1kHz and 48kHz context rates — retest both if you
+change it.
+
+**Verified**: two layers. (1) Raw WASM: instantiated `public/clouds.wasm`
+directly in Node the same way the worklet does (manual `WebAssembly.instantiate`
+with a minimal import object, NOT the Emscripten glue .js — see "Discovering
+WASM export names" below for why), fed it a synthesized sine wave, granulated
+it live, froze the buffer, granulated the frozen buffer — got sensible
+RMS/peak in both cases, no NaN, no runaway clipping. Note: `density=0.5` is a
+genuine "dead zone" in Clouds' own algorithm (zero grains scheduled between
+0.47–0.53) — if you test this again and get silence, check density first,
+it's not necessarily a bug. (2) Resampling logic: stubbed
+`AudioWorkletProcessor`/`registerProcessor`/`sampleRate` in a Node `vm`
+context and ran `clouds-processor.js`'s actual unmodified `process()` loop
+for ~400 blocks at both 48kHz and 44.1kHz, toggling freeze mid-stream —
+non-silent, no NaN/Inf, output FIFO stayed bounded (~1 sample residual,
+confirming the down/up resampler ratios are exact inverses and don't drift
+over time). Did NOT verify in an actual running browser — same headless-preview
+limitation as the rest of this app's AudioWorklet work (see "Verification
+caveat" in the Multitrack architecture section above).
+
+**What's NOT done / known gaps** (see BACKLOG.md for the actionable version):
+- No per-track Clouds Send knob yet — every track feeds the bus at the same
+  fixed level (`cloudsSend.gain.value = 0.4` in `createTrackWorklet`).
+  Architecturally ready (mirrors `delaySend`/`reverbSend` exactly, and
+  `setTrackSend`'s `kind` union already includes `'clouds'`) — just needs a
+  3rd knob added to every track panel + a save-format field, deliberately
+  deferred to keep this session's UI/save-format surface smaller.
+- Clouds' parameters (`cloudsUi` in `App.tsx`) are NOT persisted in the save
+  format, same scope decision as the Grids generator UI state above.
+- Spectral playback mode (`clouds_set_playback_mode(3)`) compiles and links
+  but is untested and not exposed in `CloudsControls.tsx` — only Granular
+  mode (0) is used. Stretch/Looping-delay modes (1/2) are wired in the
+  wrapper but also not exposed in the UI yet.
+- The resampler is linear interpolation, not a proper windowed-sinc
+  resampler — adequate for a granular texture effect, introduces some
+  aliasing that a "transparent" resampler wouldn't. Not expected to matter
+  much for this use case but worth knowing if the wet signal sounds slightly
+  gritty even at low density/texture settings.
+
 ## Key decisions worth knowing before you change things
 
 - **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)
@@ -317,12 +494,17 @@ to the picker — see BACKLOG.md).
 ```bash
 ./build-wasm.sh          # Rings
 ./build-plaits-wasm.sh   # Plaits
+./build-clouds-wasm.sh   # Clouds
 ```
 
-Both require Emscripten SDK installed locally (`~/Developer/emsdk`, sourced via
+All three require Emscripten SDK installed locally (`~/Developer/emsdk`, sourced via
 `emsdk_env.sh` at the top of each script) — confirmed present and working as of
-2026-06-21. This is a real local dependency — if you're an agent running in a
-sandboxed/remote environment without that toolchain, you cannot recompile the WASM.
+2026-06-21, and reconfirmed 2026-07-01 for the Clouds build (note: `emcc --version`
+can spuriously fail with a Python-version assertion if `emsdk_env.sh` hasn't fully
+taken effect in that shell yet — re-run the actual build command before concluding
+the toolchain is broken, it resolved itself the same session). This is a real local
+dependency — if you're an agent running in a sandboxed/remote environment without
+that toolchain, you cannot recompile the WASM.
 Flag this limitation to the user rather than guessing. After recompiling, re-check
 the export-letter mapping (see "Discovering WASM export names" above) before editing
 the corresponding `*-processor.js` — the letters can shift if the file list or
