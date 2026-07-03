@@ -682,7 +682,7 @@ export default function App() {
                 onClick={() => setKidsMode(v => !v)}
                 title={kidsMode ? 'Exit Kids Mode' : 'Kids Mode'}
               >
-                {kidsMode ? '🎮 Exit Kids' : '🎮 Kids'}
+                {kidsMode ? 'Exit Kids' : 'Kids'}
               </button>
             </div>
           </div>
@@ -693,7 +693,7 @@ export default function App() {
             onClick={() => setKidsMode(v => !v)}
             title="Exit Kids Mode"
           >
-            🎮 Exit Kids
+            Exit Kids
           </button>
         )}
       </div>
@@ -855,7 +855,7 @@ export default function App() {
                 </div>
                 <div className="send-row">
                   <div className="panel-name">Sends</div>
-                  <div className="knob-row">
+                  <div className="sends-grid">
                     <Knob value={active.volume} min={0} max={1.5} label="Volume" size={68} percent
                       onChange={v => setVolumeFor(activeTrack, v)} />
                     <Knob value={active.delaySend} min={0} max={1} label="Delay" size={68} percent
@@ -870,62 +870,71 @@ export default function App() {
             </>
           ) : (
             <div className="master-layout">
-              {/* Left: waveform meter + FX controls stacked */}
-              <div className="master-fx-col">
-                <div className="waveform-section">
-                  <WaveformMeter />
-                </div>
-                <DelayControls
-                  bpm={bpm} division={delayDivision} mix={delayMix}
-                  feedback={delayFeedback} filter={delayFilter}
-                  onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
-                  onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
-                />
-                <CloudsControls
-                  state={cloudsUi}
-                  presets={TEXTURE_PRESETS}
-                  onPresetLoad={loadTexturePreset}
-                  onChange={next => setCloudsUi(prev => ({ ...prev, ...next }))}
-                />
-                <ReverbControls
-                  activeType={reverbType} wet={reverbMix}
-                  decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
-                  onTypeChange={setReverbType} onWetChange={setReverbMix}
-                  onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
-                  onToneChange={setReverbTone}
-                />
+              <div className="waveform-section">
+                <WaveformMeter />
               </div>
 
-              {/* Right: vertical mixer faders */}
-              <div className="master-mixer-col">
-                <div className="mixer-section-label">Mixer</div>
-                <div className="mixer-faders">
-                  {/* Master volume — taller, neutral style */}
-                  <div className="mixer-fader-wrap">
-                    <Slider vertical className="v-fader-master"
-                      min={0} max={1.5} step={0.01}
-                      value={masterVolume}
-                      onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }}
-                    />
-                    <div className="mixer-fader-label mixer-fader-label-master">Master</div>
-                  </div>
+              {/* Delay | Texture | Reverb | Mixer — four side-by-side
+                  columns divided by 1px vertical rules, per master_layout.html. */}
+              <div className="master-columns">
+                <div className="master-fx-col">
+                  <DelayControls
+                    bpm={bpm} division={delayDivision} mix={delayMix}
+                    feedback={delayFeedback} filter={delayFilter}
+                    onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
+                    onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
+                  />
+                </div>
+                <div className="master-col-divider" />
+                <div className="master-fx-col">
+                  <CloudsControls
+                    state={cloudsUi}
+                    presets={TEXTURE_PRESETS}
+                    onPresetLoad={loadTexturePreset}
+                    onChange={next => setCloudsUi(prev => ({ ...prev, ...next }))}
+                  />
+                </div>
+                <div className="master-col-divider" />
+                <div className="master-fx-col">
+                  <ReverbControls
+                    activeType={reverbType} wet={reverbMix}
+                    decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
+                    onTypeChange={setReverbType} onWetChange={setReverbMix}
+                    onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
+                    onToneChange={setReverbTone}
+                  />
+                </div>
+                <div className="master-col-divider" />
 
-                  <div className="mixer-v-divider" />
-
-                  {/* Per-track faders, color-coded */}
-                  {TRACK_IDS.map(id => (
-                    <div key={id} className="mixer-fader-wrap">
-                      <Slider vertical
-                        accent={TRACK_FADER_COLORS[id][0]}
+                {/* Vertical mixer faders */}
+                <div className="master-mixer-col">
+                  <div className="mixer-section-label">Mixer</div>
+                  <div className="mixer-faders">
+                    {/* Master volume — taller, neutral style */}
+                    <div className="mixer-fader-wrap">
+                      <Slider vertical className="v-fader-master"
                         min={0} max={1.5} step={0.01}
-                        value={trackParams[id].volume}
-                        onChange={v => setVolumeFor(id, v)}
+                        value={masterVolume}
+                        onChange={v => { setMasterVolume(v); Engine.setMasterVolume(v); }}
                       />
-                      <div className="mixer-fader-label" style={{ color: TRACK_FADER_COLORS[id][0] }}>
-                        {TRACK_LABELS[id]}
-                      </div>
+                      <div className="mixer-fader-label mixer-fader-label-master">Master</div>
                     </div>
-                  ))}
+
+                    {/* Per-track faders, color-coded */}
+                    {TRACK_IDS.map(id => (
+                      <div key={id} className="mixer-fader-wrap">
+                        <Slider vertical
+                          accent={TRACK_FADER_COLORS[id][0]}
+                          min={0} max={1.5} step={0.01}
+                          value={trackParams[id].volume}
+                          onChange={v => setVolumeFor(id, v)}
+                        />
+                        <div className="mixer-fader-label" style={{ color: TRACK_FADER_COLORS[id][0] }}>
+                          {TRACK_LABELS[id]}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

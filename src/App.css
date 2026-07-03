@@ -22,6 +22,7 @@
   --neutral-dark-900: #1c1a18; --neutral-dark-950: #131211;
 
   /* ── Semantic UI roles, mapped onto the neutral-dark ramp ── */
+  --bg-page: #0d0c0b; /* outer page background — the app itself sits as a bordered card on top of this, one shade darker than --bg-body */
   --bg-body: var(--neutral-dark-950);
   --bg-panel: var(--neutral-dark-900);
   --bg-input: var(--neutral-dark-900);
@@ -48,13 +49,20 @@
 .app.track-drums   { --accent: var(--slate-400); --accent-dark: var(--slate-500); --accent-light: var(--slate-300); }
 .app.track-master  { --accent: var(--neutral-dark-300); --accent-dark: var(--neutral-dark-400); --accent-light: var(--neutral-dark-200); }
 
+/* The app renders as a bordered card sitting on the (darker) page background,
+   not edge-to-edge — matches both rings_layout.html and master_layout.html,
+   which wrap everything in a `.dv-card` with its own background/border. */
+body { display: flex; justify-content: center; padding: 40px 20px; min-height: 100vh; }
 .app {
-  min-height: 100vh;
+  width: 100%;
+  max-width: 1172px; /* 1120px content + card padding */
+  background: var(--bg-body);
+  border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48px 24px 64px;
-  gap: 28px;
+  padding: 26px 26px 22px;
+  gap: 22px;
 }
 
 .app h1 {
@@ -394,10 +402,12 @@
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-family: inherit;
-  padding: 6px 14px;
-  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 7px 14px;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -592,8 +602,11 @@
 .send-row {
   flex-shrink: 0;
 }
-.send-row .knob-row {
-  gap: 16px;
+/* 2x2 grid, not a single row of 4 — matches rings_layout.html's Sends panel. */
+.sends-grid {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 22px;
 }
 
 /* Mixer knob row, on the Master page */
@@ -1296,10 +1309,25 @@
 /* ── Master page two-column layout ── */
 .master-layout {
   display: flex;
-  gap: 32px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 20px;
   width: 100%;
   max-width: 1120px;
+}
+/* Delay | Texture | Reverb | Mixer as four side-by-side columns divided by
+   1px vertical rules — matches master_layout.html exactly (was previously
+   stacked in one column, which is the "layout is way off" bug). */
+.master-columns {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+}
+.master-col-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  flex-shrink: 0;
 }
 .master-fx-col {
   display: flex;
