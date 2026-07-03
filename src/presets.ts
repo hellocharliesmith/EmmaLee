@@ -96,3 +96,20 @@ export const DRUM_PRESETS: DrumPreset[] = [
     },
   },
 ];
+
+export interface TexturePreset {
+  name: string;
+  position: number;
+  size: number;
+  pitch: number;
+  density: number;
+  texture: number;
+  feedback: number;
+  mix: number;
+  reverbSend: number;
+}
+
+// Empty until captured via captureTexture() in the browser console (same
+// workflow as captureVoice() for the per-track voice presets) — the preset
+// dropdown on the Texture panel hides itself when this is empty.
+export const TEXTURE_PRESETS: TexturePreset[] = [];

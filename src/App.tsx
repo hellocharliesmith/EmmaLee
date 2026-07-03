@@ -7,7 +7,7 @@ import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT, STE
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { DEMO_SONGS } from './demoSongs';
-import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, type RingsPreset, type PlaitsPreset, type DrumPreset } from './presets';
+import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { WaveformMeter } from './components/WaveformMeter';
@@ -187,7 +187,7 @@ export default function App() {
   // Session-only, like gridsUi above — not part of the save format yet.
   const [cloudsUi, setCloudsUi] = useState<CloudsUiState>({
     position: 0.5, size: 0.5, pitch: 0.5, density: 0.65, texture: 0.5,
-    feedback: 0.0, mix: 0.5, freeze: false,
+    feedback: 0.0, mix: 0.5, reverbSend: 0.0, freeze: false,
   });
 
   // ── Grids drum pattern generator (Drums tab only) ────────────────────
@@ -241,6 +241,18 @@ export default function App() {
       return p;
     };
   }, [trackParams, activeTrack]);
+
+  // Console helper — open DevTools and type captureTexture() to get the current
+  // Texture (master granular effect) settings, same workflow as captureVoice().
+  useEffect(() => {
+    (window as any).captureTexture = () => {
+      const p = { name: 'Untitled', ...cloudsUi };
+      delete (p as any).freeze;
+      const out = JSON.stringify(p, null, 2);
+      console.log(`captureTexture()\n${out}`);
+      return p;
+    };
+  }, [cloudsUi]);
 
   // ── Save / load ───────────────────────────────────────────────────────
   const { songs, save, remove } = useSavedSongs();
@@ -467,6 +479,24 @@ export default function App() {
     if (!Engine.isAudioReady()) return;
     Engine.setPlaitsModel(preset.engine);
     preset.params.forEach((v, i) => Engine.setPlaitsParam(i, v));
+  }
+
+  function loadTexturePreset(preset: TexturePreset) {
+    setCloudsUi({
+      position: preset.position, size: preset.size, pitch: preset.pitch,
+      density: preset.density, texture: preset.texture, feedback: preset.feedback,
+      mix: preset.mix, reverbSend: preset.reverbSend, freeze: false,
+    });
+    if (!Engine.isAudioReady()) return;
+    Engine.setCloudsParam(0, preset.position);
+    Engine.setCloudsParam(1, preset.size);
+    Engine.setCloudsParam(2, (preset.pitch - 0.5) * 96);
+    Engine.setCloudsParam(3, preset.density);
+    Engine.setCloudsParam(4, preset.texture);
+    Engine.setCloudsParam(7, preset.feedback);
+    Engine.setCloudsWet(preset.mix);
+    Engine.setCloudsReverbSend(preset.reverbSend);
+    Engine.setCloudsFreeze(false);
   }
 
   function handleExport(name: string) {
@@ -828,16 +858,18 @@ export default function App() {
                   onDivisionChange={setDelayDivision} onMixChange={setDelayMix}
                   onFeedbackChange={setDelayFeedback} onFilterChange={setDelayFilter}
                 />
+                <CloudsControls
+                  state={cloudsUi}
+                  presets={TEXTURE_PRESETS}
+                  onPresetLoad={loadTexturePreset}
+                  onChange={next => setCloudsUi(prev => ({ ...prev, ...next }))}
+                />
                 <ReverbControls
                   activeType={reverbType} wet={reverbMix}
                   decay={reverbDecay} preDelay={reverbPreDelay} tone={reverbTone}
                   onTypeChange={setReverbType} onWetChange={setReverbMix}
                   onDecayChange={setReverbDecay} onPreDelayChange={setReverbPreDelay}
                   onToneChange={setReverbTone}
-                />
-                <CloudsControls
-                  state={cloudsUi}
-                  onChange={next => setCloudsUi(prev => ({ ...prev, ...next }))}
                 />
               </div>
 

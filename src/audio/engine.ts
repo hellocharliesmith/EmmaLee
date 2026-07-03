@@ -28,6 +28,7 @@ let delayMixGain: GainNode | null = null;     // delay return level
 let cloudsBusInput: GainNode | null = null;   // sums all tracks' clouds sends
 let cloudsNode: AudioWorkletNode | null = null;
 let cloudsWetGain: GainNode | null = null;    // clouds return level ("Mix")
+let cloudsReverbSend: GainNode | null = null; // clouds output -> reverbBusInput, own amount
 let masterGain: GainNode | null = null;
 let analyserL: AnalyserNode | null = null;
 let analyserR: AnalyserNode | null = null;
@@ -313,6 +314,16 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   cloudsNode.connect(cloudsWetGain);
   cloudsWetGain.connect(masterGain);
 
+  // Texture -> Reverb: an additional tap off Clouds' own output (not the Mix-
+  // scaled cloudsWetGain, so this send works independently of how loud the
+  // direct texture return is) feeding into the same reverbBusInput every
+  // track's reverbSend already sums into. Off by default (0) — opt-in extra
+  // "chain" character, not part of the base signal path.
+  cloudsReverbSend = audioCtx.createGain();
+  cloudsReverbSend.gain.value = 0.0;
+  cloudsNode.connect(cloudsReverbSend);
+  cloudsReverbSend.connect(reverbBusInput!);
+
   // Defaults — position/size/pitch/density/texture/dry_wet/stereo_spread/
   // feedback/reverb (see clouds_wrapper.cpp's clouds_set_param comment for
   // the param index mapping). dry_wet=1 (fully wet) since the dry path
@@ -523,6 +534,13 @@ export function setCloudsPlaybackMode(mode: number): void {
 export function setCloudsWet(value: number): void {
   if (!cloudsWetGain) return;
   cloudsWetGain.gain.value = value;
+}
+
+// Amount of Clouds' own output fed into the shared reverb bus, independent of
+// the Mix knob above (see cloudsReverbSend's setup comment in initAudio).
+export function setCloudsReverbSend(value: number): void {
+  if (!cloudsReverbSend) return;
+  cloudsReverbSend.gain.value = value;
 }
 
 export function isAudioReady(): boolean { return isReady; }
