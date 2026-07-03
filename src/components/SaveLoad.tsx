@@ -7,23 +7,55 @@ interface Props {
   onSave: (name: string) => void;
   onLoad: (song: SavedSong) => void;
   onDelete: (id: string) => void;
+  onNewSong: () => void;
+  onExport: (name: string) => void;
+  onImport: (song: SavedSong) => void;
 }
 
-export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
-  const [showSave, setShowSave]         = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+export function SaveLoad({ songs, onSave, onLoad, onDelete, onNewSong, onExport, onImport }: Props) {
+  const [showSave, setShowSave]           = useState(false);
+  const [showExport, setShowExport]       = useState(false);
+  const [showDropdown, setShowDropdown]   = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [importError, setImportError]     = useState<string | null>(null);
   const [name, setName] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef     = useRef<HTMLInputElement>(null);
+  const exportRef    = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (showSave) { setName(''); setTimeout(() => inputRef.current?.focus(), 40); }
-  }, [showSave]);
+    if (showSave)   { setName(''); setTimeout(() => inputRef.current?.focus(),  40); }
+    if (showExport) { setName(''); setTimeout(() => exportRef.current?.focus(), 40); }
+  }, [showSave, showExport]);
 
   function handleSave() {
     if (!name.trim()) return;
     onSave(name.trim());
     setShowSave(false);
+  }
+
+  function handleExport() {
+    if (!name.trim()) return;
+    onExport(name.trim());
+    setShowExport(false);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as SavedSong;
+        if (!parsed.state || !parsed.name) throw new Error('Unrecognised file format');
+        onImport({ ...parsed, id: crypto.randomUUID(), savedAt: Date.now() });
+        setImportError(null);
+      } catch {
+        setImportError('Could not read that file — make sure it\'s an Emma Lee export.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   }
 
   const pendingSong = songs.find(s => s.id === pendingDelete);
@@ -33,6 +65,10 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
     <>
       <div className="sl-wrap">
         <button className="sl-btn" onClick={() => setShowSave(true)}>Save</button>
+        <button className="sl-btn" onClick={() => setShowExport(true)}>Export</button>
+        <button className="sl-btn sl-import-btn" onClick={() => fileInputRef.current?.click()}>Import</button>
+        <input ref={fileInputRef} type="file" accept=".json,application/json"
+          style={{ display: 'none' }} onChange={handleFileChange} />
 
         {totalCount > 0 && (
           <div className="sl-dropdown-wrap">
@@ -43,6 +79,20 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
               <>
                 <div className="sl-backdrop" onClick={() => setShowDropdown(false)} />
                 <div className="sl-dropdown">
+
+                  {/* ── New Song ── */}
+                  <div className="sl-row sl-row-new">
+                    <div className="sl-info">
+                      <span className="sl-name">New Song</span>
+                      <span className="sl-date">Clear all + random presets</span>
+                    </div>
+                    <div className="sl-actions">
+                      <button className="sl-load"
+                        onClick={() => { onNewSong(); setShowDropdown(false); }}>
+                        New
+                      </button>
+                    </div>
+                  </div>
 
                   {/* ── Demo / example songs — always present, not deletable ── */}
                   <div className="sl-section-label">Examples</div>
@@ -117,6 +167,32 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
         </div>
       )}
 
+      {/* Export modal */}
+      {showExport && (
+        <div className="modal-backdrop" onClick={() => setShowExport(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Export Song</h3>
+            <p className="modal-body">Downloads a .json file with your song and all voice settings.</p>
+            <input
+              ref={exportRef}
+              className="modal-input"
+              placeholder="Song name…"
+              value={name}
+              maxLength={60}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleExport();
+                if (e.key === 'Escape') setShowExport(false);
+              }}
+            />
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setShowExport(false)}>Cancel</button>
+              <button className="modal-confirm" onClick={handleExport} disabled={!name.trim()}>Download</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete confirm modal */}
       {pendingDelete && (
         <div className="modal-backdrop" onClick={() => setPendingDelete(null)}>
@@ -129,6 +205,19 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete }: Props) {
                 onClick={() => { onDelete(pendingDelete); setPendingDelete(null); }}>
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import error toast */}
+      {importError && (
+        <div className="modal-backdrop" onClick={() => setImportError(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Import failed</h3>
+            <p className="modal-body">{importError}</p>
+            <div className="modal-actions">
+              <button className="modal-confirm" onClick={() => setImportError(null)}>OK</button>
             </div>
           </div>
         </div>

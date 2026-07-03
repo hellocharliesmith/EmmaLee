@@ -2,6 +2,7 @@ import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, se
          type RingsTrackId } from '../audio/engine';
 import { Knob } from './Knob';
 import type { LfoState } from '../types';
+import type { RingsPreset } from '../presets';
 
 const MODELS = [
   { id: 0, label: 'Modal',   description: 'Struck metal, glass, wood — 60 resonant modes' },
@@ -29,14 +30,30 @@ export interface RingsControlsProps {
   model: number;
   params: [number, number, number, number];
   lfo: LfoState[];
+  presets: RingsPreset[];
+  onPresetLoad: (p: RingsPreset) => void;
   onModelChange: (m: number) => void;
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
 }
 
-export function RingsControls({ trackId, model, params, lfo, onModelChange, onParamChange, onLfoChange }: RingsControlsProps) {
+export function RingsControls({ trackId, model, params, lfo, presets, onPresetLoad, onModelChange, onParamChange, onLfoChange }: RingsControlsProps) {
   return (
     <div className="rings-controls">
+      {presets.length > 0 && (
+        <div className="knob-row">
+          <label>Preset</label>
+          <select className="preset-select" defaultValue=""
+            onChange={e => {
+              const p = presets[parseInt(e.target.value)];
+              if (p) onPresetLoad(p);
+              e.target.value = '';
+            }}>
+            <option value="" disabled>— Load preset —</option>
+            {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
       <div className="knob-row">
         <label>Model</label>
         <div className="reverb-type-btns" style={{ flexWrap: 'wrap' }}>

@@ -27,7 +27,7 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       switch (type) {
 
         case 'load-wasm':
-          await this._init(payload.wasmModule);
+          await this._init(payload.wasmBytes);
           break;
 
         case 'trigger':
@@ -51,7 +51,7 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     };
   }
 
-  async _init(wasmModule) {
+  async _init(wasmBytes) {
     try {
       let memRef = null;
       const imports = {
@@ -67,7 +67,7 @@ class PlaitsProcessor extends AudioWorkletProcessor {
         },
       };
 
-      const instance = await WebAssembly.instantiate(wasmModule, imports);
+      const { instance } = await WebAssembly.instantiate(wasmBytes, imports);
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory
 

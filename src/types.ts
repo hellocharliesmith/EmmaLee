@@ -11,6 +11,7 @@ export interface LfoState {
 interface BaseTrackState {
   pages: StepValue[][];
   enabledPages: boolean[];
+  lastStep?: number;
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;
@@ -38,7 +39,7 @@ export interface PlaitsTrackState extends BaseTrackState {
 }
 
 export interface DrumTrackState extends BaseTrackState {
-  voices: Record<'drumHihat' | 'drumSnare' | 'drumKick', { tone: number; decay: number }>;
+  voices: Record<'drumHihat' | 'drumSnare' | 'drumKick', { tone: number; decay: number; volume: number }>;
 }
 
 export interface SongState {

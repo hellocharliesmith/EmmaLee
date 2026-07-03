@@ -99,9 +99,9 @@ export const DEMO_SONGS: DemoSong[] = [
           rootNote: 0,
           scrollRow: 7,
           voices: {
-            drumHihat: { tone: 0.5, decay: 0.25 },
-            drumSnare:  { tone: 0.5, decay: 0.45 },
-            drumKick:   { tone: 0.5, decay: 0.5  },
+            drumHihat: { tone: 0.5, decay: 0.25, volume: 1 },
+            drumSnare:  { tone: 0.5, decay: 0.45, volume: 1 },
+            drumKick:   { tone: 0.5, decay: 0.5,  volume: 1 },
           },
           volume: 0.85,
           delaySend: 0.5,

@@ -135,12 +135,12 @@ const tracks = new Map<TrackId, TrackNodes>();
 
 // Builds the worklet, awaits its 'ready' handshake, and wires dry/delaySend/reverbSend
 // into the shared master bus. Caller is responsible for instrument-specific defaults.
-async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmModule: WebAssembly.Module): Promise<AudioWorkletNode> {
+async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmBytes: ArrayBuffer): Promise<AudioWorkletNode> {
   const worklet = new AudioWorkletNode(ctx, processorName, {
     numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
   });
 
-  worklet.port.postMessage({ type: 'load-wasm', payload: { wasmModule } });
+  worklet.port.postMessage({ type: 'load-wasm', payload: { wasmBytes } });
   await new Promise<void>((resolve, reject) => {
     worklet.port.onmessage = (e) => {
       if (e.data.type === 'ready') resolve();
@@ -163,8 +163,8 @@ async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName:
   return worklet;
 }
 
-async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule: WebAssembly.Module): Promise<void> {
-  const worklet = await createTrackWorklet(ctx, id, 'rings-processor', wasmModule);
+async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmBytes: ArrayBuffer): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, id, 'rings-processor', wasmBytes);
 
   // Defaults — Structure/Brightness/Damping/Position, Strings model
   worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.11 } });
@@ -180,8 +180,8 @@ async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmModule:
   worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'enabled', value: true } });
 }
 
-async function createPlaitsTrack(ctx: AudioContext, wasmModule: WebAssembly.Module): Promise<void> {
-  const worklet = await createTrackWorklet(ctx, PLAITS_TRACK_ID, 'plaits-processor', wasmModule);
+async function createPlaitsTrack(ctx: AudioContext, wasmBytes: ArrayBuffer): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, PLAITS_TRACK_ID, 'plaits-processor', wasmBytes);
 
   // Defaults — Harmonics/Timbre/Morph/Decay, Virtual Analog engine (index 8)
   worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });
@@ -201,8 +201,8 @@ const DRUM_VOICE_CONFIG: Record<DrumVoiceId, { engine: number; note: number; dec
   drumHihat: { engine: 23, note: 60, decay: 0.25 },
 };
 
-async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmModule: WebAssembly.Module): Promise<void> {
-  const worklet = await createTrackWorklet(ctx, id, 'plaits-processor', wasmModule);
+async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmBytes: ArrayBuffer): Promise<void> {
+  const worklet = await createTrackWorklet(ctx, id, 'plaits-processor', wasmBytes);
   const cfg = DRUM_VOICE_CONFIG[id];
 
   // For Plaits' drum engines specifically (bass_drum/snare_drum/hi_hat), the
@@ -284,19 +284,17 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   splitter.connect(analyserL, 0);
   splitter.connect(analyserR, 1);
 
-  // Rings tracks — compile WASM once, instantiate per track
-  const ringsBytes  = await fetch('/rings.wasm').then(r => r.arrayBuffer());
-  const ringsModule = await WebAssembly.compile(ringsBytes);
+  // Rings tracks — fetch bytes once, each worklet compiles its own instance
+  const ringsBytes = await fetch('/rings.wasm').then(r => r.arrayBuffer());
   for (const id of RINGS_TRACK_IDS) {
-    await createRingsTrack(audioCtx, id, ringsModule);
+    await createRingsTrack(audioCtx, id, ringsBytes);
   }
 
-  // Plaits track + drum voices — same compiled WASM module reused for all 4
-  const plaitsBytes  = await fetch('/plaits.wasm').then(r => r.arrayBuffer());
-  const plaitsModule = await WebAssembly.compile(plaitsBytes);
-  await createPlaitsTrack(audioCtx, plaitsModule);
+  // Plaits track + drum voices — same bytes reused for all 4 worklets
+  const plaitsBytes = await fetch('/plaits.wasm').then(r => r.arrayBuffer());
+  await createPlaitsTrack(audioCtx, plaitsBytes);
   for (const id of DRUM_VOICE_IDS) {
-    await createDrumTrack(audioCtx, id, plaitsModule);
+    await createDrumTrack(audioCtx, id, plaitsBytes);
   }
 
   isReady = true;

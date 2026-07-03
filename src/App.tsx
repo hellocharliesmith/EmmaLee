@@ -3,9 +3,11 @@ import * as Tone from 'tone';
 import * as Engine from './audio/engine';
 import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
-import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT,
+import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT, STEP_COUNT,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
+import { DEMO_SONGS } from './demoSongs';
+import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, type RingsPreset, type PlaitsPreset, type DrumPreset } from './presets';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { WaveformMeter } from './components/WaveformMeter';
@@ -89,9 +91,9 @@ function defaultPlaitsParams(): PlaitsParamsState {
 // actually set on the worklet at creation time.
 function defaultDrumVoices(): Record<DrumVoiceId, DrumVoiceParams> {
   return {
-    drumHihat: { tone: 0.5, decay: 0.25 },
-    drumSnare: { tone: 0.5, decay: 0.45 },
-    drumKick:  { tone: 0.5, decay: 0.5 },
+    drumHihat: { tone: 0.5, decay: 0.25, volume: 1 },
+    drumSnare: { tone: 0.5, decay: 0.45, volume: 1 },
+    drumKick:  { tone: 0.5, decay: 0.5,  volume: 1 },
   };
 }
 function defaultDrumParams(): DrumParamsState {
@@ -118,9 +120,10 @@ export default function App() {
     bpm, isPlaying, currentStep,
     currentPage, enabledPages, currentPagePlaying,
     toggleNote, toggleStrumDir, setProbability, setVelocity,
-    loadTracks,
+    loadTracks, clearCurrentPage,
     setScale, setRootNote, scrollUp, scrollDown,
     switchToPage, togglePageEnabled,
+    lastStep, setLastStep,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -144,8 +147,12 @@ export default function App() {
   // Drums is one UI tab but 3 separate engine.ts tracks — volume/sends broadcast to all 3.
   function setVolumeFor(id: TrackId, v: number) {
     updateTrackParamsFor(id, p => ({ ...p, volume: v }));
-    if (id === 'drums') DRUM_VOICE_IDS.forEach(vid => Engine.setTrackVolume(vid, v));
-    else Engine.setTrackVolume(id, v);
+    if (id === 'drums') {
+      const voices = (trackParams.drums as DrumParamsState).voices;
+      DRUM_VOICE_IDS.forEach(vid => Engine.setTrackVolume(vid, (voices[vid].volume ?? 1) * v));
+    } else {
+      Engine.setTrackVolume(id, v);
+    }
   }
   function setSendFor(id: TrackId, kind: 'delay' | 'reverb', v: number) {
     updateTrackParamsFor(id, p => kind === 'delay' ? ({ ...p, delaySend: v }) : ({ ...p, reverbSend: v }));
@@ -174,6 +181,16 @@ export default function App() {
   const KIDS_ROWS = 8;
   useEffect(() => { if (kidsMode) setActiveTrack('ringsA'); }, [kidsMode, setActiveTrack]);
 
+  // Console helper — open DevTools and type captureVoice() to get current track params
+  useEffect(() => {
+    (window as any).captureVoice = () => {
+      const p = trackParams[activeTrack];
+      const out = JSON.stringify(p, null, 2);
+      console.log(`captureVoice() — active track: ${activeTrack}\n${out}`);
+      return p;
+    };
+  }, [trackParams, activeTrack]);
+
   // ── Save / load ───────────────────────────────────────────────────────
   const { songs, save, remove } = useSavedSongs();
 
@@ -184,28 +201,28 @@ export default function App() {
     const drumsP  = trackParams.drums as DrumParamsState;
 
     const ringsA: RingsTrackState = {
-      pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages,
+      pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages, lastStep: tracks.ringsA.lastStep,
       scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
       damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo,
       volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend,
     };
     const ringsB: RingsTrackState = {
-      pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages,
+      pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages, lastStep: tracks.ringsB.lastStep,
       scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
       damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo,
       volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend,
     };
     const plaits: PlaitsTrackState = {
-      pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages,
+      pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages, lastStep: tracks.plaits.lastStep,
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
     };
     const drums: DrumTrackState = {
-      pages: tracks.drums.pages, enabledPages: tracks.drums.enabledPages,
+      pages: tracks.drums.pages, enabledPages: tracks.drums.enabledPages, lastStep: tracks.drums.lastStep,
       scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
       voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
     };
@@ -297,13 +314,18 @@ export default function App() {
       ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
-    const drumVoices = drumsState.voices ?? defaultDrumVoices();
+    const rawVoices = drumsState.voices ?? defaultDrumVoices();
+    const drumVoices = {
+      drumHihat: { ...rawVoices.drumHihat, volume: rawVoices.drumHihat.volume ?? 1 },
+      drumSnare: { ...rawVoices.drumSnare, volume: rawVoices.drumSnare.volume ?? 1 },
+      drumKick:  { ...rawVoices.drumKick,  volume: rawVoices.drumKick.volume  ?? 1 },
+    };
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
-      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
-      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
-      drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
+      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, lastStep: state.tracks.ringsA.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
+      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
+      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
+      drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, lastStep: drumsState.lastStep ?? STEP_COUNT - 1, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: {
@@ -347,6 +369,96 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    loadSong({ ...DEMO_SONGS[0], savedAt: 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function loadRingsPreset(id: TrackId, preset: RingsPreset) {
+    updateTrackParamsFor(id, p => p.kind === 'rings'
+      ? { ...p, model: preset.model, params: preset.params, lfo: preset.lfo }
+      : p);
+    if (!Engine.isAudioReady()) return;
+    Engine.setRingsModel(id as RingsTrackId, preset.model);
+    preset.params.forEach((v, i) => Engine.setRingsParam(id as RingsTrackId, i, v));
+    preset.lfo.forEach((l, i) => {
+      Engine.setLFOWave(id as RingsTrackId, i, l.wave);
+      Engine.setLFORate(id as RingsTrackId, i, l.rate);
+      Engine.setLFODepth(id as RingsTrackId, i, l.depth);
+      Engine.setLFOEnabled(id as RingsTrackId, i, l.on);
+    });
+  }
+
+  function loadDrumPreset(preset: DrumPreset) {
+    updateTrackParamsFor('drums', p => p.kind === 'drums'
+      ? { ...p, voices: { ...p.voices, ...preset.voices } }
+      : p);
+    if (!Engine.isAudioReady()) return;
+    DRUM_VOICE_IDS.forEach(vid => {
+      const v = preset.voices[vid];
+      Engine.setTrackVolume(vid, v.volume);
+      Engine.setDrumParam(vid, 1, v.tone);
+      Engine.setDrumParam(vid, 2, v.decay);
+    });
+  }
+
+  function loadPlaitsPreset(preset: PlaitsPreset) {
+    updateTrackParamsFor('plaits', p => p.kind === 'plaits'
+      ? { ...p, engine: preset.engine, params: preset.params }
+      : p);
+    if (!Engine.isAudioReady()) return;
+    Engine.setPlaitsModel(preset.engine);
+    preset.params.forEach((v, i) => Engine.setPlaitsParam(i, v));
+  }
+
+  function handleExport(name: string) {
+    const song: SavedSong = {
+      id: crypto.randomUUID(),
+      name,
+      savedAt: Date.now(),
+      state: captureState(),
+    };
+    const blob = new Blob([JSON.stringify(song, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleNewSong() {
+    function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    const ringsAPreset = pick(RINGS_PRESETS);
+    const ringsBPreset = pick(RINGS_PRESETS);
+    const plaitsPreset = pick(PLAITS_PRESETS);
+    const drumPreset   = pick(DRUM_PRESETS);
+
+    const emptyPages = () => Array.from({ length: PAGE_COUNT }, () => Array(STEP_COUNT).fill(null) as StepValue[]);
+
+    const nextTracks: Record<TrackId, TrackSeqState> = {
+      ringsA: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
+      ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
+      plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
+      drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
+    };
+    const nextParams: Record<TrackId, AnyTrackParams> = {
+      ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
+      ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
+      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
+      drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
+    };
+
+    loadTracks(nextTracks);
+    setTrackParams(nextParams);
+    if (Engine.isAudioReady()) {
+      syncParamsToEngine(nextParams, delayDivision, bpm,
+        delayMix, delayFeedback, delayFilter,
+        reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
+    }
+  }
+
   function syncParamsToEngine(
     params: Record<TrackId, AnyTrackParams>,
     delDiv: string, bpmVal: number,
@@ -383,7 +495,7 @@ export default function App() {
 
     const dp = params.drums as DrumParamsState;
     DRUM_VOICE_IDS.forEach(vid => {
-      Engine.setTrackVolume(vid, dp.volume);
+      Engine.setTrackVolume(vid, (dp.voices[vid].volume ?? 1) * dp.volume);
       Engine.setTrackSend(vid, 'delay', dp.delaySend);
       Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
       Engine.setDrumParam(vid, 1, dp.voices[vid].tone);
@@ -414,9 +526,11 @@ export default function App() {
         await Tone.start();
         const ctx = new AudioContext();
         await ctx.resume();
-        console.log('[Emma Lee] native ctx state:', ctx.state);
         Tone.setContext(ctx);
         await Engine.initAudio(ctx);
+        syncParamsToEngine(trackParams, delayDivision, bpm,
+          delayMix, delayFeedback, delayFilter,
+          reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone);
         setAudioStarted(true);
       } catch (err) {
         setAudioError(`Audio failed to start: ${err instanceof Error ? err.message : String(err)}`);
@@ -509,7 +623,8 @@ export default function App() {
             )}
             <SaveLoad songs={songs}
               onSave={name => save(name, captureState())}
-              onLoad={loadSong} onDelete={remove} />
+              onLoad={loadSong} onDelete={remove} onNewSong={handleNewSong}
+              onExport={handleExport} onImport={loadSong} />
           </div>
 
           {audioError && (
@@ -550,6 +665,11 @@ export default function App() {
                   >{i + 1}</button>
                 );
               })}
+              <button
+                className="page-btn clear-seq-btn"
+                onClick={clearCurrentPage}
+                title="Clear all steps on this page"
+              >Clear</button>
             </div>
           )}
 
@@ -559,6 +679,8 @@ export default function App() {
                 steps={steps} visibleNotes={visibleNotes}
                 rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
                 currentStep={isPlaying && currentPagePlaying[activeTrack] === currentPage ? currentStep : -1}
+                lastStep={lastStep}
+                onSetLastStep={setLastStep}
                 rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
                 noStrum={activeTrack === 'drums'}
                 showVelocity={activeTrack === 'drums'}
@@ -574,6 +696,8 @@ export default function App() {
                     <RingsControls
                       trackId={activeTrack as RingsTrackId}
                       model={active.model} params={active.params} lfo={active.lfo}
+                      presets={RINGS_PRESETS}
+                      onPresetLoad={p => loadRingsPreset(activeTrack, p)}
                       onModelChange={m => updateActiveParams(p => p.kind === 'rings' ? ({ ...p, model: m }) : p)}
                       onParamChange={(i, v) => updateActiveParams(p => {
                         if (p.kind !== 'rings') return p;
@@ -587,6 +711,8 @@ export default function App() {
                   {active.kind === 'plaits' && (
                     <PlaitsControls
                       engine={active.engine} params={active.params}
+                      presets={PLAITS_PRESETS}
+                      onPresetLoad={loadPlaitsPreset}
                       onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
                       onParamChange={(i, v) => updateActiveParams(p => {
                         if (p.kind !== 'plaits') return p;
@@ -598,6 +724,8 @@ export default function App() {
                   {active.kind === 'drums' && (
                     <DrumControls
                       voices={active.voices}
+                      presets={DRUM_PRESETS}
+                      onPresetLoad={loadDrumPreset}
                       onVoiceChange={(voice, field, value) => updateActiveParams(p => p.kind === 'drums'
                         ? ({ ...p, voices: { ...p.voices, [voice]: { ...p.voices[voice], [field]: value } } })
                         : p)}

@@ -343,6 +343,19 @@
   -webkit-appearance: none;
 }
 .scale-select:focus { border-color: var(--accent); color: var(--text-primary); }
+
+.preset-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+}
+.preset-select:focus { border-color: var(--accent); color: var(--text-primary); }
 .bpm-row .bpm-val {
   color: var(--text-primary);
   width: 30px;
@@ -518,6 +531,16 @@
   gap: 6px;
   align-items: center;
 }
+
+.clear-seq-btn {
+  width: auto;
+  padding: 0 8px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+}
+.clear-seq-btn:hover { color: var(--text-secondary); border-color: var(--border-hover); }
 
 /* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.) */
 .track-tab {
@@ -904,6 +927,45 @@
   gap: 2px;
   margin-top: 2px;
   height: 14px;
+}
+
+/* Last-step indicator row */
+.pr-last-step-row { margin-bottom: 4px; }
+.pr-last-step-track {
+  display: flex;
+  gap: 2px;
+}
+.pr-last-step-cell {
+  width: 26px;
+  height: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 2px;
+  background: transparent;
+  position: relative;
+  transition: background 0.1s;
+}
+.pr-last-step-cell:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.pr-last-step-cell.is-last {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.pr-last-step-cell.is-last::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid var(--accent);
+}
+.pr-last-step-cell.beyond { opacity: 0.25; }
+
+/* Grid cells beyond the last step */
+.pr-cell.beyond-end {
+  opacity: 0.25;
 }
 
 /* Probability row */

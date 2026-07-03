@@ -72,6 +72,7 @@ export interface TrackSeqState {
   pages: StepValue[][];    // PAGE_COUNT pages × STEP_COUNT steps each
   enabledPages: boolean[]; // length PAGE_COUNT — which pages participate in playback
   currentPage: number;     // 0-indexed, which page is shown in the editor
+  lastStep: number;        // 0-based index; only the final enabled page is cut here
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;
@@ -84,6 +85,7 @@ function makeDefaultTrackState(id: TrackId): TrackSeqState {
     pages,
     enabledPages: [true, false, false, false],
     currentPage: 0,
+    lastStep: STEP_COUNT - 1,
     scale: 'major',
     rootNote: 0,
     scrollRow: 7,
@@ -94,6 +96,14 @@ function initPlayingPages(): Record<TrackId, number> {
   return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0 };
 }
 
+function initTrackSteps(): Record<TrackId, number> {
+  return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0 };
+}
+
+function initCurrentSteps(): Record<TrackId, number> {
+  return { ringsA: -1, ringsB: -1, plaits: -1, drums: -1 };
+}
+
 export function useSequencer() {
   const [tracks, setTracksState] = useState<Record<TrackId, TrackSeqState>>(() => {
     const init = {} as Record<TrackId, TrackSeqState>;
@@ -102,10 +112,12 @@ export function useSequencer() {
   });
   const [activeTrack, setActiveTrackState] = useState<TrackId>('ringsA');
 
-  const [isPlaying, setIsPlaying]     = useState(false);
-  const [bpm, setBpm]                 = useState(72);
-  const [currentStep, setCurrentStep] = useState(-1);
+  const [isPlaying, setIsPlaying]         = useState(false);
+  const [bpm, setBpm]                     = useState(72);
+  const [currentSteps, setCurrentSteps]   = useState<Record<TrackId, number>>(initCurrentSteps);
   const [currentPagePlaying, setCurrentPagePlaying] = useState<Record<TrackId, number>>(initPlayingPages);
+
+  const trackStepsRef = useRef(initTrackSteps());
 
   const tracksRef = useRef(tracks);
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
@@ -247,41 +259,70 @@ export function useSequencer() {
     setActiveTrackState('ringsA');
   }, []);
 
-  // ── Playback — single shared transport, per-track page advancing ──────
-  const loopRef    = useRef<Tone.Loop | null>(null);
-  const stepIdxRef = useRef(0);
+  const setLastStep = useCallback((step: number) => {
+    updateTrack(activeTrack, prev => ({ ...prev, lastStep: step }));
+  }, [activeTrack]);
+
+  const clearCurrentPage = useCallback(() => {
+    updateTrack(activeTrack, prev => ({
+      ...prev,
+      pages: makeEmptyPages(),
+      enabledPages: [true, false, false, false],
+      currentPage: 0,
+    }));
+  }, [activeTrack]);
+
+  // ── Playback — per-track independent step counters + variable page lengths ──
+  const loopRef = useRef<Tone.Loop | null>(null);
 
   const start = useCallback(() => {
     Tone.getTransport().bpm.value = bpm;
-    stepIdxRef.current = 0;
+    for (const id of TRACK_IDS) trackStepsRef.current[id] = 0;
 
     const loop = new Tone.Loop((time) => {
-      const globalStep = stepIdxRef.current;
-      stepIdxRef.current++;
-      const colInPage = globalStep % STEP_COUNT;
+      // Per-track: advance through pages using that track's own step counter and
+      // its per-page lastStep values, so each track can have independent lengths.
+      const resolvedPage: Record<string, number> = {};
+      const resolvedCol:  Record<string, number> = {};
 
-      // Compute which page each track is on for this global step tick.
-      // Each track independently advances through its enabled pages.
-      const computePlayingPage = (id: TrackId): number => {
-        const t = tracksRef.current[id];
+      for (const id of TRACK_IDS) {
+        const t  = tracksRef.current[id];
         const ei = [0,1,2,3].filter(i => t.enabledPages[i]);
-        if (ei.length === 0) return -1;
-        const slot = Math.floor((globalStep % (ei.length * STEP_COUNT)) / STEP_COUNT);
-        return ei[slot];
-      };
+        if (ei.length === 0) { resolvedPage[id] = -1; resolvedCol[id] = -1; continue; }
+
+        const lastEnabledPage = ei[ei.length - 1];
+        const pageLengths = ei.map(p => p === lastEnabledPage ? t.lastStep + 1 : STEP_COUNT);
+        const totalCycle  = pageLengths.reduce((a, b) => a + b, 0);
+        const stepInCycle = trackStepsRef.current[id] % totalCycle;
+        trackStepsRef.current[id]++;
+
+        let cumulative = 0, pageSlot = 0;
+        for (let s = 0; s < ei.length; s++) {
+          if (stepInCycle < cumulative + pageLengths[s]) { pageSlot = s; break; }
+          cumulative += pageLengths[s];
+        }
+        resolvedPage[id] = ei[pageSlot];
+        resolvedCol[id]  = stepInCycle - cumulative;
+      }
 
       Tone.getDraw().schedule(() => {
         const ppNow = {} as Record<TrackId, number>;
-        for (const id of TRACK_IDS) ppNow[id] = computePlayingPage(id);
+        const csNow = {} as Record<TrackId, number>;
+        for (const id of TRACK_IDS) {
+          ppNow[id] = resolvedPage[id];
+          csNow[id] = resolvedCol[id];
+        }
         setCurrentPagePlaying(ppNow);
-        setCurrentStep(colInPage);
+        setCurrentSteps(csNow);
       }, time);
 
       for (const id of TRACK_IDS) {
-        const t = tracksRef.current[id];
-        const pageIdx = computePlayingPage(id);
-        if (pageIdx === -1) continue;
-        const step = t.pages[pageIdx][colInPage];
+        const pageIdx = resolvedPage[id];
+        const col     = resolvedCol[id];
+        if (pageIdx === -1 || col < 0) continue;
+
+        const t    = tracksRef.current[id];
+        const step = t.pages[pageIdx][col];
         if (!step) continue;
 
         const prob = step.prob ?? 1;
@@ -318,8 +359,8 @@ export function useSequencer() {
     Tone.getTransport().stop();
     loopRef.current?.dispose();
     loopRef.current = null;
-    stepIdxRef.current = 0;
-    setCurrentStep(-1);
+    for (const id of TRACK_IDS) trackStepsRef.current[id] = 0;
+    setCurrentSteps(initCurrentSteps());
     setCurrentPagePlaying(initPlayingPages());
     setIsPlaying(false);
   }, []);
@@ -333,14 +374,18 @@ export function useSequencer() {
     tracks, activeTrack, setActiveTrack,
     steps, visibleNotes, allNotes,
     scale: track.scale, rootNote: track.rootNote,
-    scroll, maxScroll, bpm, isPlaying, currentStep,
+    scroll, maxScroll, bpm, isPlaying,
+    currentStep: currentSteps[activeTrack],
     currentPage: track.currentPage,
+    lastStep: track.lastStep,
     enabledPages: track.enabledPages,
     currentPagePlaying,
     toggleNote, toggleStrumDir, setProbability, setVelocity,
-    loadTracks,
+    loadTracks, clearCurrentPage,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     switchToPage, setCurrentPage, togglePageEnabled,
+    setLastStep,
     start, stop, updateBpm,
+
   };
 }

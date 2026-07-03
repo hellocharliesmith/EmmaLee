@@ -39,6 +39,8 @@ interface Props {
   scroll: number;
   maxScroll: number;
   currentStep: number;
+  lastStep?: number;
+  onSetLastStep?: (step: number) => void; // sets the one global lastStep for this track
   kidsMode?: boolean;
   rowLabels?: string[];
   noStrum?: boolean;
@@ -53,9 +55,11 @@ interface Props {
 
 export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
-  currentStep, kidsMode, rowLabels, noStrum, showVelocity,
+  currentStep, lastStep, onSetLastStep,
+  kidsMode, rowLabels, noStrum, showVelocity,
   onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onScrollUp, onScrollDown,
 }: Props) {
+  const effectiveLastStep = lastStep ?? STEP_COUNT - 1;
 
   const handleCell = useCallback((col: number, midi: number) => {
     onToggleNote(col, midi);
@@ -84,6 +88,27 @@ export function PianoRoll({
 
       {/* Scrollable content — all rows share one horizontal scroll */}
       <div className="piano-roll-scroll">
+
+        {/* Last-step indicator row */}
+        {!kidsMode && onSetLastStep && (
+          <div className="pr-meta-row pr-last-step-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>End</div>
+            <div className="pr-last-step-track">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const isLast   = i === effectiveLastStep;
+                const isBeyond = i > effectiveLastStep;
+                return (
+                  <div
+                    key={i}
+                    className={['pr-last-step-cell', isLast ? 'is-last' : '', isBeyond ? 'beyond' : ''].filter(Boolean).join(' ')}
+                    onClick={() => onSetLastStep(i)}
+                    title={`Set last step to ${i + 1}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Piano keys | labels | grid */}
         <div className="pr-row">
@@ -141,6 +166,7 @@ export function PianoRoll({
                       ? `0 0 16px ${rowColor}aa` : undefined,
                     opacity: probReduced ? 0.55 : undefined,
                   } : undefined;
+                  const beyondEnd = col > effectiveLastStep;
                   return (
                     <div
                       key={`${row}-${col}`}
@@ -151,10 +177,11 @@ export function PianoRoll({
                         probReduced ? 'prob-reduced' : '',
                         isMulti && isActive && isFirst ? 'strum-first' : '',
                         isMulti && isActive && isLast  ? 'strum-last'  : '',
-                        playing   ? 'playhead'   : '',
-                        barStart  ? 'bar-start'  : '',
-                        beatStart ? 'beat-start' : '',
-                        oddGroup  ? 'group-odd'  : '',
+                        playing    ? 'playhead'    : '',
+                        beyondEnd  ? 'beyond-end'  : '',
+                        barStart   ? 'bar-start'   : '',
+                        beatStart  ? 'beat-start'  : '',
+                        oddGroup   ? 'group-odd'   : '',
                       ].filter(Boolean).join(' ')}
                       style={cellStyle}
                       onClick={() => handleCell(col, midi)}
