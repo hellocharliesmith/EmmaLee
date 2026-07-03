@@ -85,7 +85,7 @@ class CloudsProcessor extends AudioWorkletProcessor {
       const { type, payload } = e.data;
       switch (type) {
         case 'load-wasm':
-          await this._init(payload.wasmModule);
+          await this._init(payload.wasmBytes);
           break;
         case 'set-param':
           this._setParam?.(payload.param, payload.value);
@@ -103,7 +103,7 @@ class CloudsProcessor extends AudioWorkletProcessor {
     };
   }
 
-  async _init(wasmModule) {
+  async _init(wasmBytes) {
     try {
       let memRef = null;
       const imports = {
@@ -119,7 +119,10 @@ class CloudsProcessor extends AudioWorkletProcessor {
         },
       };
 
-      const instance = await WebAssembly.instantiate(wasmModule, imports);
+      // Compile from raw bytes INSIDE the worklet, not a Module passed in via
+      // postMessage — Chrome silently hangs instantiating a Module across that
+      // boundary (see rings-processor.js/plaits-processor.js for the same fix).
+      const { instance } = await WebAssembly.instantiate(wasmBytes, imports);
       this.instance = instance;
       memRef = instance.exports.b;
 

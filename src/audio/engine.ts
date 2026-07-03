@@ -291,13 +291,15 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   cloudsBusInput = audioCtx.createGain();
   cloudsBusInput.gain.value = 1.0;
 
-  const cloudsBytes  = await fetch('/clouds.wasm').then(r => r.arrayBuffer());
-  const cloudsModule = await WebAssembly.compile(cloudsBytes);
+  // Raw bytes, compiled inside the worklet — same Chrome workaround as
+  // Rings/Plaits (a compiled Module silently hangs WebAssembly.instantiate
+  // when passed across the postMessage boundary).
+  const cloudsBytes = await fetch('/clouds.wasm').then(r => r.arrayBuffer());
 
   cloudsNode = new AudioWorkletNode(audioCtx, 'clouds-processor', {
     numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
   });
-  cloudsNode.port.postMessage({ type: 'load-wasm', payload: { wasmModule: cloudsModule } });
+  cloudsNode.port.postMessage({ type: 'load-wasm', payload: { wasmBytes: cloudsBytes } });
   await new Promise<void>((resolve, reject) => {
     cloudsNode!.port.onmessage = (e) => {
       if (e.data.type === 'ready') resolve();

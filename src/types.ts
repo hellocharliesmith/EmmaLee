@@ -18,6 +18,7 @@ interface BaseTrackState {
   volume: number;
   delaySend: number;
   reverbSend: number;
+  cloudsSend?: number;
 }
 
 export interface RingsTrackState extends BaseTrackState {

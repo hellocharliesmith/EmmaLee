@@ -1,14 +1,17 @@
 import { setCloudsParam, setCloudsFreeze, setCloudsWet } from '../audio/engine';
 
-// Master-bus Clouds granular texture effect. Session-only state (App.tsx owns
-// it, not persisted in the save format yet — see BACKLOG.md "Clouds params
-// not saved"). Every track feeds this bus at a fixed level (cloudsSend in
-// engine.ts, no per-track knob yet either) — this panel controls the shared
-// granular engine itself plus its overall return level ("Mix").
+// Master-bus granular texture effect (Mutable Instruments Clouds' granular
+// mode only — Stretch/Looping-Delay/Spectral modes exist in the underlying
+// DSP but aren't exposed here, kept simple on purpose). Each track sends into
+// this bus via its own "Texture" send knob (App.tsx's per-track Sends row,
+// same pattern as Delay/Reverb) — this panel controls the shared granular
+// engine itself plus its overall return level ("Mix").
 //
-// Position/Size/Density/Texture/Feedback/Reverb are Clouds' own 0-1 native
-// range. Pitch is in semitones (-48..+48), scaled from a 0-1 slider here for
-// UI consistency with everything else.
+// Position/Size/Density/Texture/Feedback are Clouds' own 0-1 native range.
+// Pitch is in semitones (-48..+48), scaled from a 0-1 slider here for UI
+// consistency with everything else. Clouds' own internal reverb knob is
+// intentionally left out — Master already has a dedicated Reverb section and
+// a second overlapping "reverb" control would just be confusing.
 
 export interface CloudsUiState {
   position: number;
@@ -17,7 +20,6 @@ export interface CloudsUiState {
   density: number;
   texture: number;
   feedback: number;
-  reverb: number;
   mix: number;       // return level into the master bus
   freeze: boolean;
 }
@@ -51,7 +53,7 @@ export function CloudsControls({ state, onChange }: CloudsControlsProps) {
     <div className="rings-controls">
       <div className="section-divider" />
       <div className="knob-row">
-        <label>Clouds</label>
+        <label>Texture</label>
         <button
           className={`reverb-type-btn${state.freeze ? ' active' : ''}`}
           onClick={() => { const next = !state.freeze; onChange({ freeze: next }); setCloudsFreeze(next); }}
@@ -68,7 +70,6 @@ export function CloudsControls({ state, onChange }: CloudsControlsProps) {
       {row('Density', 'density', 3)}
       {row('Texture', 'texture', 4)}
       {row('Feedback', 'feedback', 7)}
-      {row('Reverb', 'reverb', 8)}
     </div>
   );
 }

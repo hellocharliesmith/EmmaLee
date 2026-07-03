@@ -29,7 +29,7 @@ export function GridsControls({ state, onChange, onGenerate }: GridsControlsProp
   return (
     <div className="rings-controls grids-controls">
       <div className="knob-row">
-        <label>Grids</label>
+        <label>Pattern Generator</label>
       </div>
       <div className="xy-pad-row">
         <div className="xy-pad-field">

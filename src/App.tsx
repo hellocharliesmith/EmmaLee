@@ -63,6 +63,7 @@ interface RingsParamsState {
   volume: number;
   delaySend: number;
   reverbSend: number;
+  cloudsSend: number;
 }
 
 interface PlaitsParamsState {
@@ -72,6 +73,7 @@ interface PlaitsParamsState {
   volume: number;
   delaySend: number;
   reverbSend: number;
+  cloudsSend: number;
 }
 
 interface DrumParamsState {
@@ -80,15 +82,16 @@ interface DrumParamsState {
   volume: number;
   delaySend: number;
   reverbSend: number;
+  cloudsSend: number;
 }
 
 type AnyTrackParams = RingsParamsState | PlaitsParamsState | DrumParamsState;
 
 function defaultRingsParams(): RingsParamsState {
-  return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+  return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
-  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 // Decay defaults match engine.ts's DRUM_VOICE_CONFIG so the knobs reflect what's
 // actually set on the worklet at creation time.
@@ -100,7 +103,7 @@ function defaultDrumVoices(): Record<DrumVoiceId, DrumVoiceParams> {
   };
 }
 function defaultDrumParams(): DrumParamsState {
-  return { kind: 'drums', voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5 };
+  return { kind: 'drums', voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultParamsFor(id: TrackId): AnyTrackParams {
   if (id === 'plaits') return defaultPlaitsParams();
@@ -157,8 +160,9 @@ export default function App() {
       Engine.setTrackVolume(id, v);
     }
   }
-  function setSendFor(id: TrackId, kind: 'delay' | 'reverb', v: number) {
-    updateTrackParamsFor(id, p => kind === 'delay' ? ({ ...p, delaySend: v }) : ({ ...p, reverbSend: v }));
+  function setSendFor(id: TrackId, kind: 'delay' | 'reverb' | 'clouds', v: number) {
+    const field = kind === 'delay' ? 'delaySend' : kind === 'reverb' ? 'reverbSend' : 'cloudsSend';
+    updateTrackParamsFor(id, p => ({ ...p, [field]: v }));
     if (id === 'drums') DRUM_VOICE_IDS.forEach(vid => Engine.setTrackSend(vid, kind, v));
     else Engine.setTrackSend(id, kind, v);
   }
@@ -183,7 +187,7 @@ export default function App() {
   // Session-only, like gridsUi above — not part of the save format yet.
   const [cloudsUi, setCloudsUi] = useState<CloudsUiState>({
     position: 0.5, size: 0.5, pitch: 0.5, density: 0.65, texture: 0.5,
-    feedback: 0.0, reverb: 0.25, mix: 0.5, freeze: false,
+    feedback: 0.0, mix: 0.5, freeze: false,
   });
 
   // ── Grids drum pattern generator (Drums tab only) ────────────────────
@@ -252,26 +256,26 @@ export default function App() {
       scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
       damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo,
-      volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend,
+      volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend, cloudsSend: ringsAP.cloudsSend,
     };
     const ringsB: RingsTrackState = {
       pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages, lastStep: tracks.ringsB.lastStep,
       scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
       damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo,
-      volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend,
+      volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend, cloudsSend: ringsBP.cloudsSend,
     };
     const plaits: PlaitsTrackState = {
       pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages, lastStep: tracks.plaits.lastStep,
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
-      volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend,
+      volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend, cloudsSend: plaitsP.cloudsSend,
     };
     const drums: DrumTrackState = {
       pages: tracks.drums.pages, enabledPages: tracks.drums.enabledPages, lastStep: tracks.drums.lastStep,
       scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
-      voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend,
+      voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend, cloudsSend: drumsP.cloudsSend,
     };
 
     return {
@@ -380,19 +384,26 @@ export default function App() {
         params: [state.tracks.ringsA.structure, state.tracks.ringsA.brightness, state.tracks.ringsA.damping, state.tracks.ringsA.position],
         lfo: state.tracks.ringsA.lfo, volume: state.tracks.ringsA.volume,
         delaySend: state.tracks.ringsA.delaySend, reverbSend: state.tracks.ringsA.reverbSend,
+        cloudsSend: state.tracks.ringsA.cloudsSend ?? 0.4,
       },
       ringsB: {
         kind: 'rings', model: state.tracks.ringsB.model,
         params: [state.tracks.ringsB.structure, state.tracks.ringsB.brightness, state.tracks.ringsB.damping, state.tracks.ringsB.position],
         lfo: state.tracks.ringsB.lfo, volume: state.tracks.ringsB.volume,
         delaySend: state.tracks.ringsB.delaySend, reverbSend: state.tracks.ringsB.reverbSend,
+        cloudsSend: state.tracks.ringsB.cloudsSend ?? 0.4,
       },
       plaits: {
         kind: 'plaits', engine: state.tracks.plaits.engine,
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
+        cloudsSend: state.tracks.plaits.cloudsSend ?? 0.4,
       },
-      drums: { kind: 'drums', voices: drumVoices, volume: drumsState.volume, delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend },
+      drums: {
+        kind: 'drums', voices: drumVoices, volume: drumsState.volume,
+        delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend,
+        cloudsSend: drumsState.cloudsSend ?? 0.4,
+      },
     };
 
     loadTracks(nextTracks);
@@ -491,10 +502,10 @@ export default function App() {
       drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
-      ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
-      ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
-      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
-      drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5 },
+      ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
 
     loadTracks(nextTracks);
@@ -528,6 +539,7 @@ export default function App() {
       Engine.setTrackVolume(id, p.volume);
       Engine.setTrackSend(id, 'delay', p.delaySend);
       Engine.setTrackSend(id, 'reverb', p.reverbSend);
+      Engine.setTrackSend(id, 'clouds', p.cloudsSend);
     }
     const pp = params.plaits as PlaitsParamsState;
     Engine.setPlaitsParam(0, pp.params[0]);
@@ -539,12 +551,14 @@ export default function App() {
     Engine.setTrackVolume('plaits', pp.volume);
     Engine.setTrackSend('plaits', 'delay', pp.delaySend);
     Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
+    Engine.setTrackSend('plaits', 'clouds', pp.cloudsSend);
 
     const dp = params.drums as DrumParamsState;
     DRUM_VOICE_IDS.forEach(vid => {
       Engine.setTrackVolume(vid, (dp.voices[vid].volume ?? 1) * dp.volume);
       Engine.setTrackSend(vid, 'delay', dp.delaySend);
       Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
+      Engine.setTrackSend(vid, 'clouds', dp.cloudsSend);
       Engine.setDrumParam(vid, 1, dp.voices[vid].tone);
       Engine.setDrumParam(vid, 2, dp.voices[vid].decay);
     });
@@ -795,6 +809,8 @@ export default function App() {
                       onChange={v => setSendFor(activeTrack, 'delay', v)} />
                     <Knob value={active.reverbSend} min={0} max={1} label="Reverb"
                       onChange={v => setSendFor(activeTrack, 'reverb', v)} />
+                    <Knob value={active.cloudsSend} min={0} max={1} label="Texture"
+                      onChange={v => setSendFor(activeTrack, 'clouds', v)} />
                   </div>
                 </div>
               </div>
