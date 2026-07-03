@@ -14,6 +14,10 @@ interface KnobProps {
 const MIN_ANG = -135;
 const MAX_ANG =  135;
 
+// r19/stroke5 @ 48px (Rate/Depth), r27/stroke7 @ 68px (Sends) — from the
+// design_handoff CSS spec, kept exact rather than approximated.
+const STROKE_BY_SIZE: Record<number, number> = { 48: 5, 68: 7 };
+
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (angleDeg - 90) * Math.PI / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -32,7 +36,10 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
   const drag  = useRef<{ y: number; val: number } | null>(null);
 
   const cx = size / 2, cy = size / 2;
-  const strokeW = Math.max(3, size * 0.13);
+  // Exact stroke widths for the two spec'd sizes (48 -> r19/stroke5, 68 ->
+  // r27/stroke7, per design_handoff's CSS spec); anything else falls back to
+  // the same rate of change so an unlisted size still scales sensibly.
+  const strokeW = STROKE_BY_SIZE[size] ?? Math.max(3, 0.2 + size * 0.1);
   const r = size / 2 - strokeW;
 
   const startDrag = useCallback((clientY: number) => {
@@ -73,7 +80,7 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
       onMouseDown={e => { e.preventDefault(); startDrag(e.clientY); }}
       onTouchStart={e => { e.preventDefault(); startDrag(e.touches[0].clientY); }}
       title={disabled ? label : `${label}: ${value.toFixed(2)}`}
-      style={{ width: size, height: size }}
+      style={{ width: size }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {/* Track */}
@@ -83,7 +90,7 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
           <path d={arc(cx, cy, r, MIN_ANG, angle)} fill="none" className="knob-arc" strokeWidth={strokeW} strokeLinecap="butt" />
         )}
         {/* Value text, inside the ring */}
-        <text x={cx} y={cy + size * 0.07} textAnchor="middle" className="knob-value" style={{ fontSize: size * 0.24 }}>
+        <text x={cx} y={cy + size * 0.07} textAnchor="middle" className="knob-value" style={{ fontSize: size * 0.2 }}>
           {displayVal}
         </text>
       </svg>

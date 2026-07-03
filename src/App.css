@@ -1105,9 +1105,15 @@
 .pr-step-num.bar { color: var(--text-secondary); }
 
 /* ── LFO inline with params ── */
+/* Bottom-align the three columns rather than center them — with center
+   alignment, the shape button (36px) and knobs (48px) have different total
+   column heights even with matched spacing, so their vertical midpoints
+   align but the captions don't quite land on the same line. Bottom-aligning
+   guarantees the caption row is flush across all three regardless of any
+   residual few-px difference in the columns above it. */
 .lfo-inline {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   flex-shrink: 0;
   margin-left: 6px;
@@ -1127,13 +1133,25 @@
    it stay mounted at all times (never unmount) so the layout doesn't jump
    as the user cycles through states — they just go inert via Knob's
    `disabled` prop when Off. */
-.lfo-cycle-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+/* The shape button is 36px tall vs. the 48px Rate/Depth knobs next to it —
+   margin-top:6px + gap:9px (vs the knob's plain gap:5px) makes up that 12px
+   difference so all three "shape"/"rate"/"depth" captions land on the same
+   baseline instead of the shape column sitting visibly higher. */
+.lfo-cycle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  margin-top: 6px;
+  gap: 9px;
+}
 .lfo-cycle-btn {
   width: 36px;
   height: 36px;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  color: var(--text-secondary);
+  color: var(--border-disabled);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1146,10 +1164,13 @@
 
 /* ── Knob — donut ring, value printed inside, butt-cap arc (hard-corner
    system extends to stroke ends, not just rectangles) ── */
+/* Plain knob wrapper — matches design_handoff's ".swatch": column flex,
+   centered, gap 5px between the ring and its caption, no margin-top. */
 .knob {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 5px;
   cursor: ns-resize;
   user-select: none;
   flex-shrink: 0;
@@ -1165,14 +1186,18 @@
   font-weight: 600;
 }
 .knob.disabled { cursor: default; }
-.knob.disabled .knob-track { stroke: var(--border-disabled); }
-.knob.disabled .knob-value { fill: var(--border-hover); }
+/* Disabled track recedes toward the panel background (darker, not lighter,
+   than the normal border) so an inert knob reads as inactive at a glance. */
+.knob.disabled .knob-track { stroke: var(--bg-panel); }
+.knob.disabled .knob-value { fill: var(--border-disabled); }
+/* Same caption style as .cap (used for the LFO shape button below) —
+   deliberately identical font-size/color/spacing so knob and shape-button
+   captions share a baseline when they sit side by side in .lfo-inline. */
 .knob-label {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 2px;
+  letter-spacing: 0.04em;
   text-align: center;
 }
 .knob.disabled .knob-label { color: var(--border-disabled); }
