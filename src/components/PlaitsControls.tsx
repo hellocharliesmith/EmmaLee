@@ -1,5 +1,6 @@
 import { setPlaitsParam, setPlaitsModel } from '../audio/engine';
 import { Slider } from './Slider';
+import { Dropdown } from './Dropdown';
 import type { PlaitsPreset } from '../presets';
 
 // Engine indices match Plaits' actual hardware registration order (see voice.cc
@@ -53,25 +54,18 @@ export function PlaitsControls({ engine, params, presets, onPresetLoad, onEngine
       {presets.length > 0 && (
         <div className="knob-row">
           <label>Preset</label>
-          <select className="preset-select" defaultValue=""
-            onChange={e => {
-              const p = presets[parseInt(e.target.value)];
-              if (p) onPresetLoad(p);
-              e.target.value = '';
-            }}>
-            <option value="" disabled>— Load preset —</option>
-            {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
-          </select>
+          <Dropdown value="" placeholder="— Load preset —"
+            options={presets.map((p, i) => ({ value: String(i), label: p.name }))}
+            onChange={v => { const p = presets[parseInt(v)]; if (p) onPresetLoad(p); }}
+          />
         </div>
       )}
       <div className="knob-row">
         <label>Engine</label>
-        <select className="preset-select model-select" value={engine}
-          onChange={e => { const eg = parseInt(e.target.value); onEngineChange(eg); setPlaitsModel(eg); }}
-          title={ENGINES.find(m => m.id === engine)?.description}
-        >
-          {ENGINES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
+        <Dropdown className="model-select" value={String(engine)}
+          options={ENGINES.map(m => ({ value: String(m.id), label: m.label }))}
+          onChange={v => { const eg = parseInt(v); onEngineChange(eg); setPlaitsModel(eg); }}
+        />
       </div>
 
       {params.map((val, i) => (

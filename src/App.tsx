@@ -11,6 +11,7 @@ import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, type Ring
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { Slider } from './components/Slider';
+import { Dropdown } from './components/Dropdown';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
@@ -753,14 +754,14 @@ export default function App() {
             <div className="page-buttons">
               {activeTrack !== 'drums' && (
                 <div className="scale-selects">
-                  <select className="scale-select" value={rootNote}
-                    onChange={e => setRootNote(parseInt(e.target.value))}>
-                    {ROOT_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-                  </select>
-                  <select className="scale-select" value={scale}
-                    onChange={e => setScale(e.target.value as ScaleType)}>
-                    {SCALE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                  </select>
+                  <Dropdown className="scale-select" value={String(rootNote)}
+                    options={ROOT_NAMES.map((n, i) => ({ value: String(i), label: n }))}
+                    onChange={v => setRootNote(parseInt(v))}
+                  />
+                  <Dropdown className="scale-select" value={scale}
+                    options={SCALE_OPTIONS.map(s => ({ value: s.id, label: s.label }))}
+                    onChange={v => setScale(v as ScaleType)}
+                  />
                 </div>
               )}
               {Array.from({ length: PAGE_COUNT }, (_, i) => {
@@ -856,13 +857,13 @@ export default function App() {
                 <div className="send-row">
                   <div className="panel-name">Sends</div>
                   <div className="sends-grid">
-                    <Knob value={active.volume} min={0} max={1.5} label="Volume" size={68} percent
+                    <Knob value={active.volume} min={0} max={1.5} label="Volume" size={68}
                       onChange={v => setVolumeFor(activeTrack, v)} />
-                    <Knob value={active.delaySend} min={0} max={1} label="Delay" size={68} percent
+                    <Knob value={active.delaySend} min={0} max={1} label="Delay" size={68}
                       onChange={v => setSendFor(activeTrack, 'delay', v)} />
-                    <Knob value={active.reverbSend} min={0} max={1} label="Reverb" size={68} percent
+                    <Knob value={active.reverbSend} min={0} max={1} label="Reverb" size={68}
                       onChange={v => setSendFor(activeTrack, 'reverb', v)} />
-                    <Knob value={active.cloudsSend} min={0} max={1} label="Texture" size={68} percent
+                    <Knob value={active.cloudsSend} min={0} max={1} label="Texture" size={68}
                       onChange={v => setSendFor(activeTrack, 'clouds', v)} />
                   </div>
                 </div>

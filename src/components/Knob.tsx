@@ -7,8 +7,7 @@ interface KnobProps {
   label: string;
   onChange: (v: number) => void;
   size?: number;      // outer SVG size in px — 44 default, 48 for Rate/Depth, 68 for Sends
-  disabled?: boolean; // inert: dim ring, no arc, "–" instead of a value
-  percent?: boolean;  // show as a rounded 0-100 readout instead of raw decimal — Sends knobs
+  disabled?: boolean; // inert: dim ring, no arc
 }
 
 const MIN_ANG = -135;
@@ -29,7 +28,7 @@ function arc(cx: number, cy: number, r: number, a1: number, a2: number) {
   return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
 }
 
-export function Knob({ value, min, max, label, onChange, size = 44, disabled = false, percent = false }: KnobProps) {
+export function Knob({ value, min, max, label, onChange, size = 44, disabled = false }: KnobProps) {
   const [dragging, setDragging] = useState(false);
   const norm  = Math.max(0, Math.min(1, (value - min) / (max - min)));
   const angle = MIN_ANG + norm * (MAX_ANG - MIN_ANG);
@@ -67,13 +66,6 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
     window.addEventListener('touchend', end);
   }, [value, min, max, onChange, disabled]);
 
-  // Value text: whole numbers for wide ranges (e.g. sends 0-1 shown as %-ish
-  // "70"), two decimals for narrow 0-1 params — matches the two conventions
-  // already used across the app's knobs before this rewrite.
-  const displayVal = disabled ? '–'
-    : percent ? Math.round(norm * 100).toString()
-    : (max - min > 1.5 ? Math.round(value).toString() : value.toFixed(2));
-
   return (
     <div
       className={`knob${dragging ? ' dragging' : ''}${disabled ? ' disabled' : ''}`}
@@ -89,10 +81,6 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
         {!disabled && norm > 0.005 && (
           <path d={arc(cx, cy, r, MIN_ANG, angle)} fill="none" className="knob-arc" strokeWidth={strokeW} strokeLinecap="butt" />
         )}
-        {/* Value text, inside the ring */}
-        <text x={cx} y={cy + size * 0.07} textAnchor="middle" className="knob-value" style={{ fontSize: size * 0.2 }}>
-          {displayVal}
-        </text>
       </svg>
       <div className="knob-label">{label}</div>
     </div>

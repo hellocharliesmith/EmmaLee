@@ -1,5 +1,6 @@
 import { setDrumParam, setTrackVolume, type DrumVoiceId } from '../audio/engine';
 import { Knob } from './Knob';
+import { Dropdown } from './Dropdown';
 import type { DrumPreset } from '../presets';
 
 const VOICE_ORDER: DrumVoiceId[] = ['drumHihat', 'drumSnare', 'drumKick'];
@@ -26,15 +27,10 @@ export function DrumControls({ voices, presets, onPresetLoad, onVoiceChange }: D
       {presets.length > 0 && (
         <div className="knob-row">
           <label>Preset</label>
-          <select className="preset-select" defaultValue=""
-            onChange={e => {
-              const p = presets[parseInt(e.target.value)];
-              if (p) onPresetLoad(p);
-              e.target.value = '';
-            }}>
-            <option value="" disabled>— Load preset —</option>
-            {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
-          </select>
+          <Dropdown value="" placeholder="— Load preset —"
+            options={presets.map((p, i) => ({ value: String(i), label: p.name }))}
+            onChange={v => { const p = presets[parseInt(v)]; if (p) onPresetLoad(p); }}
+          />
         </div>
       )}
       {VOICE_ORDER.map(voice => (

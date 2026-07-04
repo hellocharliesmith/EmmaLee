@@ -2,6 +2,7 @@ import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, se
          type RingsTrackId } from '../audio/engine';
 import { Knob } from './Knob';
 import { Slider } from './Slider';
+import { Dropdown } from './Dropdown';
 import type { LfoState } from '../types';
 import type { RingsPreset } from '../presets';
 
@@ -36,11 +37,13 @@ function lfoIcon(lfo: LfoState) {
       </svg>
     );
   }
+  // "Smooth random" — an irregular, non-periodic wandering curve (unlike the
+  // clean, evenly-spaced sine above) — reads as filtered/slewed noise rather
+  // than stepped/quantized randomness.
   return (
-    <svg width="16" height="16" viewBox="0 0 20 20">
-      <circle cx="5" cy="5" r="1.4" fill="currentColor" /><circle cx="15" cy="5" r="1.4" fill="currentColor" />
-      <circle cx="10" cy="10" r="1.4" fill="currentColor" /><circle cx="5" cy="15" r="1.4" fill="currentColor" />
-      <circle cx="15" cy="15" r="1.4" fill="currentColor" />
+    <svg width="16" height="10" viewBox="0 0 20 12">
+      <path d="M1,7 C2,3 3,9 4,5 C6,1 7,10 9,6 C11,2 12,8 14,4 C15,7 16,2 17,6"
+        fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -69,25 +72,18 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
       {presets.length > 0 && (
         <div className="knob-row">
           <label>Preset</label>
-          <select className="preset-select" defaultValue=""
-            onChange={e => {
-              const p = presets[parseInt(e.target.value)];
-              if (p) onPresetLoad(p);
-              e.target.value = '';
-            }}>
-            <option value="" disabled>— Load preset —</option>
-            {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
-          </select>
+          <Dropdown value="" placeholder="— Load preset —"
+            options={presets.map((p, i) => ({ value: String(i), label: p.name }))}
+            onChange={v => { const p = presets[parseInt(v)]; if (p) onPresetLoad(p); }}
+          />
         </div>
       )}
       <div className="knob-row">
         <label>Model</label>
-        <select className="preset-select model-select" value={model}
-          onChange={e => { const m = parseInt(e.target.value); onModelChange(m); setRingsModel(trackId, m); }}
-          title={MODELS.find(m => m.id === model)?.description}
-        >
-          {MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
+        <Dropdown className="model-select" value={String(model)}
+          options={MODELS.map(m => ({ value: String(m.id), label: m.label }))}
+          onChange={v => { const m = parseInt(v); onModelChange(m); setRingsModel(trackId, m); }}
+        />
       </div>
 
       {params.map((val, i) => {

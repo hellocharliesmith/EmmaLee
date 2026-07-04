@@ -1,6 +1,7 @@
 import { setCloudsParam, setCloudsFreeze, setCloudsWet, setCloudsReverbSend } from '../audio/engine';
 import { Slider } from './Slider';
 import { Toggle } from './Toggle';
+import { Dropdown } from './Dropdown';
 import type { TexturePreset } from '../presets';
 
 // Master-bus granular texture effect (Mutable Instruments Clouds' granular
@@ -69,15 +70,10 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
       {presets.length > 0 && (
         <div className="knob-row">
           <label>Preset</label>
-          <select className="preset-select" defaultValue=""
-            onChange={e => {
-              const p = presets[parseInt(e.target.value)];
-              if (p) onPresetLoad(p);
-              e.target.value = '';
-            }}>
-            <option value="" disabled>— Load preset —</option>
-            {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
-          </select>
+          <Dropdown value="" placeholder="— Load preset —"
+            options={presets.map((p, i) => ({ value: String(i), label: p.name }))}
+            onChange={v => { const p = presets[parseInt(v)]; if (p) onPresetLoad(p); }}
+          />
         </div>
       )}
       <div className="knob-row">

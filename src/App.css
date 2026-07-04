@@ -382,6 +382,55 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .preset-select:focus { border-color: var(--accent); color: var(--text-primary); }
 .model-select { width: 170px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ── Custom Dropdown — replaces native <select>, which can't be dark-themed
+   cross-browser once opened (the closed control can be styled, the open
+   popup can't, so it always looked like a stock OS menu). ── */
+.dv-dropdown { position: relative; display: inline-block; }
+.dv-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.dv-dropdown-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.dv-dropdown-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-dropdown-caret { flex-shrink: 0; font-size: 8px; color: var(--text-secondary); }
+.dv-dropdown-backdrop { position: fixed; inset: 0; z-index: 10; }
+.dv-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.dv-dropdown-item {
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+.dv-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.dv-dropdown-item.selected { color: var(--accent); }
+.dv-dropdown-item.dv-dropdown-placeholder { color: var(--border-hover); font-style: italic; pointer-events: none; }
+.dv-dropdown.model-select .dv-dropdown-btn { text-transform: uppercase; letter-spacing: 0.04em; width: 170px; }
+.dv-dropdown.scale-select .dv-dropdown-btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; padding: 5px 8px; }
 .bpm-row .bpm-val {
   color: var(--text-primary);
   width: 30px;
