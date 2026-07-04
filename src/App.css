@@ -1639,19 +1639,6 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   flex-shrink: 0;
 }
 
-.xy-pad-field input[type='range'] {
-  width: 220px;
-  flex-shrink: 0;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  outline: none;
-}
-
 .grids-generate-btn {
   margin-left: 94px;
   margin-top: 4px;
@@ -1686,35 +1673,3 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   flex-shrink: 0;
 }
 
-/* Fixed width — all sliders match Structure, LFO controls flow right */
-.knob-row input[type='range'] {
-  width: 220px;
-  flex-shrink: 0;
-  flex-grow: 0;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  outline: none;
-}
-input[type='range']::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--accent-light);
-  border: 1.5px solid var(--accent);
-  cursor: pointer;
-}
-input[type='range']::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--accent-light);
-  border: 1.5px solid var(--accent);
-  cursor: pointer;
-  box-shadow: none;
-}
