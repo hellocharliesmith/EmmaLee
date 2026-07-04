@@ -599,6 +599,15 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   max-width: 1120px;
   gap: 24px;
 }
+/* Must actually stretch to fill the row — without flex:1 here, this column
+   shrinks to fit its content and every Slider inside it (which wants
+   flex:1 within its own .knob-row) has no space to grow into, collapsing
+   to a sliver. min-width:0 lets it shrink below its content's natural
+   width too, which flex items don't do by default. */
+.track-controls-main {
+  flex: 1;
+  min-width: 0;
+}
 .send-row {
   flex-shrink: 0;
 }

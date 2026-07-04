@@ -805,7 +805,7 @@ export default function App() {
               />
 
               <div className="track-controls-row">
-                <div>
+                <div className="track-controls-main">
                   {active.kind === 'rings' && (
                     <RingsControls
                       trackId={activeTrack as RingsTrackId}
