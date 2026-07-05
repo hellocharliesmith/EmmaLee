@@ -34,7 +34,7 @@ function smoothNoise(t: number): number {
 // SVG path's `d` attribute directly via ref on every driver tick instead of
 // going through React state/re-render, and reads live rate/depth/wave off a
 // ref so dragging those knobs never has to re-subscribe the animation.
-export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 20 }: LfoScopeProps) {
+export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 48 }: LfoScopeProps) {
   const pathRef = useRef<SVGPathElement>(null);
   const lfoRef = useRef(lfo);
   useEffect(() => { lfoRef.current = lfo; }, [lfo]);
@@ -51,7 +51,9 @@ export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 20 }: LfoSc
 
     return registerScope(now => {
       const { wave, rate, depth } = lfoRef.current;
-      const amp = Math.min(1, depth / maxDepth) * (height / 2 - 2);
+      // -strokeWidth/2 so a full-depth peak's stroke reaches the box edge
+      // without being clipped by the svg's own bounds, not padding the box.
+      const amp = Math.min(1, depth / maxDepth) * (height / 2 - 0.75);
       const midY = height / 2;
       const t0 = now / 1000;
       let d = '';
