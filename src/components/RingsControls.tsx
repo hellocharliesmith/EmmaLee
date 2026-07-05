@@ -3,6 +3,7 @@ import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, se
 import { Knob } from './Knob';
 import { Slider } from './Slider';
 import { Dropdown } from './Dropdown';
+import { LfoScope } from './LfoScope';
 import type { LfoState } from '../types';
 import type { RingsPreset } from '../presets';
 
@@ -121,6 +122,10 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
                     disabled={!lfoState.on}
                     onChange={v => { onLfoChange(lfoIdx, { depth: v }); setLFODepth(trackId, lfoIdx, v); }}
                   />
+                  <div className="lfo-cycle-wrap">
+                    <LfoScope lfo={lfoState} maxDepth={0.5} />
+                    <div className="cap">wave</div>
+                  </div>
                 </div>
               )}
             </div>

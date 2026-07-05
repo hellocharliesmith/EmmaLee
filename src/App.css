@@ -1233,6 +1233,11 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .lfo-cycle-btn.on { background: var(--accent); border-color: var(--accent); color: var(--bg-body); }
 .lfo-icon-dash { width: 11px; height: 1.5px; background: currentColor; display: block; }
 
+/* Running LFO waveform preview — dim flat line at rest, accent-colored trace
+   while the LFO is on (path itself is redrawn imperatively, see LfoScope.tsx). */
+.lfo-scope { color: var(--border-disabled); flex-shrink: 0; }
+.lfo-scope.on { color: var(--accent); }
+
 /* ── Knob — donut ring, value printed inside, butt-cap arc (hard-corner
    system extends to stroke ends, not just rectangles) ── */
 /* Plain knob wrapper — matches design_handoff's ".swatch": column flex,
