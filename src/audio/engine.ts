@@ -339,6 +339,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   setCloudsParam(6, 0.0);  // stereo_spread
   setCloudsParam(7, 0.0);  // feedback
   setCloudsParam(8, 0.25); // reverb
+  setCloudsQuality(2);     // manual's 3rd quality option: 16kHz 8-bit mu-law, stereo
 
   // Stereo metering — split master bus into L/R analysers
   const splitter = audioCtx.createChannelSplitter(2);
@@ -523,6 +524,13 @@ export function setCloudsParam(param: number, value: number): void {
 
 export function setCloudsFreeze(on: boolean): void {
   cloudsNode?.port.postMessage({ type: 'set-freeze', payload: { on } });
+}
+
+// quality: bit0 = mono (vs stereo), bit1 = low-fidelity 8-bit mu-law (vs
+// 16-bit) — matches GranularProcessor::set_quality()'s bit layout (see
+// clouds_wrapper.cpp). 0=16-bit stereo 1=16-bit mono 2=8-bit stereo 3=8-bit mono.
+export function setCloudsQuality(quality: number): void {
+  cloudsNode?.port.postMessage({ type: 'set-quality', payload: { quality } });
 }
 
 // mode: 0=granular 1=stretch 2=looping delay 3=spectral (spectral is

@@ -1351,6 +1351,19 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .dv-slider.disabled { opacity: 0.35; pointer-events: none; }
 
+/* Bipolar center detent — always visible (unlike .dv-slider-tick, which only
+   shows the live drag position on hover/focus/drag), marking the 12-o'clock
+   "zero" point on knobs like Clouds' Density/Pitch. */
+.dv-slider-center {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--border-hover);
+  pointer-events: none;
+}
+.dv-slider.vertical .dv-slider-center { left: 0; right: 0; top: auto; width: auto; height: 2px; transform: translateY(1px); }
+
 /* Vertical variant — Master tab mixer faders. Fill grows from the bottom. */
 .dv-slider.vertical {
   width: 22px;

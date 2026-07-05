@@ -1,8 +1,21 @@
-import { setCloudsParam, setCloudsFreeze, setCloudsWet, setCloudsReverbSend } from '../audio/engine';
+import { setCloudsParam, setCloudsFreeze, setCloudsWet, setCloudsReverbSend, setCloudsQuality } from '../audio/engine';
 import { Slider } from './Slider';
 import { Toggle } from './Toggle';
 import { Dropdown } from './Dropdown';
 import type { TexturePreset } from '../presets';
+
+// Manual's 4 quality settings, in the order the hardware's Blend/Quality
+// button cycles through them (see clouds_wrapper.cpp's clouds_set_quality —
+// bit0=mono, bit1=low-fidelity 8-bit mu-law). Buffer times are the printed
+// hardware spec; this build's much larger sample memory means actual freeze
+// time runs longer than these, but the rate/resolution/channel mapping is
+// what "quality" actually selects.
+const QUALITY_OPTIONS = [
+  { value: '0', label: '32kHz 16-bit stereo (1s)' },
+  { value: '1', label: '32kHz 16-bit mono (2s)' },
+  { value: '2', label: '16kHz 8-bit µ-law stereo (4s)' },
+  { value: '3', label: '16kHz 8-bit µ-law mono (8s)' },
+];
 
 // Master-bus granular texture effect (Mutable Instruments Clouds' granular
 // mode only — Stretch/Looping-Delay/Spectral modes exist in the underlying
@@ -31,6 +44,7 @@ export interface CloudsUiState {
   mix: number;       // return level into the master bus
   reverbSend: number; // amount fed into the shared Reverb, independent of Mix
   freeze: boolean;
+  quality: number;   // 0-3, see QUALITY_OPTIONS / clouds_wrapper.cpp's clouds_set_quality
 }
 
 export interface CloudsControlsProps {
@@ -41,12 +55,15 @@ export interface CloudsControlsProps {
 }
 
 export function CloudsControls({ state, presets, onPresetLoad, onChange }: CloudsControlsProps) {
-  function row(label: string, key: keyof CloudsUiState, param: number, min = 0, max = 1) {
+  // bipolar: Density and Pitch are the two Clouds controls whose 12-o'clock
+  // center is a real "zero" point (manual: density=no grains, pitch=original
+  // frequency), not just a midpoint of a 0-1 range like Position/Size/Texture.
+  function row(label: string, key: keyof CloudsUiState, param: number, bipolar = false, min = 0, max = 1) {
     const value = state[key] as number;
     return (
       <div className="knob-row">
         <label>{label}</label>
-        <Slider value={value} min={min} max={max}
+        <Slider value={value} min={min} max={max} bipolar={bipolar}
           onChange={v => {
             onChange({ [key]: v } as Partial<CloudsUiState>);
             if (key === 'pitch') {
@@ -83,14 +100,20 @@ export function CloudsControls({ state, presets, onPresetLoad, onChange }: Cloud
       </div>
       {row('Position', 'position', 0)}
       {row('Size', 'size', 1)}
-      {row('Pitch', 'pitch', 2)}
-      {row('Density', 'density', 3)}
+      {row('Pitch', 'pitch', 2, true)}
+      {row('Density', 'density', 3, true)}
       {row('Texture', 'texture', 4)}
       {row('Feedback', 'feedback', 7)}
       <div className="knob-row">
         <label>&gt; Reverb</label>
         <Slider value={state.reverbSend} min={0} max={1}
           onChange={v => { onChange({ reverbSend: v }); setCloudsReverbSend(v); }} />
+      </div>
+      <div className="knob-row">
+        <label>Quality</label>
+        <Dropdown value={String(state.quality)} options={QUALITY_OPTIONS}
+          onChange={v => { const q = parseInt(v); onChange({ quality: q }); setCloudsQuality(q); }}
+        />
       </div>
     </div>
   );

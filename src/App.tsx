@@ -190,6 +190,7 @@ export default function App() {
   const [cloudsUi, setCloudsUi] = useState<CloudsUiState>({
     position: 0.5, size: 0.5, pitch: 0.5, density: 0.65, texture: 0.5,
     feedback: 0.0, mix: 0.5, reverbSend: 0.0, freeze: false,
+    quality: 2, // manual's 3rd option: 16kHz 8-bit mu-law, stereo — matches Engine.initAudio's default
   });
 
   // ── Grids drum pattern generator (Drums tab only) ────────────────────
@@ -250,6 +251,7 @@ export default function App() {
     (window as any).captureTexture = () => {
       const p = { name: 'Untitled', ...cloudsUi };
       delete (p as any).freeze;
+      delete (p as any).quality;
       const out = JSON.stringify(p, null, 2);
       console.log(`captureTexture()\n${out}`);
       return p;
@@ -484,11 +486,12 @@ export default function App() {
   }
 
   function loadTexturePreset(preset: TexturePreset) {
-    setCloudsUi({
+    setCloudsUi(prev => ({
+      ...prev,
       position: preset.position, size: preset.size, pitch: preset.pitch,
       density: preset.density, texture: preset.texture, feedback: preset.feedback,
       mix: preset.mix, reverbSend: preset.reverbSend, freeze: false,
-    });
+    }));
     if (!Engine.isAudioReady()) return;
     Engine.setCloudsParam(0, preset.position);
     Engine.setCloudsParam(1, preset.size);
