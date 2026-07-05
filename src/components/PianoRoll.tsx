@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { noteName, STEP_COUNT, PROB_OPTIONS, VELOCITY_OPTIONS,
          type StepValue } from '../hooks/useSequencer';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const PROB_LABELS: Record<number, string> = {
   1: '', 0.75: '75', 0.66: '66', 0.5: '50', 0.33: '33', 0.25: '25',
@@ -65,6 +66,15 @@ export function PianoRoll({
     onToggleNote(col, midi);
   }, [onToggleNote]);
 
+  // Squish: phone-width viewport, regular (non-kids) sequencer — same row
+  // heights as desktop (the page already scrolls vertically), just fluid
+  // step-column widths instead of a fixed 26px/step, so it fits without a
+  // horizontal scrollbar. Kids mode already has its own fluid layout, so it's
+  // left alone regardless of viewport.
+  const isMobile = useIsMobile();
+  const squish = isMobile && !kidsMode;
+  const fluid  = kidsMode || squish;
+
   const rows  = visibleNotes.length;
   const ROW_H = kidsMode ? 56 : 30;
   const GAP   = kidsMode ? 6  : 2;
@@ -72,11 +82,11 @@ export function PianoRoll({
 
   // Width of the left-side label area in meta rows — must match the left offset of
   // pr-grid-col inside pr-row. Normal: piano(22)+gap(4)+labels(36)+gap(4)=66.
-  // Drums: no piano col → labels(36)+gap(4)=40.
-  const metaLblWidth = rowLabels ? 40 : 66;
+  // Drums, or squish (piano-col hidden to save width): labels(36)+gap(4)=40.
+  const metaLblWidth = (rowLabels || squish) ? 40 : 66;
 
   return (
-    <div className={`piano-roll-wrap${kidsMode ? ' kids-piano-roll' : ''}`}>
+    <div className={`piano-roll-wrap${kidsMode ? ' kids-piano-roll' : ''}${squish ? ' squish-piano-roll' : ''}`}>
 
       {/* Scroll up — narrow, aligned with piano+label area only */}
       {!rowLabels && (
@@ -113,7 +123,7 @@ export function PianoRoll({
         {/* Piano keys | labels | grid */}
         <div className="pr-row">
 
-          {!kidsMode && !rowLabels && (
+          {!kidsMode && !rowLabels && !squish && (
             <div className="pr-piano-col" style={{ height: gridH }}>
               {visibleNotes.map((midi, i) => (
                 <PianoKey key={i} midi={midi} rootNote={rootNote} />
@@ -134,11 +144,15 @@ export function PianoRoll({
           <div className="pr-grid-col">
             <div
               className="pr-grid"
-              style={kidsMode ? {
-                gridTemplateColumns: `repeat(${STEP_COUNT}, minmax(0, 1fr))`,
-              } : {
-                gridTemplateColumns: `repeat(${STEP_COUNT}, 26px)`,
-                gridTemplateRows: `repeat(${rows}, ${ROW_H}px)`,
+              style={{
+                gridTemplateColumns: fluid
+                  ? `repeat(${STEP_COUNT}, minmax(0, 1fr))`
+                  : `repeat(${STEP_COUNT}, 26px)`,
+                // Kids mode's square cells auto-size off aspect-ratio, so no
+                // explicit row height there; squish keeps desktop's row
+                // height (the page scrolls vertically regardless), only
+                // columns go fluid.
+                ...(kidsMode ? {} : { gridTemplateRows: `repeat(${rows}, ${ROW_H}px)` }),
               }}
             >
               {Array.from({ length: rows }, (_, row) =>

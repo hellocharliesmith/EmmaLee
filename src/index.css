@@ -9,3 +9,10 @@ body {
 }
 
 button { font-family: inherit; }
+
+/* #root is body's actual flex item (App.css's body{display:flex} centers it) —
+   without min-width:0 here, its default min-width:auto means any wide-enough
+   descendant (pre-squish sequencer, an unwrapped button row, ...) forces this
+   — and so the whole page — wider than the viewport instead of wrapping or
+   scrolling internally. */
+#root { min-width: 0; }

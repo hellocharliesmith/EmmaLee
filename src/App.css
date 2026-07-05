@@ -49,19 +49,15 @@
 .app.track-drums   { --accent: var(--slate-400); --accent-dark: var(--slate-500); --accent-light: var(--slate-300); }
 .app.track-master  { --accent: var(--neutral-dark-300); --accent-dark: var(--neutral-dark-400); --accent-light: var(--neutral-dark-200); }
 
-/* The app renders as a bordered card sitting on the (darker) page background,
-   not edge-to-edge — matches both rings_layout.html and master_layout.html,
-   which wrap everything in a `.dv-card` with its own background/border. */
+/* Content sits directly on the page background, edge-to-edge — no bordered
+   card wrapper (that framing just ate padding on every side for no benefit). */
 body { display: flex; justify-content: center; padding: 40px 20px; min-height: 100vh; }
 .app {
   width: 100%;
-  max-width: 1172px; /* 1120px content + card padding */
-  background: var(--bg-body);
-  border: 1px solid var(--border);
+  max-width: 1120px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 26px 26px 22px;
   gap: 22px;
 }
 
@@ -561,6 +557,33 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .kids-piano-roll .pr-step-nums { display: none; }
 .kids-piano-roll .pr-strum-row { display: none; }
 .kids-piano-roll .pr-prob-row  { display: none; }
+
+/* ── Squish (mobile) piano roll — the regular (non-kids) sequencer compressed
+   to fit a phone-width viewport: fluid step-column widths instead of a fixed
+   26px/step, same row heights/gaps as desktop (the page scrolls vertically
+   regardless, so there's no need to touch those). Class is applied by
+   PianoRoll.tsx via useIsMobile(), same trigger as the rest of the mobile
+   layout in the @media block above. */
+.piano-roll-wrap.squish-piano-roll { width: 100%; }
+.squish-piano-roll .pr-grid-col { overflow-x: hidden; width: 100%; }
+.squish-piano-roll .pr-grid { width: 100%; }
+.squish-piano-roll .pr-cell { min-width: 0; }
+.squish-piano-roll .pr-last-step-cell,
+.squish-piano-roll .pr-strum-cell,
+.squish-piano-roll .pr-prob-cell,
+.squish-piano-roll .pr-velocity-cell,
+.squish-piano-roll .pr-step-num {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.squish-piano-roll .pr-prob-btn,
+.squish-piano-roll .pr-velocity-btn,
+.squish-piano-roll .pr-strum-btn {
+  width: 100%;
+  font-size: 7px;
+  padding: 0;
+}
 
 /* ── Page selector ── */
 .page-selector {
@@ -1738,5 +1761,46 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   text-transform: uppercase;
   letter-spacing: 0.08em;
   flex-shrink: 0;
+}
+
+/* ── Mobile layout — below ~640px (phone-sized viewports), every structural
+   row that's normally side-by-side stacks into a column and the page simply
+   scrolls; nothing here shrinks content to fit, that's what .squish-piano-roll
+   (PianoRoll.tsx, driven by useIsMobile()) is for on the sequencer specifically,
+   since a step grid doesn't have a sensible single-column form. ── */
+@media (max-width: 640px) {
+  body { padding: 16px 10px; }
+
+  /* body's default flex-shrink:1 + min-width:auto means a single wide
+     descendant anywhere (pre-squish sequencer, an unwrapped button row...)
+     forces .app itself wider than the viewport instead of wrapping/scrolling
+     internally. min-width:0 lets it actually shrink to the viewport so the
+     wrapping/stacking rules below can take effect. */
+  .app { min-width: 0; width: 100%; }
+
+  .app-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .header-clusters { flex-wrap: wrap; row-gap: 10px; width: 100%; }
+  .header-cluster { flex-wrap: wrap; row-gap: 6px; }
+  .header-divider { display: none; }
+
+  .page-selector, .page-buttons { flex-wrap: wrap; row-gap: 6px; }
+
+  .track-controls-row { flex-direction: column; }
+  .send-row { width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+  .waveform-section { flex-direction: column; align-items: stretch; }
+  .master-columns { flex-direction: column; align-items: stretch; }
+  .master-col-divider { width: 100%; height: 1px; align-self: auto; }
+  .master-mixer-col { align-items: center; }
+  .mixer-faders { flex-wrap: wrap; justify-content: center; }
+
+  /* flex-basis:100% forces lfo-inline onto its own line unconditionally
+     (rather than only wrapping once it no longer fits) — otherwise it just
+     barely shares the line with label+Slider, squeezing the actual param
+     control down to a near-invisible sliver. */
+  .knob-row { flex-wrap: wrap; row-gap: 8px; }
+  .lfo-inline { flex-basis: 100%; margin-left: 0; }
+  .reverb-type-btns { flex-wrap: wrap; }
+  .xy-pad-row, .grids-generate-btn { margin-left: 0; }
 }
 
