@@ -1175,51 +1175,45 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .pr-step-num.bar { color: var(--text-secondary); }
 
-/* ── LFO inline with params ── */
-/* Bottom-align the three columns rather than center them — with center
-   alignment, the shape button (36px) and knobs (48px) have different total
-   column heights even with matched spacing, so their vertical midpoints
-   align but the captions don't quite land on the same line. Bottom-aligning
-   guarantees the caption row is flush across all three regardless of any
-   residual few-px difference in the columns above it. */
-.lfo-inline {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-shrink: 0;
-  margin-left: 6px;
+/* ── LFO X/Y pad — Rate (x) and Depth (y) combined into one draggable pad
+   per param, with the running waveform (LfoScope) as a full-bleed background
+   reference instead of separate Rate/Depth knobs. ── */
+.lfo-param-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 28px;
 }
-
-/* Small caption under an icon-button/knob to line up with "rate"/"depth" */
-.cap {
-  font-size: 8px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  text-align: center;
-  margin-top: 2px;
-}
-
-/* LFO cycle button: Off -> Sine -> Random -> Off. Rate/Depth knobs next to
-   it stay mounted at all times (never unmount) so the layout doesn't jump
-   as the user cycles through states — they just go inert via Knob's
-   `disabled` prop when Off. */
-/* The shape button is 36px tall vs. the 48px Rate/Depth knobs next to it —
-   margin-top:6px + gap:9px (vs the knob's plain gap:5px) makes up that 12px
-   difference so all three "shape"/"rate"/"depth" captions land on the same
-   baseline instead of the shape column sitting visibly higher. */
-.lfo-cycle-wrap {
+.lfo-param-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-  width: 48px;
-  margin-top: 6px;
-  gap: 9px;
+  gap: 8px;
 }
+.lfo-param-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+/* Stacked below the label (not inline in a .knob-row), so it can't rely on
+   the row's flex context for sizing — .dv-slider's own flex:1 would otherwise
+   grow it along the column's main axis instead of filling the width. Also
+   bumped past the base 14px so it's a real touch target. */
+.lfo-param-card .lfo-param-slider {
+  flex: none;
+  width: 100%;
+  height: 24px;
+}
+.lfo-pad-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Shape button: Off -> Sine -> Random -> Off, sits beside the pad rather
+   than overlaid in its corner. */
 .lfo-cycle-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   color: var(--border-disabled);
@@ -1233,10 +1227,67 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .lfo-cycle-btn.on { background: var(--accent); border-color: var(--accent); color: var(--bg-body); }
 .lfo-icon-dash { width: 11px; height: 1.5px; background: currentColor; display: block; }
 
+/* Frame: a narrow rotated "Depth" label to the left of the pad, a "Rate"
+   label centered below it. */
+.lfo-xy-frame {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  grid-template-rows: 1fr 14px;
+  gap: 4px;
+  width: fit-content;
+}
+.lfo-xy-axis-y {
+  grid-column: 1; grid-row: 1;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-align: center;
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.lfo-xy-axis-x {
+  grid-column: 2; grid-row: 2;
+  text-align: center;
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.lfo-xy-pad {
+  grid-column: 2; grid-row: 1;
+  position: relative;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  touch-action: none; /* the pad's own pointer-drag handles panning, not the browser */
+  overflow: hidden;
+}
+.lfo-xy-pad.disabled { cursor: default; }
+.lfo-xy-pad.disabled .lfo-xy-handle { opacity: 0.3; }
+.lfo-xy-handle {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+  transition: opacity 0.12s;
+}
+
 /* Running LFO waveform preview — dim flat line at rest, accent-colored trace
    while the LFO is on (path itself is redrawn imperatively, see LfoScope.tsx). */
 .lfo-scope { color: var(--border-disabled); flex-shrink: 0; }
 .lfo-scope.on { color: var(--accent); }
+/* As the pad's background layer specifically: fill it, sit behind the
+   handle/shape button, never intercept the pad's own pointer events. */
+.lfo-xy-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 
 /* ── Knob — donut ring, value printed inside, butt-cap arc (hard-corner
    system extends to stroke ends, not just rectangles) ── */
@@ -1266,9 +1317,6 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
    than the normal border) so an inert knob reads as inactive at a glance. */
 .knob.disabled .knob-track { stroke: var(--bg-panel); }
 .knob.disabled .knob-value { fill: var(--border-disabled); }
-/* Same caption style as .cap (used for the LFO shape button below) —
-   deliberately identical font-size/color/spacing so knob and shape-button
-   captions share a baseline when they sit side by side in .lfo-inline. */
 .knob-label {
   font-size: 8px;
   color: var(--text-secondary);
@@ -1740,6 +1788,22 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   flex-shrink: 0;
 }
 
+/* Preset + Model dropdowns share one row instead of stacking. */
+.preset-model-row {
+  display: flex;
+  gap: 20px;
+}
+.preset-model-row .knob-row {
+  flex: 1;
+  min-width: 0;
+}
+.preset-model-row .knob-row .dv-dropdown,
+.preset-model-row .knob-row .model-select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
 /* ── Mobile layout — below ~640px (phone-sized viewports), every structural
    row that's normally side-by-side stacks into a column and the page simply
    scrolls. The sequencer itself is deliberately NOT shrunk to fit here — it
@@ -1780,12 +1844,9 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   .master-mixer-col { align-items: center; }
   .mixer-faders { flex-wrap: wrap; justify-content: center; }
 
-  /* flex-basis:100% forces lfo-inline onto its own line unconditionally
-     (rather than only wrapping once it no longer fits) — otherwise it just
-     barely shares the line with label+Slider, squeezing the actual param
-     control down to a near-invisible sliver. */
   .knob-row { flex-wrap: wrap; row-gap: 8px; }
-  .lfo-inline { flex-basis: 100%; margin-left: 0; }
+  .preset-model-row { flex-direction: column; gap: 10px; }
+  .lfo-param-grid { grid-template-columns: 1fr; }
   .reverb-type-btns { flex-wrap: wrap; }
   .xy-pad-row, .grids-generate-btn { margin-left: 0; }
 }

@@ -7,9 +7,9 @@ interface LfoScopeProps {
   maxDepth?: number; // normalizes lfo.depth to the box height (Rings' Depth knob runs 0-0.5)
   width?: number;
   height?: number;
+  className?: string; // e.g. LfoXYPad positions this as an absolute-filled background layer
 }
 
-const POINTS = 32;           // path resolution — plenty for a ~48px-wide box
 const WINDOW_SECONDS = 1.6;  // how much time the box width spans, oscilloscope-style
 
 // Deterministic 1D value noise — a continuous, smoothly-wandering function of
@@ -34,10 +34,14 @@ function smoothNoise(t: number): number {
 // SVG path's `d` attribute directly via ref on every driver tick instead of
 // going through React state/re-render, and reads live rate/depth/wave off a
 // ref so dragging those knobs never has to re-subscribe the animation.
-export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 48 }: LfoScopeProps) {
+export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 48, className }: LfoScopeProps) {
   const pathRef = useRef<SVGPathElement>(null);
   const lfoRef = useRef(lfo);
   useEffect(() => { lfoRef.current = lfo; }, [lfo]);
+
+  // Path resolution scales with box width — 32 points was plenty at ~48px,
+  // but reads as choppy stretched across a ~160px+ XY pad.
+  const points = Math.max(24, Math.round(width / 3));
 
   useEffect(() => {
     const path = pathRef.current;
@@ -57,20 +61,20 @@ export function LfoScope({ lfo, maxDepth = 0.5, width = 48, height = 48 }: LfoSc
       const midY = height / 2;
       const t0 = now / 1000;
       let d = '';
-      for (let i = 0; i < POINTS; i++) {
-        const x = (i / (POINTS - 1)) * width;
-        const t = t0 - ((POINTS - 1 - i) / (POINTS - 1)) * WINDOW_SECONDS;
+      for (let i = 0; i < points; i++) {
+        const x = (i / (points - 1)) * width;
+        const t = t0 - ((points - 1 - i) / (points - 1)) * WINDOW_SECONDS;
         const v = wave === 'sine' ? Math.sin(2 * Math.PI * rate * t) : smoothNoise(t * rate * 1.5);
         const y = midY - v * amp;
         d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
       }
       path.setAttribute('d', d);
     });
-  }, [lfo.on, width, height, maxDepth]);
+  }, [lfo.on, width, height, maxDepth, points]);
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
-      className={`lfo-scope${lfo.on ? ' on' : ''}`}>
+      className={`lfo-scope${lfo.on ? ' on' : ''}${className ? ` ${className}` : ''}`}>
       <path ref={pathRef} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
     </svg>
   );
