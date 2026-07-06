@@ -558,33 +558,6 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .kids-piano-roll .pr-strum-row { display: none; }
 .kids-piano-roll .pr-prob-row  { display: none; }
 
-/* ── Squish (mobile) piano roll — the regular (non-kids) sequencer compressed
-   to fit a phone-width viewport: fluid step-column widths instead of a fixed
-   26px/step, same row heights/gaps as desktop (the page scrolls vertically
-   regardless, so there's no need to touch those). Class is applied by
-   PianoRoll.tsx via useIsMobile(), same trigger as the rest of the mobile
-   layout in the @media block above. */
-.piano-roll-wrap.squish-piano-roll { width: 100%; }
-.squish-piano-roll .pr-grid-col { overflow-x: hidden; width: 100%; }
-.squish-piano-roll .pr-grid { width: 100%; }
-.squish-piano-roll .pr-cell { min-width: 0; }
-.squish-piano-roll .pr-last-step-cell,
-.squish-piano-roll .pr-strum-cell,
-.squish-piano-roll .pr-prob-cell,
-.squish-piano-roll .pr-velocity-cell,
-.squish-piano-roll .pr-step-num {
-  width: auto;
-  min-width: 0;
-  flex: 1 1 0;
-}
-.squish-piano-roll .pr-prob-btn,
-.squish-piano-roll .pr-velocity-btn,
-.squish-piano-roll .pr-strum-btn {
-  width: 100%;
-  font-size: 7px;
-  padding: 0;
-}
-
 /* ── Page selector ── */
 .page-selector {
   display: flex;
@@ -739,12 +712,16 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   margin: 0 auto;
 }
 
-/* Inner scroll container — all grid rows scroll together horizontally */
+/* Inner scroll container — all grid rows scroll together horizontally.
+   overscroll-behavior-x:contain keeps a swipe that runs out of scroll room
+   (e.g. already at step 1, swiping right) from chaining into the browser's
+   own swipe-to-go-back/forward navigation gesture. */
 .piano-roll-scroll {
   display: flex;
   flex-direction: column;
   gap: 4px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 /* Meta rows (strum / prob / vel) with left label */
@@ -1765,18 +1742,27 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 
 /* ── Mobile layout — below ~640px (phone-sized viewports), every structural
    row that's normally side-by-side stacks into a column and the page simply
-   scrolls; nothing here shrinks content to fit, that's what .squish-piano-roll
-   (PianoRoll.tsx, driven by useIsMobile()) is for on the sequencer specifically,
-   since a step grid doesn't have a sensible single-column form. ── */
+   scrolls. The sequencer itself is deliberately NOT shrunk to fit here — it
+   keeps its normal (desktop) step-column width and just scrolls horizontally
+   within .piano-roll-scroll, since squishing 32 steps down to phone width
+   made them too small to tap reliably. ── */
 @media (max-width: 640px) {
   body { padding: 16px 10px; }
 
   /* body's default flex-shrink:1 + min-width:auto means a single wide
-     descendant anywhere (pre-squish sequencer, an unwrapped button row...)
-     forces .app itself wider than the viewport instead of wrapping/scrolling
-     internally. min-width:0 lets it actually shrink to the viewport so the
+     descendant anywhere (an unwrapped button row, etc.) forces .app itself
+     wider than the viewport instead of wrapping/scrolling internally.
+     min-width:0 lets it actually shrink to the viewport so the
      wrapping/stacking rules below can take effect. */
   .app { min-width: 0; width: 100%; }
+
+  /* .piano-roll-wrap's base width:fit-content means it just grows to match
+     its ~900px-wide content instead of being clipped — .piano-roll-scroll's
+     overflow-x:auto has nothing to actually overflow against until the wrap
+     is capped to the viewport's available width. .piano-roll-scroll itself
+     stretches to match (default align-items:stretch on the column-flex
+     wrap), so it doesn't need its own rule here. */
+  .piano-roll-wrap { width: 100%; }
 
   .app-header { flex-direction: column; align-items: stretch; gap: 12px; }
   .header-clusters { flex-wrap: wrap; row-gap: 10px; width: 100%; }
