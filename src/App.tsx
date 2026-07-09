@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Tone from 'tone';
 import * as Engine from './audio/engine';
-import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId } from './audio/engine';
+import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId, type TrackId as EngineTrackId } from './audio/engine';
 import { divisionSeconds } from './audio/utils';
 import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT, STEP_COUNT,
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
@@ -22,6 +22,7 @@ import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
+import { VoiceTabViz } from './components/VoiceTabViz';
 import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
 
@@ -37,6 +38,17 @@ const TRACK_FADER_COLORS: Record<TrackId, [string, string]> = {
   ringsB: ['var(--teal-400)',   'var(--teal-500)'],
   plaits: ['var(--sage-400)',   'var(--sage-500)'],
   drums:  ['var(--slate-400)',  'var(--slate-500)'],
+};
+const MASTER_VOICE_COLOR = 'var(--neutral-dark-300)';
+
+// Which engine.ts worklets feed each tab's VoiceTabViz — the Drums tab is one
+// grid/tab here but 3 independent engine tracks (see DRUM_VOICE_IDS's comment
+// in engine.ts), so its indicator aggregates all three.
+const VOICE_TRACKS_FOR_TAB: Record<TrackId, EngineTrackId[]> = {
+  ringsA: ['ringsA'],
+  ringsB: ['ringsB'],
+  plaits: ['plaits'],
+  drums:  DRUM_VOICE_IDS,
 };
 
 function checkSupport(): string | null {
@@ -741,16 +753,27 @@ export default function App() {
           )}
 
           <div className="page-selector">
-            {TRACK_IDS.map(id => (
-              <button key={id}
-                className={['page-btn', 'track-tab', (viewSection === 'track' && activeTrack === id) ? 'viewing' : ''].filter(Boolean).join(' ')}
-                onClick={() => { setActiveTrack(id); setViewSection('track'); }}
-              >{TRACK_LABELS[id]}</button>
-            ))}
+            {TRACK_IDS.map(id => {
+              const isViewing = viewSection === 'track' && activeTrack === id;
+              return (
+                <button key={id}
+                  className={['page-btn', 'track-tab', isViewing ? 'viewing' : ''].filter(Boolean).join(' ')}
+                  onClick={() => { setActiveTrack(id); setViewSection('track'); }}
+                >
+                  {TRACK_LABELS[id]}
+                  <VoiceTabViz tracks={VOICE_TRACKS_FOR_TAB[id]}
+                    color={isViewing ? 'var(--bg-body)' : TRACK_FADER_COLORS[id][0]} />
+                </button>
+              );
+            })}
             <button
               className={['page-btn', 'track-tab', viewSection === 'master' ? 'viewing' : ''].filter(Boolean).join(' ')}
               onClick={() => setViewSection('master')}
-            >Master</button>
+            >
+              Master
+              <VoiceTabViz tracks="all"
+                color={viewSection === 'master' ? 'var(--bg-body)' : MASTER_VOICE_COLOR} />
+            </button>
           </div>
 
           {viewSection === 'track' && (

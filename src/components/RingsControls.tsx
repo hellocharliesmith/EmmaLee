@@ -113,7 +113,7 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
                     <div className="cap">shape</div>
                   </div>
                   <Knob
-                    value={lfoState.rate} min={0.05} max={8} label="Rate" size={48}
+                    value={lfoState.rate} min={1 / 30} max={8} label="Rate" size={48} log
                     disabled={!lfoState.on}
                     onChange={v => { onLfoChange(lfoIdx, { rate: v }); setLFORate(trackId, lfoIdx, v); }}
                   />

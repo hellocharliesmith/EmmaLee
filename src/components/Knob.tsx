@@ -8,6 +8,9 @@ interface KnobProps {
   onChange: (v: number) => void;
   size?: number;      // outer SVG size in px — 44 default, 48 for Rate/Depth, 68 for Sends
   disabled?: boolean; // inert: dim ring, no arc
+  log?: boolean;      // logarithmic taper — e.g. LFO Rate, where the musically
+                      // useful slow end would otherwise be squeezed into a
+                      // sliver of the knob's travel under a linear taper
 }
 
 const MIN_ANG = -135;
@@ -28,11 +31,21 @@ function arc(cx: number, cy: number, r: number, a1: number, a2: number) {
   return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
 }
 
-export function Knob({ value, min, max, label, onChange, size = 44, disabled = false }: KnobProps) {
+export function Knob({ value, min, max, label, onChange, size = 44, disabled = false, log = false }: KnobProps) {
   const [dragging, setDragging] = useState(false);
-  const norm  = Math.max(0, Math.min(1, (value - min) / (max - min)));
+
+  const normFromValue = useCallback((v: number) => {
+    const n = log ? Math.log(v / min) / Math.log(max / min) : (v - min) / (max - min);
+    return Math.max(0, Math.min(1, n));
+  }, [min, max, log]);
+  const valueFromNorm = useCallback((n: number) => {
+    const v = log ? min * Math.pow(max / min, n) : min + n * (max - min);
+    return Math.max(min, Math.min(max, v));
+  }, [min, max, log]);
+
+  const norm  = normFromValue(value);
   const angle = MIN_ANG + norm * (MAX_ANG - MIN_ANG);
-  const drag  = useRef<{ y: number; val: number } | null>(null);
+  const drag  = useRef<{ y: number; norm: number } | null>(null);
 
   const cx = size / 2, cy = size / 2;
   // Exact stroke widths for the two spec'd sizes (48 -> r19/stroke5, 68 ->
@@ -43,12 +56,12 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
 
   const startDrag = useCallback((clientY: number) => {
     if (disabled) return;
-    drag.current = { y: clientY, val: value };
+    drag.current = { y: clientY, norm: normFromValue(value) };
     setDragging(true);
     const move = (y: number) => {
       if (!drag.current) return;
       const delta = (drag.current.y - y) / 120;
-      onChange(Math.max(min, Math.min(max, drag.current.val + delta * (max - min))));
+      onChange(valueFromNorm(Math.max(0, Math.min(1, drag.current.norm + delta))));
     };
     const mouseMove = (e: MouseEvent) => move(e.clientY);
     const touchMove = (e: TouchEvent) => { e.preventDefault(); move(e.touches[0].clientY); };
@@ -64,7 +77,7 @@ export function Knob({ value, min, max, label, onChange, size = 44, disabled = f
     window.addEventListener('mouseup', end);
     window.addEventListener('touchmove', touchMove, { passive: false });
     window.addEventListener('touchend', end);
-  }, [value, min, max, onChange, disabled]);
+  }, [value, normFromValue, valueFromNorm, disabled, onChange]);
 
   return (
     <div

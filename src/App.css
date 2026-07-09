@@ -624,15 +624,45 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .clear-seq-btn:hover { color: var(--text-secondary); border-color: var(--border-hover); }
 
-/* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.) */
+/* Track tabs — like page-btn but sized for text labels (Rings A, Master, etc.)
+   and widened to fit a per-voice activity indicator (see .voice-tab-viz)
+   alongside the label rather than just centering the text. */
 .track-tab {
   width: auto;
-  padding: 0 14px;
+  min-width: 148px;
+  height: 32px;
+  padding: 0 12px;
+  justify-content: space-between;
+  gap: 10px;
   border-color: var(--border-disabled);
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.7rem;
+}
+
+/* Per-voice activity indicator — firefly-scatter dots (see VoiceTabViz.tsx),
+   one per note-on, positioned left-to-right by pitch. Sits in the remaining
+   width the wider .track-tab makes room for. */
+.voice-tab-viz {
+  position: relative;
+  flex: 1;
+  min-width: 40px;
+  height: 18px;
+  overflow: hidden;
+}
+.voice-dot {
+  position: absolute;
+  top: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: voice-dot-fire 650ms ease-out forwards;
+}
+@keyframes voice-dot-fire {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
 }
 
 /* Voice controls + sends on the same horizontal band, aligned to piano roll width */

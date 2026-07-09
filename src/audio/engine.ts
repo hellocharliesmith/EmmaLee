@@ -369,6 +369,19 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   isReady = true;
 }
 
+// ── Voice-trigger events ────────────────────────────────────────────────────
+// Fired synchronously from triggerNote(), which is itself always called from
+// inside a Tone.getDraw().schedule() callback — so subscribers already get
+// audio-visual-synced timing for free, the same mechanism the sequencer grid
+// uses to light up the currently-playing step. Consumed by VoiceTabViz for
+// the per-tab firefly-scatter activity indicator.
+export interface VoiceEvent { trackId: TrackId; pitch: number; velocity: number; }
+const voiceListeners = new Set<(e: VoiceEvent) => void>();
+export function onVoiceTrigger(cb: (e: VoiceEvent) => void): () => void {
+  voiceListeners.add(cb);
+  return () => voiceListeners.delete(cb);
+}
+
 // ── Generic per-track controls (any track type) ────────────────────────────
 // midiNote is omitted for drum voices — each has a fixed note set once at creation.
 // velocity (0-1, default 1) scales the worklet's output for this hit — currently
@@ -377,6 +390,10 @@ export function triggerNote(trackId: TrackId, midiNote?: number, velocity?: numb
   const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'trigger', payload: { note: midiNote, velocity } });
+
+  const pitch = midiNote ?? (DRUM_VOICE_CONFIG as Record<string, { note: number }>)[trackId]?.note ?? 60;
+  const event: VoiceEvent = { trackId, pitch, velocity: velocity ?? 1 };
+  for (const cb of voiceListeners) cb(event);
 }
 
 export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb' | 'clouds', value: number): void {
