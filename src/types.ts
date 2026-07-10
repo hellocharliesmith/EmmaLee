@@ -36,7 +36,8 @@ export interface PlaitsTrackState extends BaseTrackState {
   timbre: number;
   morph: number;
   decay: number;
-  lpgColour: number;
+  lpgColour: number; // no longer surfaced in the UI — always sent to the engine as 1.0 (see engine.ts)
+  lfo: LfoState[];
 }
 
 export interface DrumTrackState extends BaseTrackState {

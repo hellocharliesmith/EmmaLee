@@ -11,6 +11,7 @@ export interface PlaitsPreset {
   name: string;
   engine: number;
   params: [number, number, number, number, number]; // harmonics, timbre, morph, decay, lpgColour
+  lfo: LfoState[];
 }
 
 export const NO_LFO: LfoState[] = [
@@ -72,11 +73,13 @@ export const PLAITS_PRESETS: PlaitsPreset[] = [
     name: 'Round Bass',
     engine: 10,
     params: [0, 0.5, 0.21, 0.9, 0],
+    lfo: NO_LFO,
   },
   {
     name: 'Analog Pluck',
     engine: 8,
     params: [0.48, 0, 0, 0.15, 0],
+    lfo: NO_LFO,
   },
 ];
 

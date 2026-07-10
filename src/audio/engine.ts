@@ -197,6 +197,10 @@ async function createPlaitsTrack(ctx: AudioContext, wasmBytes: ArrayBuffer): Pro
   worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });
   worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.5 } });
   worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.5 } });
+  // LPG Colour (param 4) — no longer exposed as a control (it read as a toggle
+  // in practice, not a useful continuous knob); pinned to 1.0, the full/"darker"
+  // lowpass-gate character, rather than the lighter/more-VCA-like end at 0.
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 4, value: 1.0 } });
   worklet.port.postMessage({ type: 'set-model', payload: { model: 8 } });
 }
 
@@ -455,6 +459,29 @@ export function setPlaitsModel(engine: number): void {
   const t = tracks.get(PLAITS_TRACK_ID);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-model', payload: { model: engine } });
+}
+
+// Plaits LFOs — same 4-slot system as Rings' (index matches param: 0=harmonics
+// 1=timbre 2=morph 3=decay), added to plaits-processor.js alongside it.
+export function setPlaitsLFOEnabled(i: number, enabled: boolean): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'enabled', value: enabled } });
+}
+export function setPlaitsLFOWave(i: number, wave: string): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'wave', value: wave } });
+}
+export function setPlaitsLFORate(i: number, rate: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'rate', value: rate } });
+}
+export function setPlaitsLFODepth(i: number, depth: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
 }
 
 // ── Drum voice controls ────────────────────────────────────────────────────

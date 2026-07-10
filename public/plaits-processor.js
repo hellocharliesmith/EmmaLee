@@ -1,5 +1,10 @@
 // AudioWorklet processor for the Plaits melodic track — runs on the audio thread.
-// Slimmed down: no LFOs, no internal reverb (those live on the master bus / Rings only).
+// Slimmed down: no internal reverb (that lives on the master bus / Rings only).
+// LFOs (added later, mirrors rings-processor.js) only ever target params 0-3
+// (Harmonics/Timbre/Morph/Decay) — param 4 (LPG Colour) is a fixed hardware
+// global set once from the main thread and never modulated.
+// Reused as-is for the 3 drum voices too (see engine.ts's DRUM_VOICE_CONFIG) —
+// they simply never receive a 'set-lfo' message, so this stays dormant there.
 
 class PlaitsProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -22,6 +27,18 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     this.pendingNote    = undefined;
     this.velocity       = 1.0; // scales output; updated on trigger, sticky until next one
 
+    // Base param values (set by sliders, used as LFO centre) — indices
+    // 0=harmonics, 1=timbre, 2=morph, 3=decay.
+    this.baseParams = [0.5, 0.5, 0.5, 0.5];
+
+    // Four LFOs, one per modulatable param (same shape as rings-processor.js).
+    this.lfos = [0, 1, 2, 3].map(paramIdx => ({
+      enabled: false, wave: 'sine', rate: 0.5, depth: 0.15,
+      paramIdx,
+      phase: 0,
+      cur: 0, tgt: Math.random() * 2 - 1, prog: 0,
+    }));
+
     this.port.onmessage = async (e) => {
       const { type, payload } = e.data;
       switch (type) {
@@ -40,13 +57,27 @@ class PlaitsProcessor extends AudioWorkletProcessor {
           this._setNote?.(payload.note);
           break;
 
-        case 'set-param':
-          this._setParam?.(payload.param, payload.value);
+        case 'set-param': {
+          const { param, value } = payload;
+          this.baseParams[param] = value;
+          const lfo = this.lfos.find(l => l.paramIdx === param);
+          if (!lfo?.enabled) this._setParam?.(param, value);
           break;
+        }
 
         case 'set-model':
           this._setModel?.(payload.model);
           break;
+
+        case 'set-lfo': {
+          const { index, field, value } = payload;
+          const lfo = this.lfos[index];
+          if (!lfo) break;
+          lfo[field] = value;
+          if (field === 'enabled' && !value)
+            this._setParam?.(lfo.paramIdx, this.baseParams[lfo.paramIdx]);
+          break;
+        }
       }
     };
   }
@@ -102,6 +133,28 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       if (this.pendingNote !== undefined) this._setNote(this.pendingNote);
       this._trigger();
       this.pendingTrigger = false;
+    }
+
+    // ── LFO — runs on audio thread, zero IPC, block-rate accurate ──────────
+    const dt = 128 / sampleRate;
+    for (const lfo of this.lfos) {
+      if (!lfo.enabled) continue;
+      let sig;
+      if (lfo.wave === 'sine') {
+        lfo.phase = (lfo.phase + lfo.rate * dt) % 1;
+        sig = Math.sin(lfo.phase * 6.283185307179586);
+      } else {
+        lfo.prog += lfo.rate * dt;
+        if (lfo.prog >= 1) {
+          lfo.cur = lfo.tgt;
+          lfo.tgt = Math.random() * 2 - 1;
+          lfo.prog = 0;
+        }
+        const t = (1 - Math.cos(lfo.prog * 3.141592653589793)) * 0.5;
+        sig = lfo.cur + (lfo.tgt - lfo.cur) * t;
+      }
+      const val = Math.max(0, Math.min(1, this.baseParams[lfo.paramIdx] + lfo.depth * sig));
+      this._setParam(lfo.paramIdx, val);
     }
 
     this._process(this.outputPtr, left.length);

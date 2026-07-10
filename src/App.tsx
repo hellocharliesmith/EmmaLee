@@ -7,7 +7,7 @@ import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT, STE
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { DEMO_SONGS } from './demoSongs';
-import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
+import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, NO_LFO, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { Slider } from './components/Slider';
@@ -104,6 +104,7 @@ interface PlaitsParamsState {
   kind: 'plaits';
   engine: number;
   params: [number, number, number, number, number]; // harmonics, timbre, morph, decay, lpgColour
+  lfo: LfoState[];
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -125,7 +126,7 @@ function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
-  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 0.5], volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 // Decay defaults match engine.ts's DRUM_VOICE_CONFIG so the knobs reflect what's
 // actually set on the worklet at creation time.
@@ -322,7 +323,7 @@ export default function App() {
       pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages, lastStep: tracks.plaits.lastStep,
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
-      morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4],
+      morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4], lfo: plaitsP.lfo,
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend, cloudsSend: plaitsP.cloudsSend,
     };
     const drums: DrumTrackState = {
@@ -360,7 +361,7 @@ export default function App() {
     };
     const plaits: PlaitsTrackState = {
       ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
-      engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5, lpgColour: 0.5,
+      engine: 8, harmonics: 0.5, timbre: 0.5, morph: 0.5, decay: 0.5, lpgColour: 0.5, lfo: NO_LFO,
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const drums: DrumTrackState = {
@@ -394,7 +395,7 @@ export default function App() {
       tracks: {
         ringsA: { ...stepsToPages(v2.tracks.ringsA.steps), scale: v2.tracks.ringsA.scale, rootNote: v2.tracks.ringsA.rootNote, scrollRow: v2.tracks.ringsA.scrollRow, model: v2.tracks.ringsA.model, structure: v2.tracks.ringsA.structure, brightness: v2.tracks.ringsA.brightness, damping: v2.tracks.ringsA.damping, position: v2.tracks.ringsA.position, lfo: v2.tracks.ringsA.lfo, volume: v2.tracks.ringsA.volume, delaySend: v2.tracks.ringsA.delaySend, reverbSend: v2.tracks.ringsA.reverbSend },
         ringsB: { ...stepsToPages(v2.tracks.ringsB.steps), scale: v2.tracks.ringsB.scale, rootNote: v2.tracks.ringsB.rootNote, scrollRow: v2.tracks.ringsB.scrollRow, model: v2.tracks.ringsB.model, structure: v2.tracks.ringsB.structure, brightness: v2.tracks.ringsB.brightness, damping: v2.tracks.ringsB.damping, position: v2.tracks.ringsB.position, lfo: v2.tracks.ringsB.lfo, volume: v2.tracks.ringsB.volume, delaySend: v2.tracks.ringsB.delaySend, reverbSend: v2.tracks.ringsB.reverbSend },
-        plaits: { ...stepsToPages(v2.tracks.plaits.steps), scale: v2.tracks.plaits.scale, rootNote: v2.tracks.plaits.rootNote, scrollRow: v2.tracks.plaits.scrollRow, engine: v2.tracks.plaits.engine, harmonics: v2.tracks.plaits.harmonics, timbre: v2.tracks.plaits.timbre, morph: v2.tracks.plaits.morph, decay: v2.tracks.plaits.decay, lpgColour: v2.tracks.plaits.lpgColour ?? 0.5, volume: v2.tracks.plaits.volume, delaySend: v2.tracks.plaits.delaySend, reverbSend: v2.tracks.plaits.reverbSend },
+        plaits: { ...stepsToPages(v2.tracks.plaits.steps), scale: v2.tracks.plaits.scale, rootNote: v2.tracks.plaits.rootNote, scrollRow: v2.tracks.plaits.scrollRow, engine: v2.tracks.plaits.engine, harmonics: v2.tracks.plaits.harmonics, timbre: v2.tracks.plaits.timbre, morph: v2.tracks.plaits.morph, decay: v2.tracks.plaits.decay, lpgColour: v2.tracks.plaits.lpgColour ?? 0.5, lfo: NO_LFO, volume: v2.tracks.plaits.volume, delaySend: v2.tracks.plaits.delaySend, reverbSend: v2.tracks.plaits.reverbSend },
         drums: drumsV3,
       },
       delayDivision: v2.delayDivision, delayMix: v2.delayMix, delayFeedback: v2.delayFeedback, delayFilter: v2.delayFilter,
@@ -451,6 +452,7 @@ export default function App() {
       plaits: {
         kind: 'plaits', engine: state.tracks.plaits.engine,
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
+        lfo: state.tracks.plaits.lfo ?? NO_LFO,
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
         cloudsSend: state.tracks.plaits.cloudsSend ?? 0.4,
       },
@@ -517,11 +519,17 @@ export default function App() {
 
   function loadPlaitsPreset(preset: PlaitsPreset) {
     updateTrackParamsFor('plaits', p => p.kind === 'plaits'
-      ? { ...p, engine: preset.engine, params: preset.params }
+      ? { ...p, engine: preset.engine, params: preset.params, lfo: preset.lfo }
       : p);
     if (!Engine.isAudioReady()) return;
     Engine.setPlaitsModel(preset.engine);
     preset.params.forEach((v, i) => Engine.setPlaitsParam(i, v));
+    preset.lfo.forEach((l, i) => {
+      Engine.setPlaitsLFOWave(i, l.wave);
+      Engine.setPlaitsLFORate(i, l.rate);
+      Engine.setPlaitsLFODepth(i, l.depth);
+      Engine.setPlaitsLFOEnabled(i, l.on);
+    });
   }
 
   function loadTexturePreset(preset: TexturePreset) {
@@ -580,7 +588,7 @@ export default function App() {
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
-      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
 
@@ -622,8 +630,16 @@ export default function App() {
     Engine.setPlaitsParam(1, pp.params[1]);
     Engine.setPlaitsParam(2, pp.params[2]);
     Engine.setPlaitsParam(3, pp.params[3]);
-    Engine.setPlaitsParam(4, pp.params[4]);
+    // LPG Colour (param 4) — no UI control, always pinned to the "darker" full
+    // lowpass-gate end (1.0) regardless of what's in saved state (see engine.ts).
+    Engine.setPlaitsParam(4, 1.0);
     Engine.setPlaitsModel(pp.engine);
+    pp.lfo.forEach((l, i) => {
+      Engine.setPlaitsLFOWave(i, l.wave);
+      Engine.setPlaitsLFORate(i, l.rate);
+      Engine.setPlaitsLFODepth(i, l.depth);
+      Engine.setPlaitsLFOEnabled(i, l.on);
+    });
     Engine.setTrackVolume('plaits', pp.volume);
     Engine.setTrackSend('plaits', 'delay', pp.delaySend);
     Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
@@ -886,7 +902,7 @@ export default function App() {
                   )}
                   {active.kind === 'plaits' && (
                     <PlaitsControls
-                      engine={active.engine} params={active.params}
+                      engine={active.engine} params={active.params} lfo={active.lfo}
                       presets={PLAITS_PRESETS}
                       onPresetLoad={loadPlaitsPreset}
                       onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
@@ -895,6 +911,8 @@ export default function App() {
                         const n = [...p.params] as [number,number,number,number,number]; n[i] = v;
                         return { ...p, params: n };
                       })}
+                      onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'plaits'
+                        ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
                     />
                   )}
                   {active.kind === 'drums' && (

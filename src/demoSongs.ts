@@ -1,4 +1,5 @@
 import type { SongState } from './types';
+import { NO_LFO } from './presets';
 
 export interface DemoSong {
   id: string;
@@ -83,6 +84,7 @@ export const DEMO_SONGS: DemoSong[] = [
           morph: 0.21,
           decay: 0.9,
           lpgColour: 0,
+          lfo: NO_LFO,
           volume: 0.21249999999999994,
           delaySend: 0.7583333333333333,
           reverbSend: 0.31666666666666665,

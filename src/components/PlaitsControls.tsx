@@ -1,6 +1,10 @@
-import { setPlaitsParam, setPlaitsModel } from '../audio/engine';
+import { setPlaitsParam, setPlaitsModel, setPlaitsLFOEnabled, setPlaitsLFOWave, setPlaitsLFORate, setPlaitsLFODepth } from '../audio/engine';
+import { Knob } from './Knob';
 import { Slider } from './Slider';
 import { Dropdown } from './Dropdown';
+import { LfoScope } from './LfoScope';
+import { lfoIcon, nextLfoState } from './lfoCycle';
+import type { LfoState } from '../types';
 import type { PlaitsPreset } from '../presets';
 
 // Engine indices match Plaits' actual hardware registration order (see voice.cc
@@ -18,8 +22,11 @@ const ENGINES = [
   { id: 6,  label: 'String Machine', description: 'String-machine/organ pads — lush, sustained' },
 ];
 
-// Params 3-4 (Decay / LPG Colour) are engine-independent hardware globals.
-// Params 0-2 have engine-specific meanings mapped below.
+// Param 3 (Decay) is an engine-independent hardware global. Params 0-2 have
+// engine-specific meanings mapped below. Param 4 (LPG Colour) used to be a
+// 5th slider here — it read as a toggle rather than a useful continuous
+// control, so it's no longer exposed at all and is pinned to its "darker"
+// full-lowpass-gate value in engine.ts instead.
 type ParamLabelRow = [string, string, string]; // [harmonics, timbre, morph]
 const ENGINE_PARAM_LABELS: Record<number, ParamLabelRow> = {
   8:  ['Overtones',  'Cutoff',      'Shape'],      // Virtual Analog
@@ -30,23 +37,27 @@ const ENGINE_PARAM_LABELS: Record<number, ParamLabelRow> = {
   6:  ['Register',   'Tone',        'Ensemble'],   // String Machine
 };
 const FALLBACK_LABELS: ParamLabelRow = ['Harmonics', 'Timbre', 'Morph'];
-const FIXED_LABELS = ['Decay', 'LPG Colour'] as const;
+const FIXED_LABEL = 'Decay';
+
+// LFO index matches param index: 0=Harmonics, 1=Timbre, 2=Morph, 3=Decay
+const PARAM_LFO_INDEX = [0, 1, 2, 3];
 
 export interface PlaitsControlsProps {
   engine: number;
   params: [number, number, number, number, number];
+  lfo: LfoState[];
   presets: PlaitsPreset[];
   onPresetLoad: (p: PlaitsPreset) => void;
   onEngineChange: (e: number) => void;
   onParamChange: (i: number, v: number) => void;
+  onLfoChange: (i: number, updates: Partial<LfoState>) => void;
 }
 
-export function PlaitsControls({ engine, params, presets, onPresetLoad, onEngineChange, onParamChange }: PlaitsControlsProps) {
+export function PlaitsControls({ engine, params, lfo, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange }: PlaitsControlsProps) {
   const engineLabels = ENGINE_PARAM_LABELS[engine] ?? FALLBACK_LABELS;
 
   function labelFor(i: number): string {
-    if (i < 3) return engineLabels[i];
-    return FIXED_LABELS[i - 3];
+    return i < 3 ? engineLabels[i] : FIXED_LABEL;
   }
 
   return (
@@ -68,15 +79,51 @@ export function PlaitsControls({ engine, params, presets, onPresetLoad, onEngine
         />
       </div>
 
-      {params.map((val, i) => (
-        <div key={i} className="knob-row param-row">
-          <label>{labelFor(i)}</label>
-          <Slider
-            value={val} min={0} max={1}
-            onChange={v => { onParamChange(i, v); setPlaitsParam(i, v); }}
-          />
-        </div>
-      ))}
+      {PARAM_LFO_INDEX.map(i => {
+        const val = params[i];
+        const lfoState = lfo[i];
+        return (
+          <div key={i}>
+            <div className="knob-row param-row">
+              <label>{labelFor(i)}</label>
+              <Slider
+                value={val} min={0} max={1}
+                onChange={v => { onParamChange(i, v); setPlaitsParam(i, v); }}
+              />
+              {lfoState && (
+                <div className="lfo-inline">
+                  <div className="lfo-cycle-wrap">
+                    <button
+                      className={`lfo-cycle-btn${lfoState.on ? ' on' : ''}`}
+                      onClick={() => {
+                        const next = nextLfoState(lfoState);
+                        onLfoChange(i, next);
+                        if ('wave' in next && next.wave) setPlaitsLFOWave(i, next.wave);
+                        if ('on' in next && next.on !== undefined) setPlaitsLFOEnabled(i, next.on);
+                      }}
+                    >{lfoIcon(lfoState)}</button>
+                    <div className="cap">shape</div>
+                  </div>
+                  <Knob
+                    value={lfoState.rate} min={1 / 30} max={8} label="Rate" size={48} log
+                    disabled={!lfoState.on}
+                    onChange={v => { onLfoChange(i, { rate: v }); setPlaitsLFORate(i, v); }}
+                  />
+                  <Knob
+                    value={lfoState.depth} min={0} max={0.5} label="Depth" size={48}
+                    disabled={!lfoState.on}
+                    onChange={v => { onLfoChange(i, { depth: v }); setPlaitsLFODepth(i, v); }}
+                  />
+                  <div className="lfo-cycle-wrap">
+                    <LfoScope lfo={lfoState} maxDepth={0.5} />
+                    <div className="cap">wave</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
