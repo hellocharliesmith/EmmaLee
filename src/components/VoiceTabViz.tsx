@@ -27,7 +27,7 @@ export function VoiceTabViz({ tracks, color }: VoiceTabVizProps) {
 
       const x = Math.max(0, Math.min(1, (e.pitch - MIDI_MIN) / (MIDI_MAX - MIDI_MIN)));
       const size = 4 + Math.max(0, Math.min(1, e.velocity)) * 4;
-      const jitterY = (Math.random() - 0.5) * 10;
+      const jitterY = (Math.random() - 0.5) * 14;
 
       const dot = document.createElement('span');
       dot.className = 'voice-dot';
