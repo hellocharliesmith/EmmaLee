@@ -95,8 +95,22 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .sl-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
 
-.sl-songs-btn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.sl-songs-btn {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 200px;
+}
 .sl-songs-btn:hover { border-color: var(--accent); }
+.sl-trigger-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.sl-trigger-caret { flex-shrink: 0; opacity: 0.7; }
 
 .sl-dropdown-wrap { position: relative; }
 .sl-backdrop { position: fixed; inset: 0; z-index: 10; }
@@ -108,10 +122,57 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 0;
-  min-width: 260px;
+  min-width: 280px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   overflow: hidden;
 }
+.sl-dropdown-full { max-height: 70vh; overflow-y: auto; }
+
+/* Current song — always visible at the top of the menu */
+.sl-current { padding: 12px; border-bottom: 1px solid var(--bg-hover); }
+.sl-current-lbl {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--border-hover);
+  margin-bottom: 4px;
+}
+.sl-current-name { font-size: 0.95rem; color: var(--text-bright); }
+.sl-current-kind { font-size: 0.7rem; color: var(--accent); margin-top: 2px; }
+
+/* New / Save / Export / Import — one row of equal-width actions */
+.sl-menu-actions {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.sl-menu-action {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 4px;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.sl-menu-action:hover { border-color: var(--accent); color: var(--accent); }
+
+.sl-empty {
+  padding: 14px 12px;
+  font-size: 0.72rem;
+  color: var(--border-hover);
+  font-style: italic;
+}
+
+.sl-row-current { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.sl-row-current .sl-name { color: var(--accent); }
+
 .sl-row {
   display: flex;
   align-items: center;
@@ -342,28 +403,17 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   background: var(--border-disabled);
 }
 
-/* Root + Scale dropdowns in transport */
-.scale-selects {
+/* Key (root + scale) — global, lives next to BPM in the transport cluster
+   rather than per-track (see useSequencer.ts's setScale/setRootNote). */
+.key-row {
   display: flex;
-  gap: 6px;
   align-items: center;
-}
-.scale-select {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--text-tertiary);
-  font-size: 0.72rem;
-  font-family: inherit;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 5px 8px;
-  border-radius: 0;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
+  letter-spacing: 0.08em;
 }
-.scale-select:focus { border-color: var(--accent); color: var(--text-primary); }
 
 .preset-select {
   background: var(--bg-input);
@@ -426,7 +476,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .dv-dropdown-item.selected { color: var(--accent); }
 .dv-dropdown-item.dv-dropdown-placeholder { color: var(--border-hover); font-style: italic; pointer-events: none; }
 .dv-dropdown.model-select .dv-dropdown-btn { text-transform: uppercase; letter-spacing: 0.04em; width: 170px; }
-.dv-dropdown.scale-select .dv-dropdown-btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; padding: 5px 8px; }
+.dv-dropdown.key-select .dv-dropdown-btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; padding: 5px 8px; }
 .bpm-row .bpm-val {
   color: var(--text-primary);
   width: 30px;
@@ -559,11 +609,15 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .kids-piano-roll .pr-prob-row  { display: none; }
 
 /* ── Page selector ── */
+/* Fixed to match .piano-roll-wrap's rendered width exactly (32 steps x 26px
+   grid + the fixed piano-key/label gutter) so the tabs span the full grid
+   width instead of just hugging their own labels. Re-measure both if the
+   step grid's column width or step count ever change. */
 .page-selector {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: fit-content;
+  width: 960px;
 }
 .page-label {
   font-size: 0.68rem;
@@ -629,6 +683,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
    alongside the label rather than just centering the text. */
 .track-tab {
   width: auto;
+  flex: 1;
   min-width: 148px;
   height: 32px;
   padding: 0 12px;
@@ -640,6 +695,9 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   letter-spacing: 0.06em;
   font-size: 0.7rem;
 }
+.tab-label-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.tab-icon { display: flex; flex-shrink: 0; }
+.tab-icon svg { display: block; }
 
 /* Per-voice activity indicator — firefly-scatter dots (see VoiceTabViz.tsx),
    one per note-on, positioned left-to-right by pitch. Sits in the remaining
@@ -738,7 +796,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: fit-content;
+  width: 960px;
   margin: 0 auto;
 }
 
@@ -1054,7 +1112,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   display: flex;
   gap: 2px;
   margin-top: 2px;
-  height: 14px;
+  height: 22px;
 }
 
 /* Last-step indicator row */
@@ -1065,7 +1123,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .pr-last-step-cell {
   width: 26px;
-  height: 10px;
+  height: 18px;
   flex-shrink: 0;
   cursor: pointer;
   border-radius: 0;
@@ -1101,7 +1159,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   display: flex;
   gap: 2px;
   margin-top: 2px;
-  height: 14px;
+  height: 22px;
 }
 .pr-prob-cell {
   width: 26px;
@@ -1115,8 +1173,8 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   border: 1px solid var(--border);
   color: var(--border-disabled);
   font-size: 8px;
-  width: 22px;
-  height: 13px;
+  width: 25px;
+  height: 20px;
   border-radius: 0;
   cursor: pointer;
   padding: 0;
@@ -1136,7 +1194,7 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   display: flex;
   gap: 2px;
   margin-top: 2px;
-  height: 14px;
+  height: 22px;
 }
 .pr-velocity-cell {
   width: 26px;
@@ -1150,8 +1208,8 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   border: 1px solid var(--border);
   color: var(--border-disabled);
   font-size: 8px;
-  width: 22px;
-  height: 13px;
+  width: 25px;
+  height: 20px;
   border-radius: 0;
   cursor: pointer;
   padding: 0;
@@ -1174,9 +1232,9 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   background: none;
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 9px;
-  width: 22px;
-  height: 13px;
+  font-size: 10px;
+  width: 25px;
+  height: 20px;
   border-radius: 0;
   cursor: pointer;
   padding: 0;
@@ -1786,13 +1844,15 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
      wrapping/stacking rules below can take effect. */
   .app { min-width: 0; width: 100%; }
 
-  /* .piano-roll-wrap's base width:fit-content means it just grows to match
-     its ~900px-wide content instead of being clipped — .piano-roll-scroll's
-     overflow-x:auto has nothing to actually overflow against until the wrap
-     is capped to the viewport's available width. .piano-roll-scroll itself
-     stretches to match (default align-items:stretch on the column-flex
-     wrap), so it doesn't need its own rule here. */
+  /* .piano-roll-wrap and .page-selector are both fixed to 960px on desktop
+     (see their base rules) so the tabs span the grid exactly — on narrow
+     viewports that fixed width has to give way to 100% instead, or
+     .piano-roll-scroll's overflow-x:auto has nothing to actually overflow
+     against until the wrap is capped to the viewport's available width.
+     .piano-roll-scroll itself stretches to match (default align-items:stretch
+     on the column-flex wrap), so it doesn't need its own rule here. */
   .piano-roll-wrap { width: 100%; }
+  .page-selector { width: 100%; }
 
   .app-header { flex-direction: column; align-items: stretch; gap: 12px; }
   .header-clusters { flex-wrap: wrap; row-gap: 10px; width: 100%; }

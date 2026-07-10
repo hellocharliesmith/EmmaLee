@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import * as Tone from 'tone';
 import * as Engine from './audio/engine';
 import { RINGS_TRACK_IDS, DRUM_VOICE_IDS, type RingsTrackId, type DrumVoiceId, type TrackId as EngineTrackId } from './audio/engine';
@@ -50,6 +50,26 @@ const VOICE_TRACKS_FOR_TAB: Record<TrackId, EngineTrackId[]> = {
   plaits: ['plaits'],
   drums:  DRUM_VOICE_IDS,
 };
+
+// One small abstract glyph per tab, inherits the tab's own text color
+// (currentColor) so it just works across selected/unselected states.
+const TRACK_ICONS: Record<TrackId, ReactNode> = {
+  ringsA: (
+    <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" /><circle cx="8" cy="8" r="1.3" fill="currentColor" /></svg>
+  ),
+  ringsB: (
+    <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" /><circle cx="8" cy="8" r="1.3" fill="currentColor" /></svg>
+  ),
+  plaits: (
+    <svg width="14" height="14" viewBox="0 0 16 16"><path d="M1,8 C3,3 5,13 8,8 C11,3 13,13 15,8" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+  ),
+  drums: (
+    <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="4" cy="10.5" r="1.6" fill="currentColor" /><circle cx="8" cy="5.5" r="2.1" fill="currentColor" /><circle cx="12" cy="10.5" r="1.6" fill="currentColor" /></svg>
+  ),
+};
+const MASTER_ICON: ReactNode = (
+  <svg width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="6" width="2" height="7" fill="currentColor" /><rect x="7" y="2" width="2" height="11" fill="currentColor" /><rect x="12" y="8" width="2" height="5" fill="currentColor" /></svg>
+);
 
 function checkSupport(): string | null {
   if (typeof AudioContext === 'undefined' && typeof (window as any).webkitAudioContext === 'undefined')
@@ -136,7 +156,7 @@ export default function App() {
 
   const {
     tracks, activeTrack, setActiveTrack,
-    steps, visibleNotes, scale, rootNote, scroll, maxScroll,
+    steps, visibleNotes, rootNote, globalScale, globalRootNote, scroll, maxScroll,
     bpm, isPlaying, currentStep,
     currentPage, enabledPages, currentPagePlaying,
     toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps,
@@ -272,6 +292,11 @@ export default function App() {
 
   // ── Save / load ───────────────────────────────────────────────────────
   const { songs, save, remove } = useSavedSongs();
+  // What's currently loaded — shown in the Songs menu so it's always clear
+  // what you're looking at. 'demo' vs 'saved' is inferred from savedAt === 0,
+  // the marker DEMO_SONGS entries are always spread with (see loadSong below).
+  const [currentSongName, setCurrentSongName] = useState('Demo 1');
+  const [currentSongKind, setCurrentSongKind] = useState<'demo' | 'saved' | 'new'>('demo');
 
   function captureState(): SongState {
     const ringsAP = trackParams.ringsA as RingsParamsState;
@@ -378,6 +403,8 @@ export default function App() {
   }
 
   function loadSong(song: SavedSong) {
+    setCurrentSongName(song.name);
+    setCurrentSongKind(song.savedAt === 0 ? 'demo' : 'saved');
     const raw = song.state;
     let state: SongState;
     if ('version' in raw && raw.version === 3) {
@@ -533,6 +560,8 @@ export default function App() {
   }
 
   function handleNewSong() {
+    setCurrentSongName('New Song');
+    setCurrentSongKind('new');
     function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
     const ringsAPreset = pick(RINGS_PRESETS);
@@ -683,11 +712,23 @@ export default function App() {
                   onChange={v => updateBpm(Math.round(v))} className="bpm-slider" />
                 <span className="bpm-val">{bpm}</span>
               </div>
+              <div className="key-row">
+                <label>Key</label>
+                <Dropdown className="key-select" value={String(globalRootNote)}
+                  options={ROOT_NAMES.map((n, i) => ({ value: String(i), label: n }))}
+                  onChange={v => setRootNote(parseInt(v))}
+                />
+                <Dropdown className="key-select" value={globalScale}
+                  options={SCALE_OPTIONS.map(s => ({ value: s.id, label: s.label }))}
+                  onChange={v => setScale(v as ScaleType)}
+                />
+              </div>
             </div>
             <div className="header-divider" />
             <div className="header-cluster">
               <SaveLoad songs={songs}
-                onSave={name => save(name, captureState())}
+                currentSongName={currentSongName} currentSongKind={currentSongKind}
+                onSave={name => { save(name, captureState()); setCurrentSongName(name); setCurrentSongKind('saved'); }}
                 onLoad={loadSong} onDelete={remove} onNewSong={handleNewSong}
                 onExport={handleExport} onImport={loadSong} />
             </div>
@@ -760,7 +801,10 @@ export default function App() {
                   className={['page-btn', 'track-tab', isViewing ? 'viewing' : ''].filter(Boolean).join(' ')}
                   onClick={() => { setActiveTrack(id); setViewSection('track'); }}
                 >
-                  {TRACK_LABELS[id]}
+                  <span className="tab-label-group">
+                    <span className="tab-icon">{TRACK_ICONS[id]}</span>
+                    {TRACK_LABELS[id]}
+                  </span>
                   <VoiceTabViz tracks={VOICE_TRACKS_FOR_TAB[id]}
                     color={isViewing ? 'var(--bg-body)' : TRACK_FADER_COLORS[id][0]} />
                 </button>
@@ -770,7 +814,10 @@ export default function App() {
               className={['page-btn', 'track-tab', viewSection === 'master' ? 'viewing' : ''].filter(Boolean).join(' ')}
               onClick={() => setViewSection('master')}
             >
-              Master
+              <span className="tab-label-group">
+                <span className="tab-icon">{MASTER_ICON}</span>
+                Master
+              </span>
               <VoiceTabViz tracks="all"
                 color={viewSection === 'master' ? 'var(--bg-body)' : MASTER_VOICE_COLOR} />
             </button>
@@ -778,18 +825,6 @@ export default function App() {
 
           {viewSection === 'track' && (
             <div className="page-buttons">
-              {activeTrack !== 'drums' && (
-                <div className="scale-selects">
-                  <Dropdown className="scale-select" value={String(rootNote)}
-                    options={ROOT_NAMES.map((n, i) => ({ value: String(i), label: n }))}
-                    onChange={v => setRootNote(parseInt(v))}
-                  />
-                  <Dropdown className="scale-select" value={scale}
-                    options={SCALE_OPTIONS.map(s => ({ value: s.id, label: s.label }))}
-                    onChange={v => setScale(v as ScaleType)}
-                  />
-                </div>
-              )}
               {Array.from({ length: PAGE_COUNT }, (_, i) => {
                 const isPageViewing = currentPage === i;
                 const isPageEnabled = enabledPages[i];

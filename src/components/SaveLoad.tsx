@@ -4,6 +4,8 @@ import { DEMO_SONGS } from '../demoSongs';
 
 interface Props {
   songs: SavedSong[];
+  currentSongName: string;
+  currentSongKind: 'demo' | 'saved' | 'new';
   onSave: (name: string) => void;
   onLoad: (song: SavedSong) => void;
   onDelete: (id: string) => void;
@@ -12,7 +14,11 @@ interface Props {
   onImport: (song: SavedSong) => void;
 }
 
-export function SaveLoad({ songs, onSave, onLoad, onDelete, onNewSong, onExport, onImport }: Props) {
+const KIND_LABEL: Record<Props['currentSongKind'], string> = {
+  demo: 'Example song', saved: 'Your song', new: 'New, unsaved song',
+};
+
+export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLoad, onDelete, onNewSong, onExport, onImport }: Props) {
   const [showSave, setShowSave]           = useState(false);
   const [showExport, setShowExport]       = useState(false);
   const [showDropdown, setShowDropdown]   = useState(false);
@@ -59,87 +65,80 @@ export function SaveLoad({ songs, onSave, onLoad, onDelete, onNewSong, onExport,
   }
 
   const pendingSong = songs.find(s => s.id === pendingDelete);
-  const totalCount  = DEMO_SONGS.length + songs.length;
 
   return (
     <>
       <div className="sl-wrap">
-        <button className="sl-btn" onClick={() => setShowSave(true)}>Save</button>
-        <button className="sl-btn" onClick={() => setShowExport(true)}>Export</button>
-        <button className="sl-btn sl-import-btn" onClick={() => fileInputRef.current?.click()}>Import</button>
         <input ref={fileInputRef} type="file" accept=".json,application/json"
           style={{ display: 'none' }} onChange={handleFileChange} />
 
-        {totalCount > 0 && (
-          <div className="sl-dropdown-wrap">
-            <button className="sl-btn sl-songs-btn" onClick={() => setShowDropdown(v => !v)}>
-              Songs ({totalCount}) ▾
-            </button>
-            {showDropdown && (
-              <>
-                <div className="sl-backdrop" onClick={() => setShowDropdown(false)} />
-                <div className="sl-dropdown">
+        <div className="sl-dropdown-wrap">
+          <button className="sl-btn sl-songs-btn" onClick={() => setShowDropdown(v => !v)}>
+            <span className="sl-trigger-name">{currentSongName}</span>
+            <span className="sl-trigger-caret">▾</span>
+          </button>
+          {showDropdown && (
+            <>
+              <div className="sl-backdrop" onClick={() => setShowDropdown(false)} />
+              <div className="sl-dropdown sl-dropdown-full">
 
-                  {/* ── New Song ── */}
-                  <div className="sl-row sl-row-new">
+                {/* ── What's loaded right now ── */}
+                <div className="sl-current">
+                  <div className="sl-current-lbl">Now loaded</div>
+                  <div className="sl-current-name">{currentSongName}</div>
+                  <div className="sl-current-kind">{KIND_LABEL[currentSongKind]}</div>
+                </div>
+
+                {/* ── Actions ── */}
+                <div className="sl-menu-actions">
+                  <button className="sl-menu-action" onClick={() => { onNewSong(); setShowDropdown(false); }}>New</button>
+                  <button className="sl-menu-action" onClick={() => { setShowDropdown(false); setShowSave(true); }}>Save</button>
+                  <button className="sl-menu-action" onClick={() => { setShowDropdown(false); setShowExport(true); }}>Export</button>
+                  <button className="sl-menu-action" onClick={() => { setShowDropdown(false); fileInputRef.current?.click(); }}>Import</button>
+                </div>
+
+                {/* ── Demo / example songs — always present, not deletable ── */}
+                <div className="sl-section-label">Examples</div>
+                {DEMO_SONGS.map(demo => (
+                  <div key={demo.id} className={`sl-row sl-row-demo${demo.name === currentSongName ? ' sl-row-current' : ''}`}>
                     <div className="sl-info">
-                      <span className="sl-name">New Song</span>
-                      <span className="sl-date">Clear all + random presets</span>
+                      <span className="sl-name">{demo.name}</span>
                     </div>
                     <div className="sl-actions">
                       <button className="sl-load"
-                        onClick={() => { onNewSong(); setShowDropdown(false); }}>
-                        New
+                        onClick={() => { onLoad({ ...demo, savedAt: 0 }); setShowDropdown(false); }}>
+                        Load
                       </button>
                     </div>
                   </div>
+                ))}
 
-                  {/* ── Demo / example songs — always present, not deletable ── */}
-                  <div className="sl-section-label">Examples</div>
-                  {DEMO_SONGS.map(demo => (
-                    <div key={demo.id} className="sl-row sl-row-demo">
-                      <div className="sl-info">
-                        <span className="sl-name">{demo.name}</span>
-                      </div>
-                      <div className="sl-actions">
-                        <button className="sl-load"
-                          onClick={() => { onLoad({ ...demo, savedAt: 0 }); setShowDropdown(false); }}>
-                          Load
-                        </button>
-                      </div>
+                {/* ── User-saved songs ── */}
+                <div className="sl-section-label">Your songs</div>
+                {songs.length === 0 && <div className="sl-empty">Nothing saved yet — hit Save to add one.</div>}
+                {songs.map(song => (
+                  <div key={song.id} className={`sl-row${song.name === currentSongName ? ' sl-row-current' : ''}`}>
+                    <div className="sl-info">
+                      <span className="sl-name">{song.name}</span>
+                      <span className="sl-date">{new Date(song.savedAt).toLocaleDateString()}</span>
                     </div>
-                  ))}
+                    <div className="sl-actions">
+                      <button className="sl-load"
+                        onClick={() => { onLoad(song); setShowDropdown(false); }}>
+                        Load
+                      </button>
+                      <button className="sl-del"
+                        onClick={() => { setPendingDelete(song.id); setShowDropdown(false); }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
 
-                  {/* ── User-saved songs ── */}
-                  {songs.length > 0 && (
-                    <>
-                      <div className="sl-section-label">Saved</div>
-                      {songs.map(song => (
-                        <div key={song.id} className="sl-row">
-                          <div className="sl-info">
-                            <span className="sl-name">{song.name}</span>
-                            <span className="sl-date">{new Date(song.savedAt).toLocaleDateString()}</span>
-                          </div>
-                          <div className="sl-actions">
-                            <button className="sl-load"
-                              onClick={() => { onLoad(song); setShowDropdown(false); }}>
-                              Load
-                            </button>
-                            <button className="sl-del"
-                              onClick={() => { setPendingDelete(song.id); setShowDropdown(false); }}>
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-
-                </div>
-              </>
-            )}
-          </div>
-        )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Save modal */}

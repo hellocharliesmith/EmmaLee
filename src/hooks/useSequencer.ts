@@ -25,6 +25,10 @@ export const VELOCITY_OPTIONS = [1, 0.75, 0.5, 0.25] as const;
 
 export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'drums'];
 export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits', drums: 'Drums' };
+// Key (scale/root) is a global setting, not per-track — these are the tracks it
+// actually applies to. Drums keeps its own fixed chromatic/0 (it addresses rows
+// by voice, not pitch) and is deliberately left out of the global key changes.
+const MELODIC_TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits'];
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
@@ -240,14 +244,26 @@ export function useSequencer() {
     });
   }, [activeTrack]);
 
-  // ── Scale / root (per active track) — clears all pages ────────────────
+  // ── Scale / root — global, applied to every melodic track at once. Still
+  // clears pages (rows would otherwise remap under already-placed notes) —
+  // now across all three melodic tracks instead of just the active one.
   const setScale = useCallback((s: ScaleType) => {
-    updateTrack(activeTrack, prev => ({ ...prev, scale: s, pages: makeEmptyPages(), scrollRow: 0 }));
-  }, [activeTrack]);
+    setTracksState(prev => {
+      const next = { ...prev };
+      for (const id of MELODIC_TRACK_IDS) next[id] = { ...prev[id], scale: s, pages: makeEmptyPages(), scrollRow: 0 };
+      tracksRef.current = next;
+      return next;
+    });
+  }, []);
 
   const setRootNote = useCallback((r: number) => {
-    updateTrack(activeTrack, prev => ({ ...prev, rootNote: r, pages: makeEmptyPages(), scrollRow: 0 }));
-  }, [activeTrack]);
+    setTracksState(prev => {
+      const next = { ...prev };
+      for (const id of MELODIC_TRACK_IDS) next[id] = { ...prev[id], rootNote: r, pages: makeEmptyPages(), scrollRow: 0 };
+      tracksRef.current = next;
+      return next;
+    });
+  }, []);
 
   const scrollUp = useCallback(() => {
     updateTrack(activeTrack, prev => ({ ...prev, scrollRow: Math.max(0, prev.scrollRow - 1) }));
@@ -385,6 +401,11 @@ export function useSequencer() {
     tracks, activeTrack, setActiveTrack,
     steps, visibleNotes, allNotes,
     scale: track.scale, rootNote: track.rootNote,
+    // Global key — always reads off ringsA, which (along with ringsB/plaits)
+    // is kept in sync by setScale/setRootNote regardless of activeTrack. Lets
+    // the header's key control show/set the right value even while viewing
+    // Drums or Master, where `scale`/`rootNote` above reflect that tab instead.
+    globalScale: tracks.ringsA.scale, globalRootNote: tracks.ringsA.rootNote,
     scroll, maxScroll, bpm, isPlaying,
     currentStep: currentSteps[activeTrack],
     currentPage: track.currentPage,
