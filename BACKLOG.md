@@ -7,6 +7,16 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-07-10** — Rings exciters: Elements' Mallet/Plectrum/Particles/Flow/Noise
+  models (compiled from a trimmed fork of `elements::Exciter`, avoiding the 94%
+  of `resources.cc` that's baked-in sample-player data) now feed Rings' real IN
+  port instead of always leaving it silent. Per-track Model dropdown +
+  Timbre/Parameter sliders + a synthesized Gate-length control (the sequencer
+  has no note-off concept, so gate length simulates a held excitation window
+  per trigger). Two new presets ("Bowed Drone", "Granular Sparkle") show off
+  the sustained/granular textures Rings' own internal exciter can't produce.
+  See AGENTS.md "Rings exciters" for the full writeup, including the export-letter
+  and C++ linkage gotchas hit along the way.
 - **2026-07-10** — FIXED: Clouds was completely silent — `clouds_process()` was being
   fed ragged block sizes, and the 8-bit µ-law quality modes (the boot default since
   the quality-control feature) trap on any non-32-frame block, permanently killing
@@ -141,13 +151,6 @@ once this session) and the WASM export-letter discovery process for wrapper chan
 ---
 
 ## New audio modules
-
-### Noise source for Rings IN port
-- Currently Rings uses `internal_exciter = true` (its own noise burst on each trigger).
-- Feeding external audio into the IN port gives much richer excitation textures.
-- Requires WASM recompile: set `internal_exciter = false`, expose `in_buffer` API.
-- Design options: white noise burst (percussive), bowed noise (sustained), mic input.
-- Needs a simple ADSR envelope. Lots of sound design to work out — plan before building.
 
 ### Clouds mono quality modes have very long buffer warm-up
 - With this build's enlarged buffers, the mono quality options give the whole 1MB

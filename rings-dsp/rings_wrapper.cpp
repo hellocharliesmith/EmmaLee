@@ -1,3 +1,14 @@
+// IMPORTANT if you add/reorder exported functions: emcc's minified export
+// letters (the single-letter names public/rings-processor.js actually calls,
+// e.g. e.g(69)) are assigned in the ORDER FUNCTIONS ARE DEFINED IN THIS FILE
+// — NOT the order they're listed in build-wasm.sh's EXPORTED_FUNCTIONS array.
+// Confirmed the expensive way while adding rings_set_internal_exciter: it was
+// listed 8th in EXPORTED_FUNCTIONS (after reverb_set) but is defined 6th in
+// this file (right after rings_trigger), and its real export letter matched
+// the file position, not the array position. After ANY wrapper change,
+// re-derive the mapping with a throwaway -O1 build (keeps real names) rather
+// than assuming — see the Node harness used for this in the exciter work.
+
 #include <emscripten/emscripten.h>
 #include <cstring>
 #include <cmath>
@@ -73,6 +84,18 @@ void rings_trigger() {
   performance.strum = true;
 }
 
+// on=1: Rings synthesizes its own excitation (a filtered pulse or noise burst
+// depending on resonator model, see part.cc's Render*Voice — this has been
+// the only mode this build used until now). on=0: Rings' own burst is
+// disabled and it resonates whatever's in the `input` buffer passed to
+// rings_process instead (see part.cc's Part::Process, which copies `in`
+// straight into resonator_input_ for the active voice) — this is the real
+// hardware's IN jack behavior, used by the exciter_wrapper.cpp module.
+EMSCRIPTEN_KEEPALIVE
+void rings_set_internal_exciter(int on) {
+  performance.internal_exciter = (on != 0);
+}
+
 // Enable/disable standalone reverb
 EMSCRIPTEN_KEEPALIVE
 void rings_reverb_enable(int enabled) {
@@ -90,14 +113,18 @@ void rings_reverb_set(float amount, float time, float lp) {
   standalone_reverb.set_lp(0.3f + 0.6f * lp);
 }
 
+// input: mono excitation signal, one sample per frame (unlike output, which
+// is interleaved stereo). Silence reproduces today's behavior exactly —
+// internal_exciter's own burst, if enabled, doesn't need this buffer at all;
+// with internal_exciter off, this buffer IS the excitation (see part.cc).
 EMSCRIPTEN_KEEPALIVE
-void rings_process(float* output, int num_samples) {
+void rings_process(float* input, float* output, int num_samples) {
   int i = 0;
   while (i < num_samples) {
     int block = rings::kMaxBlockSize;
     if (i + block > num_samples) block = num_samples - i;
 
-    memset(in_buffer, 0, sizeof(float) * block);
+    memcpy(in_buffer, &input[i], sizeof(float) * block);
     part.Process(performance, patch, in_buffer, out_buffer, aux_buffer, block);
 
     // Apply standalone reverb in-place on out_buffer/aux_buffer before output copy

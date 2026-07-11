@@ -1,4 +1,5 @@
 import type { ScaleType, StepValue, TrackId } from './hooks/useSequencer';
+import type { ExciterModel } from './audio/engine';
 export type { StepValue, TrackId };
 
 export interface LfoState {
@@ -6,6 +7,17 @@ export interface LfoState {
   wave: 'sine' | 'random';
   rate: number;
   depth: number;
+}
+
+// Rings' excitation source — 'internal' (default) is Rings' own noise burst/
+// pulse, unchanged from before this existed. The other 5 route Elements'
+// Mallet/Plectrum/Particles/Flow/Noise into Rings' real IN port instead —
+// see engine.ts's setExciterModel / AGENTS.md "Rings exciter".
+export interface ExciterState {
+  model: ExciterModel;
+  timbre: number;
+  parameter: number;
+  gateMs: number;
 }
 
 interface BaseTrackState {
@@ -28,6 +40,7 @@ export interface RingsTrackState extends BaseTrackState {
   damping: number;
   position: number;
   lfo: LfoState[];
+  exciter?: ExciterState; // optional -- old saves default to 'internal' (today's behavior), see App.tsx's loadSong
 }
 
 export interface PlaitsTrackState extends BaseTrackState {

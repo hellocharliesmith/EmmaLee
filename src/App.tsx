@@ -23,7 +23,7 @@ import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
 import { VoiceTabViz } from './components/VoiceTabViz';
-import type { LfoState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
+import type { LfoState, ExciterState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -100,11 +100,14 @@ const DEFAULT_LFO: LfoState[] = [
   { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
 ];
 
+const DEFAULT_EXCITER: ExciterState = { model: 'internal', timbre: 0.6, parameter: 0.5, gateMs: 80 };
+
 interface RingsParamsState {
   kind: 'rings';
   model: number;
   params: [number, number, number, number]; // structure, brightness, damping, position
   lfo: LfoState[];
+  exciter: ExciterState;
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -134,7 +137,7 @@ interface DrumParamsState {
 type AnyTrackParams = RingsParamsState | PlaitsParamsState | DrumParamsState;
 
 function defaultRingsParams(): RingsParamsState {
-  return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
+  return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
   return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
@@ -318,14 +321,14 @@ export default function App() {
       pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages, lastStep: tracks.ringsA.lastStep,
       scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
-      damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo,
+      damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo, exciter: ringsAP.exciter,
       volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend, cloudsSend: ringsAP.cloudsSend,
     };
     const ringsB: RingsTrackState = {
       pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages, lastStep: tracks.ringsB.lastStep,
       scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
-      damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo,
+      damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo, exciter: ringsBP.exciter,
       volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend, cloudsSend: ringsBP.cloudsSend,
     };
     const plaits: PlaitsTrackState = {
@@ -447,14 +450,14 @@ export default function App() {
       ringsA: {
         kind: 'rings', model: state.tracks.ringsA.model,
         params: [state.tracks.ringsA.structure, state.tracks.ringsA.brightness, state.tracks.ringsA.damping, state.tracks.ringsA.position],
-        lfo: state.tracks.ringsA.lfo, volume: state.tracks.ringsA.volume,
+        lfo: state.tracks.ringsA.lfo, exciter: state.tracks.ringsA.exciter ?? DEFAULT_EXCITER, volume: state.tracks.ringsA.volume,
         delaySend: state.tracks.ringsA.delaySend, reverbSend: state.tracks.ringsA.reverbSend,
         cloudsSend: state.tracks.ringsA.cloudsSend ?? 0.4,
       },
       ringsB: {
         kind: 'rings', model: state.tracks.ringsB.model,
         params: [state.tracks.ringsB.structure, state.tracks.ringsB.brightness, state.tracks.ringsB.damping, state.tracks.ringsB.position],
-        lfo: state.tracks.ringsB.lfo, volume: state.tracks.ringsB.volume,
+        lfo: state.tracks.ringsB.lfo, exciter: state.tracks.ringsB.exciter ?? DEFAULT_EXCITER, volume: state.tracks.ringsB.volume,
         delaySend: state.tracks.ringsB.delaySend, reverbSend: state.tracks.ringsB.reverbSend,
         cloudsSend: state.tracks.ringsB.cloudsSend ?? 0.4,
       },
@@ -501,7 +504,7 @@ export default function App() {
 
   function loadRingsPreset(id: TrackId, preset: RingsPreset) {
     updateTrackParamsFor(id, p => p.kind === 'rings'
-      ? { ...p, model: preset.model, params: preset.params, lfo: preset.lfo }
+      ? { ...p, model: preset.model, params: preset.params, lfo: preset.lfo, exciter: preset.exciter ?? p.exciter }
       : p);
     if (!Engine.isAudioReady()) return;
     Engine.setRingsModel(id as RingsTrackId, preset.model);
@@ -512,6 +515,13 @@ export default function App() {
       Engine.setLFODepth(id as RingsTrackId, i, l.depth);
       Engine.setLFOEnabled(id as RingsTrackId, i, l.on);
     });
+    if (preset.exciter) {
+      const ex = preset.exciter;
+      Engine.setExciterModel(id as RingsTrackId, ex.model);
+      Engine.setExciterParam(id as RingsTrackId, 'timbre', ex.timbre);
+      Engine.setExciterParam(id as RingsTrackId, 'parameter', ex.parameter);
+      Engine.setExciterGateMs(id as RingsTrackId, ex.gateMs);
+    }
   }
 
   function loadDrumPreset(preset: DrumPreset) {
@@ -596,8 +606,8 @@ export default function App() {
       drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
-      ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
-      ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
@@ -897,7 +907,7 @@ export default function App() {
                   {active.kind === 'rings' && (
                     <RingsControls
                       trackId={activeTrack as RingsTrackId}
-                      model={active.model} params={active.params} lfo={active.lfo}
+                      model={active.model} params={active.params} lfo={active.lfo} exciter={active.exciter}
                       presets={RINGS_PRESETS}
                       onPresetLoad={p => loadRingsPreset(activeTrack, p)}
                       onModelChange={m => updateActiveParams(p => p.kind === 'rings' ? ({ ...p, model: m }) : p)}
@@ -908,6 +918,8 @@ export default function App() {
                       })}
                       onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'rings'
                         ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
+                      onExciterChange={u => updateActiveParams(p => p.kind === 'rings'
+                        ? ({ ...p, exciter: { ...p.exciter, ...u } }) : p)}
                     />
                   )}
                   {active.kind === 'plaits' && (

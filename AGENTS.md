@@ -138,7 +138,11 @@ src/
                        per-voice mixing UI. kids-mode branch pinned to ringsA only.
 public/
   rings-processor.js  — Rings AudioWorklet (one registered class, instantiated
-                       twice — once per Rings track).
+                       twice — once per Rings track). Also loads a SECOND WASM
+                       instance (`exciter.wasm`) in the same worklet and feeds its
+                       output into `rings_process`'s real `input` buffer when a
+                       track's exciter is set to anything but 'internal' — see
+                       "Rings exciters" below.
   plaits-processor.js — Plaits AudioWorklet, modeled on rings-processor.js
                        (as of 2026-07-09 it has the same 4-slot audio-thread
                        LFO system too, targeting params 0-3; still no internal
@@ -171,7 +175,16 @@ public/
                        it needs by hand (memory-grow import, direct exports["x"]
                        calls) — see "Discovering WASM export names" below.
 rings-dsp/
-  rings_wrapper.cpp  — thin C wrapper exposing rings_init/set_param/trigger/etc
+  rings_wrapper.cpp  — thin C wrapper exposing rings_init/set_param/trigger/etc.
+                       `rings_process` takes a real `input` buffer (copied into
+                       Rings' `in_buffer` each block) plus `rings_set_internal_exciter`
+                       toggling `performance.internal_exciter` — see "Rings exciters"
+                       below for the full feature this enables.
+  exciter_wrapper.cpp — wraps a trimmed fork of Elements' `Exciter` class
+                       (`exciter_slim.h/.cc`, NOT the original `elements/dsp/exciter.*`
+                       — see "Rings exciters" below for why). Exposes exciter_init/
+                       set_model/set_timbre/set_parameter/set_gate/process.
+                       `build-exciter-wasm.sh` compiles it to `public/exciter.wasm`.
   plaits_wrapper.cpp — same pattern for Plaits, exposing plaits_init/set_param/
                        set_model/set_note/trigger/process. Compiles Plaits' full
                        Voice class (all 22 engines — can't selectively compile,
@@ -201,6 +214,9 @@ build-clouds-wasm.sh — same for Clouds (granular_processor.cc + correlator +
                        are unavoidable even though the spectral playback mode
                        itself isn't exposed in the UI — PhaseVocoder is a plain
                        member of GranularProcessor, not conditionally compiled).
+build-exciter-wasm.sh — compiles `exciter_wrapper.cpp` + `exciter_slim.cc` +
+                       `exciter_svf_luts.cc` (NOT `elements/resources.cc` — see
+                       "Rings exciters" below) to `public/exciter.wasm`, 13.6KB.
 ```
 
 ## Multitrack architecture (added 2026-06-21, completed same day)
@@ -477,6 +493,114 @@ same headless-preview limitation as the rest of this app's AudioWorklet work
   much for this use case but worth knowing if the wet signal sounds slightly
   gritty even at low density/texture settings.
 
+## Rings exciters (added 2026-07-10)
+
+Rings only ever excited itself with its own internal noise burst/pulse
+(`performance.internal_exciter = true`, unconditional). The actual audio-rate
+excitation input Rings' DSP reads from (`in_buffer` in `rings_wrapper.cpp`,
+copied into `resonator_input_` by `rings::Part::Process` for the active voice)
+was architecturally supported but always fed silence. This feature wires that
+port up to Elements' `Exciter` class — Mutable's OTHER module, whose entire
+job on real hardware is generating excitation signals for exactly this kind
+of resonator — compiled to a second, small WASM module running inside the
+same `rings-processor.js` worklet.
+
+**5 of Elements' 7 exciter models are exposed**: Mallet, Plectrum, Particles,
+Flow, Noise (plus `'internal'` = today's original behavior, selectable per
+Rings track). **`SAMPLE_PLAYER`/`GRANULAR_SAMPLE_PLAYER` are deliberately
+excluded** — both depend on Elements' baked-in sample ROM
+(`smp_sample_data`/`smp_noise_sample`/`smp_boundaries` in
+`rings-source/elements/resources.cc`), which is **~42,000 of that file's
+~44,600 lines (94%)**. Worse, `Exciter`'s `fn_table_` (a function-pointer
+dispatch table) keeps ALL 7 `Process*` methods linked regardless of which
+model is selected at runtime — "just not selecting" those 2 models in the UI
+would NOT have avoided linking in the sample data. The only way to actually
+drop it was forking the class: `exciter_slim.h/.cc` is a trimmed copy of
+`elements/dsp/exciter.{h,cc}` with the 2 sample-player models, `set_meta`,
+`damping()`/`filter()` getters, and `phase_` removed. `exciter_svf_luts.h/.cc`
+carries just the 4 small SVF filter LUTs (`lut_approx_svf_gain/g/r/h`, ~450
+lines) the remaining 5 models need, hand-extracted from `resources.cc` — do
+NOT link the original `elements/resources.cc` into this build, that's the
+94%-dead-weight file this whole fork exists to avoid. Result: 13.6KB compiled
+(vs. Clouds' 99KB, Plaits' 198KB, Rings' 56KB), confirming the strategy worked.
+
+**Every model shares 2 knobs**: `timbre` (filter cutoff, same meaning for all
+5 models) and `parameter` (per-model meaning — decay/pick-delay/particle-decay/
+texture/resonance, see `EXCITER_PARAMETER_LABEL` in `RingsControls.tsx`). One
+Model dropdown + these 2 sliders covers every model — no per-model control sets.
+
+**Gate length, not real note-off**: Elements' exciter reacts to rising/falling
+edges and a held gate (`ExciterFlags`). The sequencer only fires one-shot
+triggers (`StepData` has no note-off/duration concept), so a synthesized
+**Gate (ms)** parameter (20–800ms, default 80) fakes a held-gate window per
+trigger — long enough for Flow/Particles to have something to work with,
+short enough to stay "one step = one hit."
+
+**Fast-retrigger gotcha**: if a new trigger arrives while the previous gate
+hasn't closed yet, naively re-asserting `gate=1` produces NO edge (the WASM's
+internal `gate_was_on` is already true) — Mallet/Particles silently drop the
+onset. Fixed in `rings-processor.js` with a one-chunk "force gate low, then
+high again" retrigger-gap (`pendingExciterRetriggerGap`): a mid-gate trigger
+closes the gate for one ~2ms chunk (clean falling edge), then reopens it next
+chunk (clean fresh rising edge). Verified via a 5x-rapid-retrigger harness —
+every trigger produces its own onset.
+
+**Sample rate**: like Clouds, Elements' DSP is hardcoded to 32kHz internally
+(`elements::kSampleRate`, `elements/dsp/dsp.h`) — unlike Rings' own DSP, which
+IS sample-rate-agnostic (`rings_init(sample_rate)`). `rings-processor.js`
+reuses the same `LinearResampler` technique as `clouds-processor.js` (mono
+variant) to upsample the exciter's 32kHz output to the real AudioContext rate
+before feeding it into `rings_process`.
+
+**Gain staging**: the Noise model's resonant filter can peak ~8.7x at extreme
+timbre/parameter settings (observed in isolated testing) — `EXCITER_GAIN =
+0.15` plus a hard `[-1, 1]` clamp in `_fillExcitationQueue` tames this without
+noticeably attenuating the other 4 (much calmer) models.
+
+**WASM export-letter gotcha (easy to get wrong, bit this session)**:
+Emscripten's minified export letters (`exports.d`, `.e`, etc.) are assigned
+in **source declaration order within the .cpp file**, NOT the order functions
+appear in `build-*-wasm.sh`'s `EXPORTED_FUNCTIONS` array (that array only
+controls what gets exported, not the letter each one gets). A Node
+regression test using the wrong letter for `rings_set_internal_exciter`
+silently called the wrong function (looked like the toggle had no effect).
+After ANY wrapper change, re-verify the real mapping via an `-O1` debug build
+(preserves real names) or by grepping the generated glue `.js`'s
+`wasmExports["x"]` assignments (see "Discovering WASM export names" above) —
+never assume letters stayed stable just because the array order didn't change.
+Current mappings: rings.wasm — `d`=init, `e`=set_param, `f`=set_model,
+`g`=set_note, `h`=trigger, `i`=set_internal_exciter, `j`=reverb_enable,
+`k`=reverb_set, `l`=process(new 3-arg signature), `m`=malloc, `n`=free.
+exciter.wasm — `d`=init, `e`=set_model, `f`=set_timbre, `g`=set_parameter,
+`h`=set_gate, `i`=process, `j`=malloc, `k`=free.
+
+**C++ linkage gotcha**: `const` globals at namespace scope default to
+INTERNAL linkage in C++ (unlike C), so `exciter_svf_luts.cc` originally threw
+`undefined symbol` linker errors defining the LUT arrays without a prior
+`extern` declaration in the same translation unit. Fixed by giving them their
+own header (`exciter_svf_luts.h`, `extern const float ...[];`) and
+`#include`-ing it at the top of the `.cc` file before the definitions —
+mirrors how the original `resources.cc`/its header do it.
+
+**Save format**: `RingsTrackState.exciter?: ExciterState` (optional, so old
+saves without it default to `'internal'` via `?? DEFAULT_EXCITER` in
+`App.tsx`'s `loadSong` — same pattern as `cloudsSend`/`lpgColour`). Two new
+presets, "Bowed Drone" (Flow, long gate, sustained bowed character) and
+"Granular Sparkle" (Particles, short gate), show off what this adds that
+Rings' internal exciter alone can't do — `RingsPreset.exciter` is likewise
+optional; presets that omit it leave whatever exciter the track already had
+untouched (`loadRingsPreset` in `App.tsx`).
+
+**Verified**: Node `vm` harness (same technique as the Clouds fix) running
+the actual `rings-processor.js` with both real compiled `.wasm` files,
+covering: default internal-exciter path stays byte-identical to pre-feature
+behavior, all 5 external models produce non-silent/no-NaN output, switching
+from an external model back to `'internal'` mid-session cleanly reverts, and
+the 5x fast-retrigger stress case. Also spot-checked in a real running
+browser (UI dropdown + sliders, model switching, preset loading) — see
+"Verification caveat" above for why deeper audio-output verification still
+needs the user's ears.
+
 ## Key decisions worth knowing before you change things
 
 - **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)
@@ -534,6 +658,7 @@ to the picker — see BACKLOG.md).
 ./build-wasm.sh          # Rings
 ./build-plaits-wasm.sh   # Plaits
 ./build-clouds-wasm.sh   # Clouds
+./build-exciter-wasm.sh  # Rings' external exciter models (Mallet/Plectrum/Particles/Flow/Noise)
 ```
 
 All three require Emscripten SDK installed locally (`~/Developer/emsdk`, sourced via

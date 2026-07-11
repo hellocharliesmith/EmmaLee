@@ -1,11 +1,12 @@
 import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth,
-         type RingsTrackId } from '../audio/engine';
+         setExciterModel, setExciterParam, setExciterGateMs,
+         type RingsTrackId, type ExciterModel } from '../audio/engine';
 import { Knob } from './Knob';
 import { Slider } from './Slider';
 import { Dropdown } from './Dropdown';
 import { LfoScope } from './LfoScope';
 import { lfoIcon, nextLfoState } from './lfoCycle';
-import type { LfoState } from '../types';
+import type { LfoState, ExciterState } from '../types';
 import type { RingsPreset } from '../presets';
 
 const MODELS = [
@@ -29,19 +30,37 @@ const PARAM_DESCS  = [
 // LFO index matches param index: 0=Structure, 1=Brightness, 2=Damping, 3=Position
 const PARAM_LFO_INDEX = [0, 1, 2, 3];
 
+// Rings' own internal burst (default, unchanged since before this existed) vs
+// Elements' Mallet/Plectrum/Particles/Flow/Noise fed into Rings' real IN port
+// instead — see engine.ts's setExciterModel / AGENTS.md "Rings exciter".
+const EXCITER_MODELS: { id: ExciterModel; label: string; description: string }[] = [
+  { id: 'internal',  label: 'Internal',  description: "Rings' own burst/pulse — the only mode this had before" },
+  { id: 'mallet',    label: 'Mallet',    description: 'Struck impulse, filtered — closest to Internal, separately tunable' },
+  { id: 'plectrum',  label: 'Plectrum',  description: 'Plucked impulse with a delayed pick transient' },
+  { id: 'particles', label: 'Particles', description: 'Granular random-amplitude impulse train while gated — sparkly, grainy' },
+  { id: 'flow',      label: 'Flow',      description: 'Continuous filtered noise — breath/bow character, the sustained texture Internal can\'t do' },
+  { id: 'noise',     label: 'Noise',     description: 'Plain filtered white noise — simplest, most neutral' },
+];
+// "Parameter"'s meaning per model (Timbre is always filter cutoff, every model) — see exciter_slim.cc.
+const EXCITER_PARAMETER_LABEL: Record<ExciterModel, string> = {
+  internal: 'Parameter', mallet: 'Decay', plectrum: 'Pick Delay', particles: 'Decay', flow: 'Texture', noise: 'Resonance',
+};
+
 export interface RingsControlsProps {
   trackId: RingsTrackId;
   model: number;
   params: [number, number, number, number];
   lfo: LfoState[];
+  exciter: ExciterState;
   presets: RingsPreset[];
   onPresetLoad: (p: RingsPreset) => void;
   onModelChange: (m: number) => void;
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
+  onExciterChange: (updates: Partial<ExciterState>) => void;
 }
 
-export function RingsControls({ trackId, model, params, lfo, presets, onPresetLoad, onModelChange, onParamChange, onLfoChange }: RingsControlsProps) {
+export function RingsControls({ trackId, model, params, lfo, exciter, presets, onPresetLoad, onModelChange, onParamChange, onLfoChange, onExciterChange }: RingsControlsProps) {
   return (
     <div className="rings-controls">
       {presets.length > 0 && (
@@ -106,6 +125,41 @@ export function RingsControls({ trackId, model, params, lfo, presets, onPresetLo
           </div>
         );
       })}
+
+      <div className="section-divider" />
+      <div className="panel-name">Exciter</div>
+      <div className="knob-row">
+        <label title="What excites the resonator — Rings' own burst, or Elements' Mallet/Plectrum/Particles/Flow/Noise fed into its real IN port">Model</label>
+        <Dropdown value={exciter.model}
+          options={EXCITER_MODELS.map(m => ({ value: m.id, label: m.label }))}
+          onChange={v => { const m = v as ExciterModel; onExciterChange({ model: m }); setExciterModel(trackId, m); }}
+        />
+      </div>
+      {exciter.model !== 'internal' && (
+        <>
+          <div className="knob-row">
+            <label title="Filter cutoff — shapes every exciter model the same way">Timbre</label>
+            <Slider
+              value={exciter.timbre} min={0} max={1}
+              onChange={v => { onExciterChange({ timbre: v }); setExciterParam(trackId, 'timbre', v); }}
+            />
+          </div>
+          <div className="knob-row">
+            <label>{EXCITER_PARAMETER_LABEL[exciter.model]}</label>
+            <Slider
+              value={exciter.parameter} min={0} max={1}
+              onChange={v => { onExciterChange({ parameter: v }); setExciterParam(trackId, 'parameter', v); }}
+            />
+          </div>
+          <div className="knob-row">
+            <label title="How long the gate stays open per trigger — Particles/Flow need it held to sustain; Mallet/Plectrum/Noise mostly ignore its length">Gate</label>
+            <Slider
+              value={exciter.gateMs} min={20} max={800}
+              onChange={v => { onExciterChange({ gateMs: v }); setExciterGateMs(trackId, v); }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

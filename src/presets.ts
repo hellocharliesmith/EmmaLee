@@ -1,10 +1,11 @@
-import type { LfoState } from './types';
+import type { LfoState, ExciterState } from './types';
 
 export interface RingsPreset {
   name: string;
   model: number;
   params: [number, number, number, number]; // structure, brightness, damping, position
   lfo: LfoState[];
+  exciter?: ExciterState; // omitted = leave whatever exciter is currently set alone
 }
 
 export interface PlaitsPreset {
@@ -65,6 +66,20 @@ export const RINGS_PRESETS: RingsPreset[] = [
       { on: true,  wave: 'random', rate: 4.74,    depth: 0.1625 },
       { on: true,  wave: 'sine',   rate: 1.56,    depth: 0.0458 },
     ],
+  },
+  {
+    name: 'Bowed Drone',
+    model: 1, // Strings — sympathetic strings hold a sustained tone well
+    params: [0.4, 0.45, 0.75, 0.3],
+    lfo: NO_LFO,
+    exciter: { model: 'flow', timbre: 0.5, parameter: 0.65, gateMs: 600 },
+  },
+  {
+    name: 'Granular Sparkle',
+    model: 4, // Sym.Q — pitch-quantized sympathetic strings, plays nice with grainy input
+    params: [0.3, 0.55, 0.5, 0.35],
+    lfo: NO_LFO,
+    exciter: { model: 'particles', timbre: 0.7, parameter: 0.4, gateMs: 180 },
   },
 ];
 

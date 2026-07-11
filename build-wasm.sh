@@ -19,7 +19,7 @@ emcc rings-dsp/rings_wrapper.cpp \
   -DTEST \
   -O3 \
   -s WASM=1 \
-  -s EXPORTED_FUNCTIONS='["_rings_init","_rings_set_param","_rings_set_model","_rings_set_note","_rings_trigger","_rings_reverb_enable","_rings_reverb_set","_rings_process","_malloc","_free"]' \
+  -s EXPORTED_FUNCTIONS='["_rings_init","_rings_set_param","_rings_set_model","_rings_set_note","_rings_trigger","_rings_reverb_enable","_rings_reverb_set","_rings_set_internal_exciter","_rings_process","_malloc","_free"]' \
   -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s MODULARIZE=1 \

@@ -181,7 +181,7 @@ async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName:
   return worklet;
 }
 
-async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmBytes: ArrayBuffer): Promise<void> {
+async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmBytes: ArrayBuffer, exciterWasmBytes: ArrayBuffer): Promise<void> {
   const worklet = await createTrackWorklet(ctx, id, 'rings-processor', wasmBytes);
 
   // Defaults — Structure/Brightness/Damping/Position, Strings model
@@ -190,6 +190,21 @@ async function createRingsTrack(ctx: AudioContext, id: RingsTrackId, wasmBytes: 
   worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: 0.44 } });
   worklet.port.postMessage({ type: 'set-param', payload: { param: 3, value: 0.25 } });
   worklet.port.postMessage({ type: 'set-model', payload: { model: 1 } });
+
+  // Exciter — a second, independent WASM instance loaded into this same
+  // worklet (see rings-processor.js's top-of-file note). Defaults to off
+  // (Rings' own internal burst keeps working exactly as before) until
+  // setExciterModel is called. Registered via addEventListener rather than
+  // overwriting worklet.port.onmessage, so it doesn't disturb
+  // createTrackWorklet's own perf-metering handler.
+  worklet.port.postMessage({ type: 'load-exciter-wasm', payload: { wasmBytes: exciterWasmBytes } });
+  await new Promise<void>((resolve, reject) => {
+    const handler = (e: MessageEvent) => {
+      if (e.data.type === 'exciter-ready') { worklet.port.removeEventListener('message', handler); resolve(); }
+      if (e.data.type === 'exciter-error') { worklet.port.removeEventListener('message', handler); reject(new Error(e.data.message)); }
+    };
+    worklet.port.addEventListener('message', handler);
+  });
 
   // Default LFO: Brightness (index 1) — smooth random, on
   worklet.port.postMessage({ type: 'set-lfo', payload: { index: 1, field: 'wave',    value: 'random' } });
@@ -377,10 +392,14 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   splitter.connect(analyserL, 0);
   splitter.connect(analyserR, 1);
 
-  // Rings tracks — fetch bytes once, each worklet compiles its own instance
-  const ringsBytes = await fetch('/rings.wasm').then(r => r.arrayBuffer());
+  // Rings tracks — fetch bytes once, each worklet compiles its own instance.
+  // exciterBytes too: the Elements-derived exciter module (Mallet/Plectrum/
+  // Particles/Flow/Noise) each Rings track can optionally use instead of its
+  // own internal burst — see rings-processor.js / AGENTS.md "Rings exciter".
+  const ringsBytes   = await fetch('/rings.wasm').then(r => r.arrayBuffer());
+  const exciterBytes = await fetch('/exciter.wasm').then(r => r.arrayBuffer());
   for (const id of RINGS_TRACK_IDS) {
-    await createRingsTrack(audioCtx, id, ringsBytes);
+    await createRingsTrack(audioCtx, id, ringsBytes, exciterBytes);
   }
 
   // Plaits track + drum voices — same bytes reused for all 4 worklets
@@ -465,6 +484,41 @@ export function setLFODepth(trackId: RingsTrackId, i: number, depth: number): vo
   const t = tracks.get(trackId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
+}
+
+// ── Rings exciter — feeds Rings' real IN port instead of its own internal
+// burst (see rings-processor.js / AGENTS.md "Rings exciter"). 'internal' is
+// the default and keeps today's behavior exactly; the other 5 are Elements'
+// Mallet/Plectrum/Particles/Flow/Noise, each a WASM module loaded alongside
+// Rings in the same worklet.
+export type ExciterModel = 'internal' | 'mallet' | 'plectrum' | 'particles' | 'flow' | 'noise';
+const EXCITER_MODEL_INDEX: Record<Exclude<ExciterModel, 'internal'>, number> = {
+  mallet: 0, plectrum: 1, particles: 2, flow: 3, noise: 4,
+};
+
+export function setExciterModel(trackId: RingsTrackId, model: ExciterModel): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  const index = model === 'internal' ? -1 : EXCITER_MODEL_INDEX[model];
+  t.worklet.port.postMessage({ type: 'set-exciter-model', payload: { model: index } });
+}
+
+// field: 'timbre' = filter cutoff (all models). 'parameter' = per-model
+// meaning — Mallet/Particles=decay, Plectrum=pick delay, Flow=noise amount,
+// Noise=filter resonance (see exciter_slim.cc).
+export function setExciterParam(trackId: RingsTrackId, field: 'timbre' | 'parameter', value: number): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-exciter-param', payload: { field, value } });
+}
+
+// Synthesizes a held-gate window per trigger (Particles/Flow need a gate to
+// sustain, Mallet/Plectrum/Noise mostly ignore its length) — the practical
+// stand-in for real note-off tracking, which this sequencer doesn't have.
+export function setExciterGateMs(trackId: RingsTrackId, ms: number): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-exciter-gate-ms', payload: { ms } });
 }
 
 // ── Plaits-specific controls (single track, no trackId needed) ────────────
