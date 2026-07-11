@@ -18,6 +18,8 @@ export interface ExciterState {
   timbre: number;
   parameter: number;
   gateMs: number;
+  level: number;    // 0-2 (0%-200%), default 1.0 -- added 2026-07-11, see App.tsx's loadSong for the old-save fallback
+  attackMs: number; // 0-500, default 0 (instant) -- added 2026-07-11, see App.tsx's loadSong for the old-save fallback
 }
 
 interface BaseTrackState {

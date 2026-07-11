@@ -1,5 +1,5 @@
 import { setRingsParam, setRingsModel, setLFOEnabled, setLFOWave, setLFORate, setLFODepth,
-         setExciterModel, setExciterParam, setExciterGateMs,
+         setExciterModel, setExciterParam, setExciterGateMs, setExciterLevel, setExciterAttackMs,
          type RingsTrackId, type ExciterModel } from '../audio/engine';
 import { Knob } from './Knob';
 import { Slider } from './Slider';
@@ -156,6 +156,20 @@ export function RingsControls({ trackId, model, params, lfo, exciter, presets, o
             <Slider
               value={exciter.gateMs} min={20} max={800}
               onChange={v => { onExciterChange({ gateMs: v }); setExciterGateMs(trackId, v); }}
+            />
+          </div>
+          <div className="knob-row">
+            <label title="Boosts this exciter independently of the others — Mallet/Plectrum/Particles' sparse impulses read much quieter than Flow/Noise's continuous signal at the same level">Level</label>
+            <Slider
+              value={exciter.level} min={0} max={2}
+              onChange={v => { onExciterChange({ level: v }); setExciterLevel(trackId, v); }}
+            />
+          </div>
+          <div className="knob-row">
+            <label title="Fades the excitation in on each trigger instead of starting instantly — a real swell for Flow/Noise's sustained texture. Mallet/Plectrum are one-sample clicks, so this mostly softens them rather than delaying them">Attack</label>
+            <Slider
+              value={exciter.attackMs} min={0} max={500}
+              onChange={v => { onExciterChange({ attackMs: v }); setExciterAttackMs(trackId, v); }}
             />
           </div>
         </>

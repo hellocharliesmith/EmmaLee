@@ -521,6 +521,26 @@ export function setExciterGateMs(trackId: RingsTrackId, ms: number): void {
   t.worklet.port.postMessage({ type: 'set-exciter-gate-ms', payload: { ms } });
 }
 
+// 0-2 (0%-200%), default 1.0. Mallet/Plectrum/Particles' sparse impulses read
+// much quieter than Flow/Noise's continuous signal at the same flat gain —
+// this lets each track push its exciter's level independently instead of
+// being stuck at one compromise value tuned for Noise's hot resonance.
+export function setExciterLevel(trackId: RingsTrackId, level: number): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-exciter-level', payload: { level } });
+}
+
+// ms, 0-500, default 0 (instant, today's original behavior). Fades the
+// excitation signal in linearly on each trigger — a true swell for Flow/
+// Noise's continuous output. Mallet/Plectrum are one-sample impulses, so this
+// mostly softens/mutes their click rather than "delaying" it.
+export function setExciterAttackMs(trackId: RingsTrackId, ms: number): void {
+  const t = tracks.get(trackId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-exciter-attack-ms', payload: { ms } });
+}
+
 // ── Plaits-specific controls (single track, no trackId needed) ────────────
 // param: 0=harmonics 1=timbre 2=morph 3=decay
 export function setPlaitsParam(param: number, value: number): void {

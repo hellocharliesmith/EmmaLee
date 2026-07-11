@@ -44,10 +44,14 @@ class LinearResampler {
 
 const EXCITER_RATE = 32000;
 const EXCITER_CHUNK = 64; // ~2ms at 32kHz -- granularity for gate on/off timing
-// Tames the exciter's raw output to something comparable in scale to Rings'
-// own internal burst (roughly 0.1-0.3 peak) -- Noise in particular can swing
-// past +/-8 at high resonance (a real property of a resonant SVF pushed hard,
-// not a bug, see AGENTS.md), so this also gets a hard clamp after gain.
+// Baseline gain at Level=1.0 (100%) -- tames the exciter's raw output to
+// something comparable in scale to Rings' own internal burst (roughly
+// 0.1-0.3 peak). Noise in particular can swing past +/-8 at high resonance
+// (a real property of a resonant SVF pushed hard, not a bug, see AGENTS.md),
+// so this also gets a hard clamp after gain. The per-track Level knob
+// (exciterLevel, 0-2) multiplies this -- added because Mallet/Plectrum/
+// Particles' sparse impulses read as much quieter than Flow/Noise's
+// continuous signal at the same flat gain, and a fixed value can't serve both.
 const EXCITER_GAIN = 0.15;
 
 class RingsProcessor extends AudioWorkletProcessor {
@@ -105,6 +109,10 @@ class RingsProcessor extends AudioWorkletProcessor {
 
     this.exciterEnabled  = false; // false = Rings' own internal exciter (default, unchanged behavior)
     this.exciterGateMs   = 80;
+    this.exciterLevel    = 1.0; // multiplies EXCITER_GAIN, 0-2 (0%-200%), default = today's fixed level
+    this.exciterAttackMs = 0;   // 0 = instant (unchanged behavior), else fades in linearly over this many ms
+    this.envelopeLevel       = 1; // current attack-ramp position, 0-1
+    this.envelopeIncrement   = 0; // per-context-sample step, recomputed when attackMs changes
     this.gateSamplesRemaining = 0; // in EXCITER-native (32kHz) samples
     this.pendingExciterGateOn = false;
     this.pendingExciterRetriggerGap = false; // see _fillExcitationQueue
@@ -181,6 +189,15 @@ class RingsProcessor extends AudioWorkletProcessor {
 
         case 'set-exciter-gate-ms':
           this.exciterGateMs = payload.ms;
+          break;
+
+        case 'set-exciter-level':
+          this.exciterLevel = payload.level;
+          break;
+
+        case 'set-exciter-attack-ms':
+          this.exciterAttackMs = payload.ms;
+          this.envelopeIncrement = payload.ms > 0 ? 1 / ((payload.ms / 1000) * sampleRate) : 0;
           break;
       }
     };
@@ -288,8 +305,9 @@ class RingsProcessor extends AudioWorkletProcessor {
     while (this.excitationQueue.length < need) {
       this._exciterProcess(this.exciterPtr, EXCITER_CHUNK);
       const raw = new Array(EXCITER_CHUNK);
+      const gain = EXCITER_GAIN * this.exciterLevel;
       for (let i = 0; i < EXCITER_CHUNK; i++) {
-        const v = Math.max(-1, Math.min(1, heap[base + i] * EXCITER_GAIN));
+        const v = Math.max(-1, Math.min(1, heap[base + i] * gain));
         raw[i] = v;
       }
       const up = this.exciterUpsample.process(raw, EXCITER_CHUNK);
@@ -305,6 +323,7 @@ class RingsProcessor extends AudioWorkletProcessor {
       // the first whenever gate-ms outlasts the step interval.
       if (this.pendingExciterRetriggerGap) {
         this._exciterSetGate(1);
+        this.envelopeLevel = 0; // fresh rising edge -- restart the attack ramp
         this.pendingExciterRetriggerGap = false;
       } else if (this.gateSamplesRemaining > 0) {
         this.gateSamplesRemaining -= EXCITER_CHUNK;
@@ -343,6 +362,7 @@ class RingsProcessor extends AudioWorkletProcessor {
         this.pendingExciterRetriggerGap = true;
       } else {
         this._exciterSetGate(1);
+        this.envelopeLevel = 0; // fresh rising edge -- restart the attack ramp
       }
       this.gateSamplesRemaining = Math.round(this.exciterGateMs / 1000 * EXCITER_RATE);
       this.pendingExciterGateOn = false;
@@ -377,8 +397,14 @@ class RingsProcessor extends AudioWorkletProcessor {
     const excBase = this.excitationBase;
     if (this.exciterEnabled && this.exciterInstance) {
       this._fillExcitationQueue(left.length);
+      const rampAttack = this.exciterAttackMs > 0;
       for (let i = 0; i < left.length; i++) {
-        excHeap[excBase + i] = this.excitationQueue.shift();
+        let v = this.excitationQueue.shift();
+        if (rampAttack && this.envelopeLevel < 1) {
+          v *= this.envelopeLevel;
+          this.envelopeLevel = Math.min(1, this.envelopeLevel + this.envelopeIncrement);
+        }
+        excHeap[excBase + i] = v;
       }
     } else {
       for (let i = 0; i < left.length; i++) excHeap[excBase + i] = 0;

@@ -100,7 +100,7 @@ const DEFAULT_LFO: LfoState[] = [
   { on: false, wave: 'sine',   rate: 0.5,  depth: 0.15 },
 ];
 
-const DEFAULT_EXCITER: ExciterState = { model: 'internal', timbre: 0.6, parameter: 0.5, gateMs: 80 };
+const DEFAULT_EXCITER: ExciterState = { model: 'internal', timbre: 0.6, parameter: 0.5, gateMs: 80, level: 1.0, attackMs: 0 };
 
 interface RingsParamsState {
   kind: 'rings';
@@ -450,14 +450,14 @@ export default function App() {
       ringsA: {
         kind: 'rings', model: state.tracks.ringsA.model,
         params: [state.tracks.ringsA.structure, state.tracks.ringsA.brightness, state.tracks.ringsA.damping, state.tracks.ringsA.position],
-        lfo: state.tracks.ringsA.lfo, exciter: state.tracks.ringsA.exciter ?? DEFAULT_EXCITER, volume: state.tracks.ringsA.volume,
+        lfo: state.tracks.ringsA.lfo, exciter: { ...DEFAULT_EXCITER, ...state.tracks.ringsA.exciter }, volume: state.tracks.ringsA.volume,
         delaySend: state.tracks.ringsA.delaySend, reverbSend: state.tracks.ringsA.reverbSend,
         cloudsSend: state.tracks.ringsA.cloudsSend ?? 0.4,
       },
       ringsB: {
         kind: 'rings', model: state.tracks.ringsB.model,
         params: [state.tracks.ringsB.structure, state.tracks.ringsB.brightness, state.tracks.ringsB.damping, state.tracks.ringsB.position],
-        lfo: state.tracks.ringsB.lfo, exciter: state.tracks.ringsB.exciter ?? DEFAULT_EXCITER, volume: state.tracks.ringsB.volume,
+        lfo: state.tracks.ringsB.lfo, exciter: { ...DEFAULT_EXCITER, ...state.tracks.ringsB.exciter }, volume: state.tracks.ringsB.volume,
         delaySend: state.tracks.ringsB.delaySend, reverbSend: state.tracks.ringsB.reverbSend,
         cloudsSend: state.tracks.ringsB.cloudsSend ?? 0.4,
       },
@@ -521,6 +521,8 @@ export default function App() {
       Engine.setExciterParam(id as RingsTrackId, 'timbre', ex.timbre);
       Engine.setExciterParam(id as RingsTrackId, 'parameter', ex.parameter);
       Engine.setExciterGateMs(id as RingsTrackId, ex.gateMs);
+      Engine.setExciterLevel(id as RingsTrackId, ex.level);
+      Engine.setExciterAttackMs(id as RingsTrackId, ex.attackMs);
     }
   }
 

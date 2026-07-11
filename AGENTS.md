@@ -555,7 +555,39 @@ before feeding it into `rings_process`.
 **Gain staging**: the Noise model's resonant filter can peak ~8.7x at extreme
 timbre/parameter settings (observed in isolated testing) — `EXCITER_GAIN =
 0.15` plus a hard `[-1, 1]` clamp in `_fillExcitationQueue` tames this without
-noticeably attenuating the other 4 (much calmer) models.
+noticeably attenuating the other 4 (much calmer) models. This flat value
+turned out to be its own problem in practice (2026-07-11): Mallet/Plectrum/
+Particles are sparse impulses — energy for a brief moment, silence the rest
+of the time — so at the same gain they read as much quieter than Flow/
+Noise's continuous signal, and one fixed constant can't serve both well. Added
+a per-track **Level** knob (0-2, default 1.0, `exciterLevel` in
+`rings-processor.js`) that multiplies `EXCITER_GAIN` — `set-exciter-level`
+message, `Engine.setExciterLevel()`. Lets each track push its exciter
+independently instead of everyone sharing one compromise value.
+
+**Attack envelope (added 2026-07-11)**: Elements' exciter models react only
+to gate edges — there's no ramp/envelope knob in the original hardware DSP,
+so every model (even Flow/Noise's continuous output) starts at full level
+the instant a trigger fires. Added an **Attack (ms)** knob (0-500, default 0
+= instant, today's original behavior) that fades the excitation signal in
+linearly on each rising edge — pure JS, no WASM/recompile involved. Lives
+entirely in `rings-processor.js`: `envelopeLevel` (0-1, current ramp
+position) and `envelopeIncrement` (per-context-sample step, recomputed
+whenever `exciterAttackMs` changes: `1 / (attackMs/1000 * sampleRate)`).
+`envelopeLevel` resets to 0 at BOTH points a fresh rising edge actually
+reaches the exciter WASM — the immediate-open case in `process()` AND the
+delayed reopen inside `_fillExcitationQueue`'s retrigger-gap handling (see
+"Fast-retrigger gotcha" above) — miss either one and a fast retrigger would
+skip the ramp reset. Applied where context-rate samples are popped off
+`excitationQueue`, since that's already in real (post-upsample) sample units
+matching the ms-based timing exactly; skipped entirely (zero cost, exact
+byte-for-byte old behavior) when `exciterAttackMs <= 0`. Most useful on
+Flow/Noise's sustained texture (a genuine swell); Mallet/Plectrum are
+one-sample impulses, so a slow attack mostly softens/mutes their click
+rather than "delaying" it — there's no sustained signal there to ramp.
+Verified via a Node harness: rms scales linearly with Level (0.5/1.0/2.0 →
+~0.020/0.041/0.081), a 200ms Attack measured >30x quieter than instant in the
+first ~10ms, and fast-retrigger-with-attack produces no NaN.
 
 **WASM export-letter gotcha (easy to get wrong, bit this session)**:
 Emscripten's minified export letters (`exports.d`, `.e`, etc.) are assigned
@@ -583,10 +615,17 @@ own header (`exciter_svf_luts.h`, `extern const float ...[];`) and
 mirrors how the original `resources.cc`/its header do it.
 
 **Save format**: `RingsTrackState.exciter?: ExciterState` (optional, so old
-saves without it default to `'internal'` via `?? DEFAULT_EXCITER` in
-`App.tsx`'s `loadSong` — same pattern as `cloudsSend`/`lpgColour`). Two new
-presets, "Bowed Drone" (Flow, long gate, sustained bowed character) and
-"Granular Sparkle" (Particles, short gate), show off what this adds that
+saves without it default to `'internal'` via a merge with `DEFAULT_EXCITER`
+in `App.tsx`'s `loadSong` — same pattern as `cloudsSend`/`lpgColour`).
+`ExciterState`'s `level`/`attackMs` fields (added 2026-07-11, after `model`/
+`timbre`/`parameter`/`gateMs` already shipped) are required in the type but
+the `loadSong` merge is `{ ...DEFAULT_EXCITER, ...state.tracks.ringsA.exciter }`
+rather than a plain `??` fallback — this matters because a save from BEFORE
+2026-07-11 can have a real `exciter` object that's simply missing those two
+keys, and `??` only helps when the whole field is absent, not when it's
+partially there. Two new presets, "Bowed Drone" (Flow, long gate + a 250ms
+Attack for a genuine swell) and "Granular Sparkle" (Particles, short gate,
+Level 1.5 to combat its natural quietness), show off what this adds that
 Rings' internal exciter alone can't do — `RingsPreset.exciter` is likewise
 optional; presets that omit it leave whatever exciter the track already had
 untouched (`loadRingsPreset` in `App.tsx`).

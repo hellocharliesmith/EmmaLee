@@ -7,6 +7,15 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-07-11** — Rings exciter Level + Attack: Mallet/Plectrum/Particles
+  read much quieter than Flow/Noise at the same fixed gain (impulses vs a
+  continuous signal), so added a per-track **Level** knob (0-200%) replacing
+  the old flat gain constant. Also added an **Attack (ms)** knob (0-500ms,
+  default 0/instant) — Elements' exciter models have no built-in envelope, so
+  this fades the excitation signal in linearly on each trigger, a real swell
+  for Flow/Noise's sustained texture. Both are pure JS in
+  `rings-processor.js`, no WASM recompile. See AGENTS.md "Rings exciters" for
+  the full writeup.
 - **2026-07-10** — Rings exciters: Elements' Mallet/Plectrum/Particles/Flow/Noise
   models (compiled from a trimmed fork of `elements::Exciter`, avoiding the 94%
   of `resources.cc` that's baked-in sample-player data) now feed Rings' real IN
@@ -147,6 +156,27 @@ once this session) and the WASM export-letter discovery process for wrapper chan
 
 ### Decouple rhythm from pitch (V3)
 - Separate rhythm lane (on/off) from pitch lane (what note). Different lane lengths = polyrhythm. Like a real modular patch.
+
+---
+
+## Modulation
+
+### Assignable LFO pool instead of one-per-parameter (raised 2026-07-11)
+- Today: 4 fixed LFOs per Rings/Plaits track, one hardwired per parameter
+  (Structure/Brightness/Damping/Position, or the Plaits equivalents) — 3
+  tracks (Rings A/B + Plaits) × 4 = 12 always-visible LFO widgets. Confirmed
+  this is a UI-density complaint, not a performance one: LFOs update once per
+  audio block (~2.7ms), just a sin/cos plus one WASM `set_param` call each,
+  and the existing CPU meter already shows <1% load with all of them running
+  (see AGENTS.md's CPU monitor note / `rings-processor.js`'s LFO loop).
+- Idea: a smaller pool of assignable LFOs per voice (e.g. 2-3), each with a
+  Target dropdown for which param it modulates — closer to how a real
+  modular patch works (a handful of LFOs you route wherever you want, not
+  one glued to every destination).
+- Real rework, not a small tweak: needs a new target-selector control per
+  LFO slot, and a save-format migration since `LfoState[]` is currently
+  indexed by parameter position, not by independent slot. Plan properly
+  before starting — don't just wedge a dropdown into the existing array.
 
 ---
 

@@ -72,14 +72,14 @@ export const RINGS_PRESETS: RingsPreset[] = [
     model: 1, // Strings — sympathetic strings hold a sustained tone well
     params: [0.4, 0.45, 0.75, 0.3],
     lfo: NO_LFO,
-    exciter: { model: 'flow', timbre: 0.5, parameter: 0.65, gateMs: 600 },
+    exciter: { model: 'flow', timbre: 0.5, parameter: 0.65, gateMs: 600, level: 1.0, attackMs: 250 },
   },
   {
     name: 'Granular Sparkle',
     model: 4, // Sym.Q — pitch-quantized sympathetic strings, plays nice with grainy input
     params: [0.3, 0.55, 0.5, 0.35],
     lfo: NO_LFO,
-    exciter: { model: 'particles', timbre: 0.7, parameter: 0.4, gateMs: 180 },
+    exciter: { model: 'particles', timbre: 0.7, parameter: 0.4, gateMs: 180, level: 1.5, attackMs: 0 },
   },
 ];
 
