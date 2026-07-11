@@ -71,10 +71,21 @@ const MASTER_ICON: ReactNode = (
   <svg width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="6" width="2" height="7" fill="currentColor" /><rect x="7" y="2" width="2" height="11" fill="currentColor" /><rect x="12" y="8" width="2" height="5" fill="currentColor" /></svg>
 );
 
+// Non-standard window members we touch: Safari's legacy AudioContext name,
+// plus the two DevTools console helpers this app installs (see the
+// captureVoice/captureTexture effects below).
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+    captureVoice?: () => unknown;
+    captureTexture?: () => unknown;
+  }
+}
+
 function checkSupport(): string | null {
-  if (typeof AudioContext === 'undefined' && typeof (window as any).webkitAudioContext === 'undefined')
+  if (typeof AudioContext === 'undefined' && typeof window.webkitAudioContext === 'undefined')
     return 'Web Audio API not supported in this browser.';
-  const Ctx = (window.AudioContext ?? (window as any).webkitAudioContext) as typeof AudioContext;
+  const Ctx = window.AudioContext ?? window.webkitAudioContext!;
   if (!('audioWorklet' in Ctx.prototype))
     return 'AudioWorklet not supported. Please update Chrome to version 66+ or use a modern browser.';
   if (typeof WebAssembly === 'undefined')
@@ -151,9 +162,8 @@ type ViewSection = 'track' | 'master';
 export default function App() {
   const [audioStarted, setAudioStarted] = useState(false);
   const [audioError,   setAudioError]   = useState<string | null>(null);
-  const [unsupported,  setUnsupported]  = useState<string | null>(null);
-
-  useEffect(() => { setUnsupported(checkSupport()); }, []);
+  // Lazy initializer, not an effect — the answer can't change after load.
+  const [unsupported] = useState<string | null>(checkSupport);
 
   const {
     tracks, activeTrack, setActiveTrack,
@@ -270,7 +280,7 @@ export default function App() {
 
   // Console helper — open DevTools and type captureVoice() to get current track params
   useEffect(() => {
-    (window as any).captureVoice = () => {
+    window.captureVoice = () => {
       const p = trackParams[activeTrack];
       const out = JSON.stringify(p, null, 2);
       console.log(`captureVoice() — active track: ${activeTrack}\n${out}`);
@@ -281,10 +291,9 @@ export default function App() {
   // Console helper — open DevTools and type captureTexture() to get the current
   // Texture (master granular effect) settings, same workflow as captureVoice().
   useEffect(() => {
-    (window as any).captureTexture = () => {
-      const p = { name: 'Untitled', ...cloudsUi };
-      delete (p as any).freeze;
-      delete (p as any).quality;
+    window.captureTexture = () => {
+      const { position, size, pitch, density, texture, feedback, mix, reverbSend } = cloudsUi;
+      const p = { name: 'Untitled', position, size, pitch, density, texture, feedback, mix, reverbSend };
       const out = JSON.stringify(p, null, 2);
       console.log(`captureTexture()\n${out}`);
       return p;
@@ -484,10 +493,11 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    loadSong({ ...DEMO_SONGS[0], savedAt: 0 });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Boot with the first demo loaded. loadSong fans out into a dozen setState
+  // calls by design (it IS the "load everything" path) — running it once from
+  // a mount effect is intentional, not an accidental render cascade.
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  useEffect(() => { loadSong({ ...DEMO_SONGS[0], savedAt: 0 }); }, []);
 
   function loadRingsPreset(id: TrackId, preset: RingsPreset) {
     updateTrackParamsFor(id, p => p.kind === 'rings'

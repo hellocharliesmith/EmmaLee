@@ -19,6 +19,16 @@
 
 const CLOUDS_RATE = 32000;
 
+// GranularProcessor::Process() MUST be called with exactly-32-frame blocks
+// (clouds/dsp/frame.h kMaxBlockSize — the firmware only ever calls it with
+// 32). The 16-bit modes happen to tolerate ragged sizes, but the 8-bit µ-law
+// modes run the audio through a fixed 2:1 SampleRateConverter that traps
+// ("memory access out of bounds") on any other size — which permanently
+// killed this worklet on its first block whenever a µ-law quality was
+// active. The input FIFO below exists to honor that contract: downsampled
+// audio is queued and only ever handed to the WASM in whole 32-frame blocks.
+const WASM_BLOCK = 32;
+
 // Continuous linear resampler: `ratio` = input samples advanced per output
 // sample (>1 shrinks/downsamples, <1 grows/upsamples). Keeps fractional phase
 // AND the last sample of the previous call across process() invocations so
@@ -63,17 +73,26 @@ class CloudsProcessor extends AudioWorkletProcessor {
     this.inPtr     = null;
     this.outPtr    = null;
     this.heapF32   = null;
-    this.maxChunk  = 512; // frames headroom for the downsampled per-block chunk
+    this.maxChunk  = 512; // malloc headroom; actual WASM calls are always WASM_BLOCK frames
 
     this.ctxRate    = sampleRate; // AudioWorkletGlobalScope global
     this.downSample = new LinearResampler(this.ctxRate / CLOUDS_RATE); // ctx -> 32k
     this.upSample   = new LinearResampler(CLOUDS_RATE / this.ctxRate); // 32k -> ctx
 
-    // Output FIFO (context-rate samples) — the upsampler doesn't produce
-    // exactly `renderQuantum` samples every block, so we queue its output and
-    // pop exactly what's needed each process() call.
+    // Input FIFO (32kHz samples) — feeds the WASM in exact WASM_BLOCK-frame
+    // blocks, see the comment on WASM_BLOCK above.
+    this.inQueueL = [];
+    this.inQueueR = [];
+
+    // Output FIFO (context-rate samples) — the resamplers don't produce
+    // exactly `renderQuantum` samples every block, so we queue their output
+    // and pop exactly what's needed each process() call.
     this.outQueueL = [];
     this.outQueueR = [];
+
+    // Set when the WASM traps — we bypass to silence instead of throwing,
+    // which would make the browser permanently unload this processor.
+    this.dead = false;
 
     this._setParam  = null;
     this._setMode   = null;
@@ -157,7 +176,7 @@ class CloudsProcessor extends AudioWorkletProcessor {
     const right = output[1] || output[0];
     const n = left.length;
 
-    if (!this.instance) {
+    if (!this.instance || this.dead) {
       left.fill(0);
       right.fill(0);
       return true;
@@ -167,36 +186,49 @@ class CloudsProcessor extends AudioWorkletProcessor {
     const inL = (input && input[0]) ? input[0] : new Float32Array(n);
     const inR = (input && input[1]) ? input[1] : inL;
 
-    // 1) Downsample this block to 32kHz.
-    const down = this.downSample.process(inL, inR, n);
-    const chunk = Math.min(down.L.length, this.maxChunk);
+    try {
+      // 1) Downsample this block to 32kHz and queue it.
+      const down = this.downSample.process(inL, inR, n);
+      for (let i = 0; i < down.L.length; i++) {
+        this.inQueueL.push(down.L[i]);
+        this.inQueueR.push(down.R[i]);
+      }
 
-    // 2) Run through the WASM granular engine.
-    if (chunk > 0) {
+      // 2) Feed the WASM granular engine in exact WASM_BLOCK-frame blocks
+      // (its hard contract — see WASM_BLOCK's comment), upsampling each
+      // block's result back to context rate as it's produced (the upsampler
+      // carries phase across calls, so per-block calls don't click).
       const heap = this.heapF32;
       const inBase = this.inPtr / 4;
-      for (let i = 0; i < chunk; i++) {
-        heap[inBase + i * 2]     = down.L[i];
-        heap[inBase + i * 2 + 1] = down.R[i];
-      }
-      this._process(this.inPtr, this.outPtr, chunk);
-
-      // 3) Upsample the result back to context rate and queue it.
       const outBase = this.outPtr / 4;
-      const wasmOutL = new Array(chunk);
-      const wasmOutR = new Array(chunk);
-      for (let i = 0; i < chunk; i++) {
-        wasmOutL[i] = heap[outBase + i * 2];
-        wasmOutR[i] = heap[outBase + i * 2 + 1];
+      const wasmOutL = new Array(WASM_BLOCK);
+      const wasmOutR = new Array(WASM_BLOCK);
+      while (this.inQueueL.length >= WASM_BLOCK) {
+        for (let i = 0; i < WASM_BLOCK; i++) {
+          heap[inBase + i * 2]     = this.inQueueL.shift();
+          heap[inBase + i * 2 + 1] = this.inQueueR.shift();
+        }
+        this._process(this.inPtr, this.outPtr, WASM_BLOCK);
+        for (let i = 0; i < WASM_BLOCK; i++) {
+          wasmOutL[i] = heap[outBase + i * 2];
+          wasmOutR[i] = heap[outBase + i * 2 + 1];
+        }
+        const up = this.upSample.process(wasmOutL, wasmOutR, WASM_BLOCK);
+        for (let i = 0; i < up.L.length; i++) {
+          this.outQueueL.push(up.L[i]);
+          this.outQueueR.push(up.R[i]);
+        }
       }
-      const up = this.upSample.process(wasmOutL, wasmOutR, chunk);
-      for (let i = 0; i < up.L.length; i++) {
-        this.outQueueL.push(up.L[i]);
-        this.outQueueR.push(up.R[i]);
-      }
+    } catch (err) {
+      // A WASM trap here would otherwise propagate out of process() and make
+      // the browser permanently unload the processor — silently, since
+      // nothing on the main thread was watching. Report it and degrade to
+      // outputting silence instead.
+      this.dead = true;
+      this.port.postMessage({ type: 'process-error', message: String(err) });
     }
 
-    // 4) Pop exactly n samples for this block (pad with silence if the queue
+    // 3) Pop exactly n samples for this block (pad with silence if the queue
     // hasn't caught up yet, e.g. right after load).
     for (let i = 0; i < n; i++) {
       left[i]  = this.outQueueL.length ? this.outQueueL.shift() : 0;

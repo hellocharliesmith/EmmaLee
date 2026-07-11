@@ -106,7 +106,14 @@ src/
     RingsControls.tsx  — takes a `trackId` prop, calls engine functions itself
                        (App.tsx callbacks are pure state setters).
     PlaitsControls.tsx — Engine picker (6 curated engines) + Harmonics/Timbre/
-                       Morph/Decay/LPG Colour sliders. No trackId prop — only one
+                       Morph/Decay sliders, each with the same 4-slot LFO block
+                       as RingsControls (shared shape-cycle icon/logic lives in
+                       lfoCycle.tsx). LPG Colour is NO LONGER exposed
+                       (2026-07-09): it read like a toggle rather than a useful
+                       continuous knob, so it's pinned to 1.0 (the full/"darker"
+                       LPG character) at every point params reach the engine —
+                       the field survives in the save format for compatibility
+                       but the UI never shows it. No trackId prop — only one
                        Plaits melodic track.
     DrumControls.tsx  — per-voice Tone/Decay knobs (Hi-Hat/Snare/Kick).
     GridsControls.tsx — the Grids "Generate Pattern" panel on the Drums tab:
@@ -132,11 +139,14 @@ src/
 public/
   rings-processor.js  — Rings AudioWorklet (one registered class, instantiated
                        twice — once per Rings track).
-  plaits-processor.js — Plaits AudioWorklet, modeled on rings-processor.js but
-                       slimmed (no LFO, no internal reverb toggle). Instantiated
-                       4 times: melodic Plaits + 3 drum voices, all from the SAME
-                       compiled binary, each just locked to a different engine
-                       index. Has a 'set-note' message type (distinct from
+  plaits-processor.js — Plaits AudioWorklet, modeled on rings-processor.js
+                       (as of 2026-07-09 it has the same 4-slot audio-thread
+                       LFO system too, targeting params 0-3; still no internal
+                       reverb toggle). Instantiated 4 times: melodic Plaits +
+                       3 drum voices, all from the SAME compiled binary, each
+                       just locked to a different engine index — the drum
+                       voices never receive 'set-lfo', so LFOs stay dormant
+                       there. Has a 'set-note' message type (distinct from
                        'trigger') that sets pitch WITHOUT firing — used once at
                        drum-voice creation so they don't sound on page load.
   clouds-processor.js — Clouds granular effect worklet. UNLIKE the other three,
@@ -401,7 +411,32 @@ boundaries. If you ever touch the resampling code, know that it was verified
 (see below) at both 44.1kHz and 48kHz context rates — retest both if you
 change it.
 
-**Verified**: two layers. (1) Raw WASM: instantiated `public/clouds.wasm`
+**HARD CONTRACT (learned the expensive way, 2026-07-10)**:
+`GranularProcessor::Process()` must be called with **exactly 32-frame blocks**
+(`kMaxBlockSize`, clouds/dsp/frame.h — the firmware only ever calls it with
+32). The 16-bit quality modes happen to tolerate other sizes; the 8-bit µ-law
+modes run audio through a fixed 2:1 `SampleRateConverter` (that's the "16kHz"
+in their labels) that TRAPS ("memory access out of bounds") on any non-32
+block. The original wrapper chunked arbitrary sizes (a 128-frame 48kHz block
+downsamples to ~85 = 32+32+21), so the moment `setCloudsQuality(2)` became
+the boot default, the first-ever audio block killed the worklet — and an
+uncaught exception in an AudioWorklet's `process()` permanently unloads the
+processor WITH NO CONSOLE ERROR unless someone listens for it. Result: Clouds
+was totally silent in production for days while every dry/delay/reverb path
+worked. Fixes (all in `clouds-processor.js` + `engine.ts`, no recompile):
+an input FIFO feeds the WASM exact 32-frame blocks; `process()` wraps the
+WASM call in try/catch and degrades to silence + posts 'process-error' to the
+main thread; `engine.ts` installs `onprocessorerror` handlers on every
+worklet node so this failure class can never be silent again.
+
+**Quality-mode buffer warm-up (expected behavior, not a bug)**: with this
+build's enlarged buffers, effective sample memory is q0 ≈ 2s, q2 ≈ 8s,
+q1 ≈ 16s, q3 ≈ 32s. Grains read seconds "back" from the write head, so after
+a quality switch (which resets buffers) the texture fades in over roughly
+half the buffer length — the mono modes especially can seem dead for 8-16s
+before blooming. Verified by feeding 40s of sine through quality 1 in Node.
+
+**Verified**: three layers. (1) Raw WASM: instantiated `public/clouds.wasm`
 directly in Node the same way the worklet does (manual `WebAssembly.instantiate`
 with a minimal import object, NOT the Emscripten glue .js — see "Discovering
 WASM export names" below for why), fed it a synthesized sine wave, granulated
@@ -412,12 +447,16 @@ genuine "dead zone" in Clouds' own algorithm (zero grains scheduled between
 it's not necessarily a bug. (2) Resampling logic: stubbed
 `AudioWorkletProcessor`/`registerProcessor`/`sampleRate` in a Node `vm`
 context and ran `clouds-processor.js`'s actual unmodified `process()` loop
-for ~400 blocks at both 48kHz and 44.1kHz, toggling freeze mid-stream —
-non-silent, no NaN/Inf, output FIFO stayed bounded (~1 sample residual,
-confirming the down/up resampler ratios are exact inverses and don't drift
-over time). Did NOT verify in an actual running browser — same headless-preview
-limitation as the rest of this app's AudioWorklet work (see "Verification
-caveat" in the Multitrack architecture section above).
+at both 48kHz and 44.1kHz, toggling freeze mid-stream — non-silent, no
+NaN/Inf, FIFOs stayed bounded. (3) 2026-07-10, same vm harness after the
+32-frame-block fix: all four quality modes at both context rates, µ-law
+freeze/unfreeze included — audible steady-state RMS, zero NaN, max combined
+FIFO depth ≤ 44 samples (~1ms). IMPORTANT: layers 1-2 were originally run
+ONLY at the default 16-bit quality, which is exactly how the µ-law crash
+shipped — if you touch this code, rerun the harness across ALL FOUR quality
+modes, not just the default. Still not verified in an actual running browser —
+same headless-preview limitation as the rest of this app's AudioWorklet work
+(see "Verification caveat" in the Multitrack architecture section above).
 
 **What's NOT done / known gaps** (see BACKLOG.md for the actionable version):
 - No per-track Clouds Send knob yet — every track feeds the bus at the same

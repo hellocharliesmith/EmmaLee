@@ -7,6 +7,28 @@ first if you're new to the codebase. This file is just queued ideas.
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-07-10** — FIXED: Clouds was completely silent — `clouds_process()` was being
+  fed ragged block sizes, and the 8-bit µ-law quality modes (the boot default since
+  the quality-control feature) trap on any non-32-frame block, permanently killing
+  the worklet on its first audio block with no console error. `clouds-processor.js`
+  now feeds the WASM exact 32-frame blocks via an input FIFO, catches WASM traps
+  (degrades to silence + reports to main thread), and every worklet now logs
+  `onprocessorerror` so this class of failure can never be silent again. See
+  AGENTS.md "Clouds granular effect" for the full post-mortem.
+- **2026-07-10** — Session-wide cleanup: removed ~6KB of dead CSS (old substep
+  drawer, pre-rework page selector, legacy note controls), fixed an invalid CSS
+  property, typed the window globals, zero eslint/tsc errors across src/.
+- **2026-07-09/10** — Plaits LFOs (same 4-slot audio-thread system as Rings, added
+  to `plaits-processor.js`; UI mirrors RingsControls). LPG Colour control removed —
+  pinned to 1.0 ("darker" full-LPG character) at every engine sync. Second demo
+  song "Phased and Bent". Per-voice activity dots in the track tabs (firefly
+  scatter: x=pitch, size=velocity, driven by an `onVoiceTrigger` pub/sub in
+  engine.ts). LFO Rate knobs: log taper + floor lowered to a 30s cycle.
+- **2026-07-09** — UI cleanup round: Save/Export/Import folded into a full Songs
+  menu (shows what's loaded, Examples vs Your songs sections), Key (root+scale)
+  moved to the header and made global across melodic tracks, track tabs span the
+  piano roll width with per-track icons, bigger strum/probability/end-of-sequence
+  touch targets.
 - **2026-07-01** — Grids drum pattern generator: hand-ported `pattern_generator.cc`
   to plain TS (`src/audio/grids.ts`), no WASM needed (pure control logic, runs once
   per click). "Generate Pattern" panel on the Drums tab (X/Y + per-voice density +
@@ -127,17 +149,14 @@ once this session) and the WASM export-letter discovery process for wrapper chan
 - Design options: white noise burst (percussive), bowed noise (sustained), mic input.
 - Needs a simple ADSR envelope. Lots of sound design to work out — plan before building.
 
-### Clouds Send knob per track
-- Clouds (shipped 2026-07-01, see AGENTS.md "Clouds granular effect") currently takes
-  every track's signal at one fixed level (`cloudsSend.gain.value = 0.4` in
-  `createTrackWorklet`) — there's no per-track knob to control how much of each track
-  feeds the granulator, unlike Delay/Reverb Sends which already have one.
-- Architecturally ready: `TrackNodes.cloudsSend` and `setTrackSend(id, 'clouds', v)`
-  already exist, mirroring `delaySend`/`reverbSend` exactly. Just needs a 3rd knob
-  added to each track panel's Sends row + a `cloudsSend` field added to the
-  per-track save-format types (`RingsParamsState`/`PlaitsParamsState`/
-  `DrumParamsState` in App.tsx) with a version bump + migration, same pattern as
-  the existing `delaySend`/`reverbSend` fields.
+### Clouds mono quality modes have very long buffer warm-up
+- With this build's enlarged buffers, the mono quality options give the whole 1MB
+  large buffer to one channel: quality 1 (16-bit mono) is a ~16s buffer, quality 3
+  (8-bit mono) ~32s. Grains read several seconds "back", so after switching to a
+  mono mode you hear nothing until the buffer has filled that far — verified real
+  behavior, not a bug (see AGENTS.md "Clouds granular effect"). Options if it
+  bothers anyone: shrink the buffers in `clouds_wrapper.cpp` (recompile), or note
+  the warm-up in the Quality dropdown labels.
 
 ### Clouds params not saved
 - `cloudsUi` (Freeze/Mix/Position/Size/Pitch/Density/Texture/Feedback/Reverb) lives

@@ -140,7 +140,7 @@ export function WaveformMeter() {
         c.beginPath();
         for (let i = 0; i < hist.length; i++) {
           const y = yOffset + getTop(hist[i]);
-          i === 0 ? c.moveTo(i, y) : c.lineTo(i, y);
+          if (i === 0) c.moveTo(i, y); else c.lineTo(i, y);
         }
         c.stroke();
       }

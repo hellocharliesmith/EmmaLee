@@ -29,10 +29,15 @@ export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLo
   const exportRef    = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Focus only — the name reset happens in openSave/openExport below, so this
+  // effect never sets state (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (showSave)   { setName(''); setTimeout(() => inputRef.current?.focus(),  40); }
-    if (showExport) { setName(''); setTimeout(() => exportRef.current?.focus(), 40); }
+    if (showSave)   setTimeout(() => inputRef.current?.focus(),  40);
+    if (showExport) setTimeout(() => exportRef.current?.focus(), 40);
   }, [showSave, showExport]);
+
+  function openSave()   { setName(''); setShowDropdown(false); setShowSave(true); }
+  function openExport() { setName(''); setShowDropdown(false); setShowExport(true); }
 
   function handleSave() {
     if (!name.trim()) return;
@@ -92,8 +97,8 @@ export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLo
                 {/* ── Actions ── */}
                 <div className="sl-menu-actions">
                   <button className="sl-menu-action" onClick={() => { onNewSong(); setShowDropdown(false); }}>New</button>
-                  <button className="sl-menu-action" onClick={() => { setShowDropdown(false); setShowSave(true); }}>Save</button>
-                  <button className="sl-menu-action" onClick={() => { setShowDropdown(false); setShowExport(true); }}>Export</button>
+                  <button className="sl-menu-action" onClick={openSave}>Save</button>
+                  <button className="sl-menu-action" onClick={openExport}>Export</button>
                   <button className="sl-menu-action" onClick={() => { setShowDropdown(false); fileInputRef.current?.click(); }}>Import</button>
                 </div>
 

@@ -90,7 +90,8 @@ function buildAlgoIR(ctx: AudioContext, decayRate = 2.5): AudioBuffer {
 
   for (let c = 0; c < 2; c++) {
     const d = buffer.getChannelData(c);
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0;
+    let b6: number; // assigned each iteration before first read
     const spread = c === 0 ? 1.0 : 0.97;
     for (let i = 0; i < len; i++) {
       const w = Math.random() * 2 - 1;
@@ -120,8 +121,10 @@ function makeConvolverUnit(ctx: AudioContext, buffer: AudioBuffer): ReverbUnit {
 function swapReverb(newUnit: ReverbUnit) {
   if (!toneFilter || !wetGain) return;
   if (reverbUnit) {
-    try { toneFilter.disconnect(reverbUnit.input); } catch {}
-    try { reverbUnit.output.disconnect(wetGain!); } catch {}
+    // disconnect() throws if the connection doesn't exist — that's fine here,
+    // we only care that it's gone.
+    try { toneFilter.disconnect(reverbUnit.input); } catch { /* not connected */ }
+    try { reverbUnit.output.disconnect(wetGain!); } catch { /* not connected */ }
   }
   toneFilter.connect(newUnit.input);
   newUnit.output.connect(wetGain!);
@@ -156,6 +159,12 @@ async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName:
   });
   worklet.port.onmessage = (e) => {
     if (e.data.type === 'perf') dspLoadByTrack.set(id, e.data.load);
+  };
+  // An uncaught exception inside process() permanently unloads the processor
+  // — without this handler that failure mode is completely silent (this is
+  // exactly how the Clouds µ-law crash went unnoticed; see clouds-processor.js).
+  worklet.onprocessorerror = () => {
+    console.error(`[engine] ${id} worklet processor crashed — this track is now silent until reload`);
   };
 
   const dryGain    = ctx.createGain(); dryGain.gain.value = 0.85;
@@ -311,6 +320,17 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
       if (e.data.type === 'error') reject(new Error(e.data.message));
     };
   });
+  // After the ready handshake, keep listening: the worklet reports WASM traps
+  // caught inside process() (it degrades to silence rather than letting the
+  // exception unload the processor — see clouds-processor.js).
+  cloudsNode.port.onmessage = (e) => {
+    if (e.data.type === 'process-error') {
+      console.error(`[engine] Clouds DSP crashed and is bypassed until reload: ${e.data.message}`);
+    }
+  };
+  cloudsNode.onprocessorerror = () => {
+    console.error('[engine] Clouds worklet processor crashed — texture bus is now silent until reload');
+  };
 
   cloudsWetGain = audioCtx.createGain();
   cloudsWetGain.gain.value = 0.5;
