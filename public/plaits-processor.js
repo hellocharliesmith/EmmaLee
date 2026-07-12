@@ -5,6 +5,17 @@
 // global set once from the main thread and never modulated.
 // Reused as-is for the 3 drum voices too (see engine.ts's DRUM_VOICE_CONFIG) —
 // they simply never receive a 'set-lfo' message, so this stays dormant there.
+// Same is true of the envelope below: drum voices never receive
+// 'set-envelope-*' messages, and their engines bypass the LPG entirely
+// regardless (already_enveloped, see AGENTS.md), so it's a no-op for them.
+//
+// Envelope (added 2026-07-12, see AGENTS.md "Plaits envelope"): Plaits' own
+// internal envelope is a fixed pitch-tied "ping" attack + a decay that always
+// falls to silence — no user-adjustable attack, no sustain. Real hardware has
+// a second mode though: patching a CV into the LEVEL input makes the internal
+// lowpass gate follow that CV directly instead of auto-triggering the ping
+// (voice.cc's ProcessLP vs ProcessPing). This drives that input with a real
+// Attack + Sustain envelope computed here, block-rate, same as the LFOs.
 
 class PlaitsProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -17,11 +28,13 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     this.base       = 0;    // outputPtr >> 2, pre-computed
 
     // Cached WASM exports
-    this._setParam = null;
-    this._setModel = null;
-    this._setNote  = null;
-    this._trigger  = null;
-    this._process  = null;
+    this._setParam        = null;
+    this._setModel        = null;
+    this._setNote         = null;
+    this._trigger         = null;
+    this._process         = null;
+    this._setLevel        = null;
+    this._setLevelPatched = null;
 
     this.pendingTrigger = false;
     this.pendingNote    = undefined;
@@ -30,6 +43,16 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     // Base param values (set by sliders, used as LFO centre) — indices
     // 0=harmonics, 1=timbre, 2=morph, 3=decay.
     this.baseParams = [0.5, 0.5, 0.5, 0.5];
+
+    // ── Envelope (drives Plaits' real LEVEL input, see file header) ────────
+    this.envAttackMs = 0; // 0 = feature off (together with envSustain===0)
+    this.envSustain  = 0; // 0-1 -- floor the level settles at instead of 0
+    this.envActive   = false;   // cached: envAttackMs>0 || envSustain>0
+    this.envWasActive = false;  // tracks mode transitions so we only call
+                                // _setLevelPatched when it actually changes
+    this.envState    = 'idle';  // 'idle' | 'attack' | 'hold'
+    this.envLevel    = 0;       // current ramp position during 'attack', 0-1
+    this.envIncrement = 0;      // per-block attack step, recomputed when envAttackMs changes
 
     // Four LFOs, one per modulatable param (same shape as rings-processor.js).
     this.lfos = [0, 1, 2, 3].map(paramIdx => ({
@@ -78,8 +101,24 @@ class PlaitsProcessor extends AudioWorkletProcessor {
             this._setParam?.(lfo.paramIdx, this.baseParams[lfo.paramIdx]);
           break;
         }
+
+        case 'set-envelope-attack-ms':
+          this.envAttackMs = payload.ms;
+          this.envActive = this.envAttackMs > 0 || this.envSustain > 0;
+          this._recomputeEnvIncrement();
+          break;
+
+        case 'set-envelope-sustain':
+          this.envSustain = payload.value;
+          this.envActive = this.envAttackMs > 0 || this.envSustain > 0;
+          break;
       }
     };
+  }
+
+  _recomputeEnvIncrement() {
+    const dt = 128 / sampleRate; // seconds per block, same granularity as the LFOs
+    this.envIncrement = this.envAttackMs > 0 ? dt / (this.envAttackMs / 1000) : 1;
   }
 
   async _init(wasmBytes) {
@@ -102,16 +141,24 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       this.instance = instance;
       memRef = instance.exports.b; // WebAssembly.Memory
 
-      // d=init e=set_param f=set_model g=set_note h=trigger i=process j=malloc k=free
+      // d=init e=set_param f=set_model g=set_note h=trigger i=process
+      // j=set_level k=set_level_patched l=malloc m=free (letters follow
+      // declaration order in plaits_wrapper.cpp, NOT build-plaits-wasm.sh's
+      // EXPORTED_FUNCTIONS array order — re-derive with a throwaway -O1 build
+      // or by grepping public/plaits.js's assignWasmExports after any wrapper
+      // change, see that file's top-of-file note. Confirmed via plaits.js's
+      // own assignWasmExports function directly, 2026-07-12.)
       this._setParam = instance.exports.e;
       this._setModel = instance.exports.f;
       this._setNote  = instance.exports.g;
       this._trigger  = instance.exports.h;
       this._process  = instance.exports.i;
+      this._setLevel        = instance.exports.j;
+      this._setLevelPatched = instance.exports.k;
 
       instance.exports.d(sampleRate); // plaits_init
 
-      this.outputPtr = instance.exports.j(128 * 2 * 4); // malloc
+      this.outputPtr = instance.exports.l(128 * 2 * 4); // malloc
       this.base      = this.outputPtr >> 2;
 
       this.heapF32 = new Float32Array(instance.exports.b.buffer);
@@ -133,6 +180,32 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       if (this.pendingNote !== undefined) this._setNote(this.pendingNote);
       this._trigger();
       this.pendingTrigger = false;
+      if (this.envActive) {
+        this.envState = 'attack';
+        this.envLevel = 0;
+      }
+    }
+
+    // ── Envelope — drives Plaits' real LEVEL input (see file header). Only
+    // touches the WASM when active/just-deactivated, same "skip when unused"
+    // discipline as the LFO loop below (enabled/disabled per-LFO). ──────────
+    if (this.envActive) {
+      if (this.envState === 'attack') {
+        this.envLevel = Math.min(1, this.envLevel + this.envIncrement);
+        if (this.envLevel >= 1) this.envState = 'hold';
+      }
+      // During 'attack' we ramp 0->1 ourselves. Once we reach 'hold' we just
+      // hold the target at envSustain forever -- Plaits' OWN vactrol/decay
+      // follower (patch.decay-driven, unchanged meaning) does the musical
+      // fall from ~1 down to that floor, then simply stays there: a real,
+      // indefinite sustain/drone once envSustain > 0.
+      const level = this.envState === 'hold' ? this.envSustain : this.envLevel;
+      this._setLevel?.(level);
+      if (!this.envWasActive) this._setLevelPatched?.(1);
+      this.envWasActive = true;
+    } else if (this.envWasActive) {
+      this._setLevelPatched?.(0); // back to Plaits' native ping-decay envelope
+      this.envWasActive = false;
     }
 
     // ── LFO — runs on audio thread, zero IPC, block-rate accurate ──────────

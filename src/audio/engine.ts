@@ -578,6 +578,23 @@ export function setPlaitsLFODepth(i: number, depth: number): void {
   t.worklet.port.postMessage({ type: 'set-lfo', payload: { index: i, field: 'depth', value: depth } });
 }
 
+// Envelope (added 2026-07-12, see AGENTS.md "Plaits envelope") — drives
+// Plaits' real LEVEL input instead of its fixed pitch-tied "ping" envelope.
+// ms, 0-3000, default 0 (instant, today's original behavior).
+export function setPlaitsEnvelopeAttackMs(ms: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-envelope-attack-ms', payload: { ms } });
+}
+
+// 0-1, default 0 (decays fully to silence, today's behavior). At 1, the note
+// swells in and holds indefinitely — a sustained drone, until the next trigger.
+export function setPlaitsEnvelopeSustain(value: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-envelope-sustain', payload: { value } });
+}
+
 // ── Drum voice controls ────────────────────────────────────────────────────
 // IMPORTANT: the param mapping here is DIFFERENT from melodic Plaits. For the
 // drum engines (bass_drum/snare_drum/hi_hat), patch.decay (param 3) is unused —

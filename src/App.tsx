@@ -23,7 +23,7 @@ import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
 import { VoiceTabViz } from './components/VoiceTabViz';
-import type { LfoState, ExciterState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
+import type { LfoState, ExciterState, PlaitsEnvelopeState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -101,6 +101,7 @@ const DEFAULT_LFO: LfoState[] = [
 ];
 
 const DEFAULT_EXCITER: ExciterState = { model: 'internal', timbre: 0.6, parameter: 0.5, gateMs: 80, level: 1.0, attackMs: 0 };
+const DEFAULT_PLAITS_ENVELOPE: PlaitsEnvelopeState = { attackMs: 0, sustain: 0 };
 
 interface RingsParamsState {
   kind: 'rings';
@@ -119,6 +120,7 @@ interface PlaitsParamsState {
   engine: number;
   params: [number, number, number, number, number]; // harmonics, timbre, morph, decay, lpgColour
   lfo: LfoState[];
+  envelope: PlaitsEnvelopeState;
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -140,7 +142,7 @@ function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
-  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, envelope: DEFAULT_PLAITS_ENVELOPE, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 // Decay defaults match engine.ts's DRUM_VOICE_CONFIG so the knobs reflect what's
 // actually set on the worklet at creation time.
@@ -336,6 +338,7 @@ export default function App() {
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4], lfo: plaitsP.lfo,
+      envelope: plaitsP.envelope,
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend, cloudsSend: plaitsP.cloudsSend,
     };
     const drums: DrumTrackState = {
@@ -465,6 +468,7 @@ export default function App() {
         kind: 'plaits', engine: state.tracks.plaits.engine,
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         lfo: state.tracks.plaits.lfo ?? NO_LFO,
+        envelope: { ...DEFAULT_PLAITS_ENVELOPE, ...state.tracks.plaits.envelope },
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
         cloudsSend: state.tracks.plaits.cloudsSend ?? 0.4,
       },
@@ -610,7 +614,7 @@ export default function App() {
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
-      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, envelope: DEFAULT_PLAITS_ENVELOPE, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
 
@@ -926,7 +930,7 @@ export default function App() {
                   )}
                   {active.kind === 'plaits' && (
                     <PlaitsControls
-                      engine={active.engine} params={active.params} lfo={active.lfo}
+                      engine={active.engine} params={active.params} lfo={active.lfo} envelope={active.envelope}
                       presets={PLAITS_PRESETS}
                       onPresetLoad={loadPlaitsPreset}
                       onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
@@ -937,6 +941,8 @@ export default function App() {
                       })}
                       onLfoChange={(i, u) => updateActiveParams(p => p.kind === 'plaits'
                         ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
+                      onEnvelopeChange={u => updateActiveParams(p => p.kind === 'plaits'
+                        ? ({ ...p, envelope: { ...p.envelope, ...u } }) : p)}
                     />
                   )}
                   {active.kind === 'drums' && (

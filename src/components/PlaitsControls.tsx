@@ -1,10 +1,11 @@
-import { setPlaitsParam, setPlaitsModel, setPlaitsLFOEnabled, setPlaitsLFOWave, setPlaitsLFORate, setPlaitsLFODepth } from '../audio/engine';
+import { setPlaitsParam, setPlaitsModel, setPlaitsLFOEnabled, setPlaitsLFOWave, setPlaitsLFORate, setPlaitsLFODepth,
+         setPlaitsEnvelopeAttackMs, setPlaitsEnvelopeSustain } from '../audio/engine';
 import { Knob } from './Knob';
 import { Slider } from './Slider';
 import { Dropdown } from './Dropdown';
 import { LfoScope } from './LfoScope';
 import { lfoIcon, nextLfoState } from './lfoCycle';
-import type { LfoState } from '../types';
+import type { LfoState, PlaitsEnvelopeState } from '../types';
 import type { PlaitsPreset } from '../presets';
 
 // Engine indices match Plaits' actual hardware registration order (see voice.cc
@@ -46,14 +47,16 @@ export interface PlaitsControlsProps {
   engine: number;
   params: [number, number, number, number, number];
   lfo: LfoState[];
+  envelope: PlaitsEnvelopeState;
   presets: PlaitsPreset[];
   onPresetLoad: (p: PlaitsPreset) => void;
   onEngineChange: (e: number) => void;
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
+  onEnvelopeChange: (updates: Partial<PlaitsEnvelopeState>) => void;
 }
 
-export function PlaitsControls({ engine, params, lfo, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange }: PlaitsControlsProps) {
+export function PlaitsControls({ engine, params, lfo, envelope, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange, onEnvelopeChange }: PlaitsControlsProps) {
   const engineLabels = ENGINE_PARAM_LABELS[engine] ?? FALLBACK_LABELS;
 
   function labelFor(i: number): string {
@@ -124,6 +127,23 @@ export function PlaitsControls({ engine, params, lfo, presets, onPresetLoad, onE
           </div>
         );
       })}
+
+      <div className="section-divider" />
+      <div className="panel-name">Envelope</div>
+      <div className="knob-row">
+        <label title="Fades the note in instead of Plaits' fixed instant attack — 0 keeps today's original behavior">Attack</label>
+        <Slider
+          value={envelope.attackMs} min={0} max={3000}
+          onChange={v => { onEnvelopeChange({ attackMs: v }); setPlaitsEnvelopeAttackMs(v); }}
+        />
+      </div>
+      <div className="knob-row">
+        <label title="Floor the note settles at instead of decaying to silence — Decay still controls how fast it gets there. At max, the note holds forever: a sustained drone">Sustain</label>
+        <Slider
+          value={envelope.sustain} min={0} max={1}
+          onChange={v => { onEnvelopeChange({ sustain: v }); setPlaitsEnvelopeSustain(v); }}
+        />
+      </div>
     </div>
   );
 }

@@ -5,8 +5,78 @@ Ideas and improvements to work through. Roughly ordered by priority within each 
 See [AGENTS.md](AGENTS.md) for architecture, deploy steps, and key decisions — read that
 first if you're new to the codebase. This file is just queued ideas.
 
+## Generative sequencing (long-term vision, raised 2026-07-12)
+
+**Vision**: an interface for people who don't know anything about synths but
+want to make a soundscape and have some control over it. Not a preset picker —
+real generative control, just with guardrails a non-expert can turn without
+getting lost. This is a big, multi-session initiative — plan it properly
+before starting, don't wedge it into an unrelated session.
+
+**Confirmed feasible**: unlike Beads (see that entry below), Marbles' actual
+firmware DSP IS present in this repo's clone: `rings-source/marbles/random/
+t_generator.cc/h` (the rhythm/gate "T" section), `x_y_generator.cc/h` (the
+CV/note "X"/"Y" section), `quantizer.cc/h` + `discrete_distribution_quantizer.
+cc/h` (a real weighted-scale quantizer, `Degree { voltage, weight }`, up to 16
+degrees). `TGenerator` already exposes `bias`, `jitter`, `deja_vu` (pattern
+memory/repeat), `length`, and — notably — `pulse_width_mean`/`pulse_width_std`,
+which lines up directly with the short-gate-vs-sustained-note ask below. This
+is a real reusable foundation, not a from-scratch reimplementation — though
+whether to compile Marbles' C++ to WASM vs. hand-port the relevant algorithms
+to plain TypeScript (like Grids' pattern generator was, see AGENTS.md) is an
+open decision — Marbles' full class also carries CV-jack-reading/hardware
+driver code this app has no use for, similar to how Elements' Exciter needed
+trimming before Rings' exciter feature could use it cleanly.
+
+**The core idea**: a new alternate sequencing mode per voice, toggleable
+alongside the existing piano roll (not replacing it) — a Turing-machine-style
+core generating notes, slow and evolving rather than bubbling arpeggios.
+Requirements as specified:
+- **Gate/trigger generation fully decoupled from note generation** — two
+  independent generative streams, not one lockstep sequence.
+- **Density** (how many triggers) and **Complexity** (pattern character)
+  controls for the gate stream.
+- **Short gate vs. long sustained note** needs its own variable — this can
+  plug directly into the Attack/Sustain/Gate controls already built this
+  session (Rings exciter Level/Attack/Gate, Plaits envelope Attack/Sustain)
+  rather than needing a whole new envelope system of its own.
+- **A quantizer**, per voice.
+- **Note limiting per voice**: pick a set of 1 to 12 notes (not a whole
+  scale) to constrain the generative output to.
+- **A range window independent of the note selection**: e.g. select C/E/G,
+  then separately choose which octave(s) those play in — octaves 1-3, or a
+  narrower 0-1 window. Two orthogonal controls: which pitch classes, and
+  which octave range they're allowed to occupy.
+
+**Brainstormed additions** (not yet requested, ideas to evaluate later):
+- **Euclidean gate option** alongside Marbles' own rhythm models, as a second,
+  more "tamed"/predictable density+complexity control (fill count + rotation)
+  — may suit total beginners better than Marbles' probabilistic chaos.
+- **Random-walk pitch mode** (small step size + a "gravity" pulling back
+  toward a center note) as a second note-generation flavor alongside the
+  Turing-machine/shift-register core — genuinely slow drift, not stepped jumps.
+- **Weighted note probability** — Marbles' quantizer already supports
+  per-degree weights; within the user's selected note set, some notes could
+  appear more often than others, not uniform-random.
+- **"Evolve" macro knob** — one knob morphing density+complexity+drift
+  together, for users who don't want five separate controls to reason about.
+- **Freeze-to-piano-roll capture** — snapshot a generated pattern into fixed
+  steps so it becomes hand-editable afterward, bridging the two sequencing
+  modes instead of leaving them totally separate.
+- **Cross-voice generative linking** (a la Marbles' X/Y correlation) — one
+  voice's density/pattern subtly influencing another's. Stretch idea, later.
+
 ## Recently shipped (remove from here once stale)
 
+- **2026-07-12** — Plaits envelope: Attack (0-3000ms, swell in instead of
+  Plaits' fixed pitch-tied instant attack) + Sustain (0-1, holds indefinitely
+  at max instead of always decaying to silence — a real drone). Uses Plaits'
+  own real LEVEL-CV mechanism (`modulations.level_patched`, previously wired
+  in the wrapper but hardcoded off) rather than a bolted-on JS gain multiply
+  — `patch.decay`/"Decay" keeps its exact original meaning and wiring. Small
+  WASM recompile (2 one-line C++ setters); all the envelope shaping logic is
+  JS in `plaits-processor.js`. At the defaults (0, 0) sounds byte-identical
+  to before — old saves/presets unaffected. See AGENTS.md "Plaits envelope".
 - **2026-07-11** — Rings exciter Level + Attack: Mallet/Plectrum/Particles
   read much quieter than Flow/Noise at the same fixed gain (impulses vs a
   continuous signal), so added a per-track **Level** knob (0-200%) replacing

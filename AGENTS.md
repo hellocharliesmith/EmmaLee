@@ -186,7 +186,9 @@ rings-dsp/
                        set_model/set_timbre/set_parameter/set_gate/process.
                        `build-exciter-wasm.sh` compiles it to `public/exciter.wasm`.
   plaits_wrapper.cpp — same pattern for Plaits, exposing plaits_init/set_param/
-                       set_model/set_note/trigger/process. Compiles Plaits' full
+                       set_model/set_note/trigger/process/set_level/
+                       set_level_patched (the last 2 added 2026-07-12 — see
+                       "Plaits envelope" below). Compiles Plaits' full
                        Voice class (all 22 engines — can't selectively compile,
                        Voice statically includes them all as members); the engine
                        picker in PlaitsControls.tsx (and the fixed engines used by
@@ -639,6 +641,87 @@ the 5x fast-retrigger stress case. Also spot-checked in a real running
 browser (UI dropdown + sliders, model switching, preset loading) — see
 "Verification caveat" above for why deeper audio-output verification still
 needs the user's ears.
+
+## Plaits envelope (added 2026-07-12)
+
+Plaits' own internal envelope (`plaits/dsp/envelope.h`'s `LPGEnvelope` +
+`DecayEnvelope`) is a fixed, hardware-tied shape: attack time is locked to
+the triggered note's pitch (`NoteToFrequency(p.note) * kBlockSize * 2.0f` in
+`voice.cc`'s `ProcessPing` call — not adjustable), and decay always falls
+asymptotically to zero — there's no sustain segment, no user control over
+attack at all. This was the actual blocker for "swell in" / "sustained drone
+notes" — not a missing knob, a genuinely fixed-shape envelope.
+
+**The real mechanism, already in the DSP**: on real hardware, patching a CV
+into Plaits' `LEVEL` input makes the internal lowpass gate stop
+auto-triggering its ping and instead just follow that CV directly —
+`voice.cc`'s branch: `if (modulations.level_patched) { lpg_envelope_.
+ProcessLP(compressed_level, ...) } else { ...ProcessPing(attack, ...) }`.
+`modulations.level`/`level_patched` were wired into the wrapper but always
+hardcoded (`level = 1.0f`, `level_patched = false`) — this feature finally
+drives them for real, from the worklet, rather than adding a parallel
+JS-side gain multiply on the output. Two new one-line C++ exports
+(`plaits_set_level`, `plaits_set_level_patched` in `plaits_wrapper.cpp`,
+appended at the end of the file to keep every existing export letter
+stable) are the entire wrapper change — all the actual envelope shaping
+logic lives in `plaits-processor.js`, same "thin wrapper, JS does the
+control logic" split as the Rings exciter's Gate/Attack.
+
+**Design — Attack + Sustain, `patch.decay` UNCHANGED**: rather than
+reinventing decay timing in JS, the envelope only computes the ATTACK ramp
+itself (`envLevel` climbing 0→1 over `envAttackMs`, written to
+`modulations.level` every block via `plaits_set_level`). Once attack
+completes, JS just holds the target at `envSustain` (0-1) constantly from
+then on — Plaits' OWN vactrol/`ProcessLP` follower (still driven by
+`patch.decay`, meaning UNCHANGED) does the musical fall from ~1 down to that
+floor, then simply stays there since the target stopped moving: a genuine,
+indefinite sustain once `envSustain > 0` (a real drone at `envSustain = 1`,
+since the target never falls at all). This is why "Decay" didn't need to
+become a dual-meaning knob — it's literally the same parameter, same wiring,
+in both modes.
+
+**Activation rule (backward compatibility)**: custom envelope
+(`level_patched = true`) only turns on when `envAttackMs > 0 OR envSustain >
+0`. At the defaults (both 0) `level_patched` stays false and Plaits behaves
+byte-identical to before this feature — old saves/presets are unaffected
+until a track explicitly raises either knob. Mirrors the activation rule
+already used for the Rings exciter's Attack ramp.
+
+**Retrigger reset**: on every new trigger, `envState` resets to `'attack'`
+and `envLevel` resets to 0 (if the envelope is active) — a monophonic
+voice's new note gets its own full swell every time, not a legato blend
+with whatever level it was already at. `envAttackMs <= 0` means the ramp
+completes in a single block (`envIncrement` computed as 1 in that case), so
+Attack=0 + Sustain>0 still works correctly (instant attack, then holds at
+Sustain) — it just skips the swell.
+
+**Shared processor, drums unaffected**: `plaits-processor.js` is reused
+as-is for the 3 drum voices (see "Plaits AudioWorklet" above). They never
+receive `'set-envelope-*'` messages, so their envelope state never leaves
+the `envActive = false` default — and even if it somehow did, their engines
+are `already_enveloped` (bass_drum/snare_drum/hi_hat), which bypasses the
+LPG unconditionally regardless of `level_patched` (same reason `patch.decay`/
+LPG Colour already do nothing for drums, see the drum param mapping note
+below). No drum-specific guard was needed in the DSP layer.
+
+**WASM export-letter note**: the 2 new functions were appended AFTER
+`plaits_process` in the .cpp file specifically to keep every existing
+letter (`d`=init through `i`=process) stable — confirmed by grepping
+`public/plaits.js`'s own `assignWasmExports` function directly rather than
+guessing: `j`=set_level, `k`=set_level_patched, and `malloc`/`free` shifted
+from `j`/`k` to `l`/`m` as a result. Same "never assume, always re-derive"
+discipline as every other wrapper change in this project.
+
+**Verified**: Node `vm` harness (same technique as the Clouds/Rings-exciter
+fixes) running the actual `plaits-processor.js` with the real compiled
+`plaits.wasm`: default path (envelope off) is non-silent with no NaN and
+still decays (native behavior, unchanged); a 600ms Attack measured ~40x
+quieter than instant in the first ~10ms; Sustain=1.0 held level across a
+2.7-second window with no decay (genuine indefinite drone, not just a long
+decay); 3 rapid retriggers and an active→off mode transition both produced
+no NaN. Also spot-checked in a real running browser (Attack/Sustain sliders
+render and persist, no console errors) — see "Verification caveat" above
+for why deeper audio-output verification still needs the user's ears.
 
 ## Key decisions worth knowing before you change things
 

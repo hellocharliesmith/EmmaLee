@@ -1,3 +1,10 @@
+// Export letters follow this file's function DEFINITION order, NOT
+// build-plaits-wasm.sh's EXPORTED_FUNCTIONS array order (that array only
+// controls what gets exported, not which letter each one gets) — re-derive
+// with a throwaway -O1 build (preserves real names) after ANY change here,
+// never assume. See AGENTS.md "Rings exciters" for the same gotcha hit
+// there, and "Plaits envelope" for this file's current mapping.
+
 #include <emscripten/emscripten.h>
 #include <cstring>
 #include <cmath>
@@ -89,6 +96,22 @@ void plaits_process(float* output, int num_samples) {
     modulations.trigger = 0.0f; // pulse for one render call, like rings' performance.strum
     i += block;
   }
+}
+
+// Drives Plaits' real LEVEL input — on actual hardware, patching a CV into
+// LEVEL makes the internal lowpass gate follow that CV directly instead of
+// auto-triggering its fixed pitch-tied "ping" envelope (see voice.cc's
+// ProcessLP vs ProcessPing branch). The worklet computes a real Attack/
+// Sustain envelope and calls this every block once plaits_set_level_patched
+// is on — see AGENTS.md "Plaits envelope" for the full design.
+EMSCRIPTEN_KEEPALIVE
+void plaits_set_level(float level) {
+  modulations.level = level;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void plaits_set_level_patched(int on) {
+  modulations.level_patched = (on != 0);
 }
 
 } // extern "C"

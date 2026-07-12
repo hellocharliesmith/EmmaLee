@@ -45,6 +45,15 @@ export interface RingsTrackState extends BaseTrackState {
   exciter?: ExciterState; // optional -- old saves default to 'internal' (today's behavior), see App.tsx's loadSong
 }
 
+// Drives Plaits' real LEVEL input instead of its fixed pitch-tied "ping"
+// envelope — see engine.ts's setPlaitsEnvelopeAttackMs/Sustain / AGENTS.md
+// "Plaits envelope". attackMs=0 && sustain=0 (the defaults) reproduce
+// Plaits' original always-decays-to-silence behavior exactly.
+export interface PlaitsEnvelopeState {
+  attackMs: number; // 0-3000, default 0 (instant)
+  sustain: number;  // 0-1, default 0 (decays to silence). 1 = holds forever (drone).
+}
+
 export interface PlaitsTrackState extends BaseTrackState {
   engine: number;
   harmonics: number;
@@ -53,6 +62,7 @@ export interface PlaitsTrackState extends BaseTrackState {
   decay: number;
   lpgColour: number; // no longer surfaced in the UI — always sent to the engine as 1.0 (see engine.ts)
   lfo: LfoState[];
+  envelope?: PlaitsEnvelopeState; // optional -- old saves default to {0,0} (today's native envelope), see App.tsx's loadSong
 }
 
 export interface DrumTrackState extends BaseTrackState {
