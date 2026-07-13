@@ -723,6 +723,134 @@ no NaN. Also spot-checked in a real running browser (Attack/Sustain sliders
 render and persist, no console errors) — see "Verification caveat" above
 for why deeper audio-output verification still needs the user's ears.
 
+## Generative sequencing (added 2026-07-12, v1 "nerdy" phase)
+
+A new alternate sequencing mode, per melodic track (Rings A/B, Plaits — not
+Drums, not Kids Mode), toggleable against the piano roll via a "Piano Roll /
+Generative" switch above the step grid. See `BACKLOG.md`'s "Generative
+sequencing" entry for the full vision (this is explicitly Phase 1 — every
+knob exposed, built for someone who already knows modular generative
+patching; a simplified "vibe picker" layer for non-experts is a deliberately
+separate, later effort, not designed into this version).
+
+**State-ownership gotcha (the one thing to get right here)**: live track
+state is split across two trees — `TrackSeqState` (pages, scale, rootNote,
+etc., owned by `useSequencer.ts`, mirrored into `tracksRef` which the shared
+`Tone.Loop` closure reads every 16th note) vs. `AnyTrackParams`/
+`RingsParamsState`/`PlaitsParamsState` (model, exciter, envelope, sends,
+owned by `App.tsx`, invisible to `useSequencer.ts`). Unlike `exciter`/
+`envelope` (which correctly live in the `App.tsx` tree, since the instrument
+panel that edits them also lives there), **`generative` config lives on
+`TrackSeqState`** — the `Tone.Loop` tick that needs to read it has zero
+visibility into `App.tsx`'s tree, so it has nowhere else to go. The SAVED
+format (`types.ts`'s `RingsTrackState`/`PlaitsTrackState`) still gets a
+`generative?: GenerativeVoiceState` field the same way `exciter?`/`envelope?`
+do, but `App.tsx`'s `captureState()`/`loadSong()` read/write it from the
+`tracks.*` side, not `trackParams.*` — get this backwards and the sequencer
+literally can't see the config.
+
+**`src/audio/generative.ts`** — pure TypeScript, no WASM/worklet dependency
+(control-rate logic, same reasoning that kept `grids.ts`'s pattern generator
+out of WASM). Two independent generators tick every 16th note, matching the
+"gate decoupled from notes" requirement — both always advance regardless of
+whether the other fires:
+
+- **Gate/rhythm**: a hand-picked subset of Marbles' real `TGeneratorModel`
+  models (`rings-source/marbles/random/t_generator.h`) — `bernoulli`
+  ("Steady"), `three-states` ("Wandering"), `drums` ("Groove", canned 8-step
+  patterns), `markov` ("Evolving", correlates with recent history/streaks).
+  Marbles' other 3 models (`Clusters`/`Divider`/the redundant
+  Complementary-Bernoulli) need sub-tick `SlaveRamp` scheduling for
+  polyrhythmic ratios between master ticks — a genuinely different problem
+  this app's single shared `'16n'` clock has no use for, not a corner cut.
+  `density` = fire threshold (all models); `complexity` is model-specific
+  (Wandering: how often its mode changes; Groove: which canned pattern;
+  Evolving: how "sticky"/bursty streaks get) — a first-pass mapping, expected
+  to get retuned once heard, per the "v1, fine-tune from there" framing.
+- **Notes**: a classic 8-bit shift-register Turing machine, hand-rolled fresh
+  (NOT adapted from Marbles' own `RandomSequence`, which is structurally
+  similar — a loop buffer blended between fresh-random and replay via a
+  `deja_vu` probability — but carries hardware-CV-recording API shape this
+  app doesn't need; confirmed with the user as a deliberate choice, not an
+  oversight). Each tick: the bit about to shift out either recirculates
+  unchanged or gets replaced with a fresh random bit, based on `mutationProb`.
+  At `mutationProb=0` this is a plain rotate-right — the whole 8-bit pattern
+  repeats exactly every 8 ticks (a locked loop, verified in the Node script).
+  At `1` it's pure random every tick (verified: no 8-tick repeat structure
+  survives). In between: mostly-repeating with occasional mutation — the
+  "slow evolving but recognizable" character this whole feature is for.
+- **Quantizer**: an ordered MIDI-note array built from `noteSet` (semitone
+  offsets 0-11 FROM ROOT, not absolute pitch classes — stored this way per
+  explicit user choice so a track's note set automatically transposes when
+  the global Key changes, no separate transpose step needed anywhere) ×
+  `[octaveMin, octaveMax]`, re-derived fresh from the current root every
+  tick. The register's value indexes into it (wrapping as needed). Marbles'
+  own weighted `Scale`/`Degree`/`HysteresisQuantizer` solves analog-CV
+  chatter at scale-degree boundaries — irrelevant here since the input is
+  already a discrete stepped index, not a continuous voltage; not porting it
+  was confirmed as the objectively correct call for a discrete input, not a
+  simplification.
+
+**Gate Bias → existing controls, not a new envelope system**: the "short
+gate vs. sustained note" control the user asked for reuses the Attack/
+Sustain/Gate(ms) work already built for Rings' exciter and Plaits' envelope,
+rather than inventing anything new. First-pass linear mapping (retune
+later): Rings — `gateMs = 20 + gateBias * 780` (matches the manual Gate
+slider's own 20-800ms range); Plaits — `attackMs = gateBias * 400`,
+`sustain = gateBias` (bias=0: instant + no sustain; bias=1: 400ms swell +
+holds forever, a drone). Both setter calls happen INSIDE the same
+`Tone.getDraw().schedule(() => {...}, time)` closure as the `triggerNote`
+call for that fired note, not a separately-scheduled call — `postMessage` to
+a worklet port is FIFO, so this guarantees the gate/attack/sustain update
+lands before the trigger message that reads it.
+
+**Dueling-writer fix**: the instrument panel below (`RingsControls.tsx`'s
+Gate(ms), `PlaitsControls.tsx`'s Attack+Sustain) still lets the user drag
+those same sliders directly. If a track's generative mode is on, the
+generative tick overwrites those worklet values every fired note — so both
+components take a `generativeEnabled?: boolean` prop (passed as
+`generative.enabled` from `App.tsx`) that disables and relabels
+(`"Gate*"`/`"Attack*"`/`"Sustain*"`, tooltip: "Controlled by Generative
+mode's Gate Bias knob while it's on") specifically those controls, not the
+whole panel — Model/Timbre/Parameter/Level stay live.
+
+**`Tone.Loop` integration** (`useSequencer.ts`): `resolvedPage`/`resolvedCol`/
+`trackStepsRef` keep running UNCONDITIONALLY for every track, generative or
+not — cheap arithmetic, and it means toggling generative off mid-song resumes
+piano-roll playback exactly where the counter already was. Only the final
+`t.pages[pageIdx][col]` read gets a `gen?.enabled` branch inserted before it
+(for melodic tracks only — `drums` never gets a `generative` field, so the
+branch is simply unreachable there). A `generativeStateRef` (keyed by
+TrackId, holding the Turing-machine register + gate-model scratch state),
+co-located with `tracksRef`/`trackStepsRef`, never touches React state — same
+imperative-ref pattern already established for exactly this reason (avoiding
+stale closures in the `Tone.Loop` callback).
+
+**UI**: `src/components/GenerativeControls.tsx` — Model dropdown, Density/
+Complexity sliders, a "Notes (Turing Machine)" section (Mutation slider, a
+12-button pitch-class picker labeled with interval abbreviations — `R ♭2 2
+♭3 3 4 ♭5 5 ♭6 6 ♭7 7` — since the note set is root-relative, not absolute
+note names, and octave-min/max dropdowns), and a Gate Bias slider. The
+"Piano Roll / Generative" toggle in `App.tsx` swaps `<PianoRoll>` + the
+page-buttons row for `<GenerativeControls>` — the instrument panel
+(`RingsControls`/`PlaitsControls`) stays mounted underneath either way.
+
+**Verified**: standalone Node script (no worklet/vm harness needed — pure
+TS, no audio-thread dependency at all) confirmed: fired notes always stay
+within the noteSet×octave pool; Bernoulli's fire rate tracks the density
+knob to within ±0.03 across 20,000 ticks; mutationProb=0 reproduces the
+exact same note sequence every 8 ticks; mutationProb=1 never falls into an
+8-tick repeat; all 4 gate models produce distinct, non-degenerate fire rates
+at the same density/complexity settings; edge-case configs (single note,
+single octave) produce stable non-NaN output. Also verified live in the
+browser: toggle swaps the view correctly, all sliders (Density/Complexity/
+Mutation/Gate Bias) and the note-set picker persist and update correctly, no
+console errors, the Gate/Attack/Sustain dueling-writer fix visibly disables
+and relabels the right controls, and a full save→reload→load round-trip
+correctly restored a custom Density value and the `enabled` toggle itself —
+confirming the `TrackSeqState`-not-`trackParams` save-format wiring works
+end-to-end.
+
 ## Key decisions worth knowing before you change things
 
 - **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)

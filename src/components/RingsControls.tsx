@@ -58,9 +58,13 @@ export interface RingsControlsProps {
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
   onExciterChange: (updates: Partial<ExciterState>) => void;
+  // When this track's Generative mode is on, its Gate Bias knob drives Gate(ms)
+  // directly every fired note — disable the manual slider so it doesn't fight
+  // that write and silently drift from the actual live value.
+  generativeEnabled?: boolean;
 }
 
-export function RingsControls({ trackId, model, params, lfo, exciter, presets, onPresetLoad, onModelChange, onParamChange, onLfoChange, onExciterChange }: RingsControlsProps) {
+export function RingsControls({ trackId, model, params, lfo, exciter, presets, onPresetLoad, onModelChange, onParamChange, onLfoChange, onExciterChange, generativeEnabled }: RingsControlsProps) {
   return (
     <div className="rings-controls">
       {presets.length > 0 && (
@@ -152,9 +156,13 @@ export function RingsControls({ trackId, model, params, lfo, exciter, presets, o
             />
           </div>
           <div className="knob-row">
-            <label title="How long the gate stays open per trigger — Particles/Flow need it held to sustain; Mallet/Plectrum/Noise mostly ignore its length">Gate</label>
+            <label title={generativeEnabled
+              ? 'Controlled by Generative mode\'s Gate Bias knob while it\'s on'
+              : 'How long the gate stays open per trigger — Particles/Flow need it held to sustain; Mallet/Plectrum/Noise mostly ignore its length'}>
+              {generativeEnabled ? 'Gate*' : 'Gate'}
+            </label>
             <Slider
-              value={exciter.gateMs} min={20} max={800}
+              value={exciter.gateMs} min={20} max={800} disabled={generativeEnabled}
               onChange={v => { onExciterChange({ gateMs: v }); setExciterGateMs(trackId, v); }}
             />
           </div>

@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
-import { triggerNote, DRUM_VOICE_IDS } from '../audio/engine';
+import { triggerNote, setExciterGateMs, setPlaitsEnvelopeAttackMs, setPlaitsEnvelopeSustain,
+         DRUM_VOICE_IDS, type RingsTrackId } from '../audio/engine';
+import { tickGenerativeVoice, makeGenerativeEngineState, defaultGenerativeVoiceState,
+         type GenerativeVoiceState, type GenerativeEngineState } from '../audio/generative';
+export type { GenerativeVoiceState, GateModel } from '../audio/generative';
 
 export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 // UI/tab-level track id — distinct from engine.ts's TrackId (which addresses 6
@@ -80,6 +84,11 @@ export interface TrackSeqState {
   scale: ScaleType;
   rootNote: number;
   scrollRow: number;
+  // Generative alternate sequencing mode (melodic tracks only, see
+  // audio/generative.ts / AGENTS.md "Generative sequencing"). Lives here
+  // (not with model/exciter/envelope in App.tsx's trackParams) because the
+  // Tone.Loop below needs to read it and has no visibility into that tree.
+  generative?: GenerativeVoiceState;
 }
 
 function makeDefaultTrackState(id: TrackId): TrackSeqState {
@@ -93,6 +102,7 @@ function makeDefaultTrackState(id: TrackId): TrackSeqState {
     scale: 'major',
     rootNote: 0,
     scrollRow: 7,
+    generative: id === 'drums' ? undefined : defaultGenerativeVoiceState(),
   };
 }
 
@@ -106,6 +116,15 @@ function initTrackSteps(): Record<TrackId, number> {
 
 function initCurrentSteps(): Record<TrackId, number> {
   return { ringsA: -1, ringsB: -1, plaits: -1, drums: -1 };
+}
+
+function initGenerativeEngineStates(): Record<TrackId, GenerativeEngineState> {
+  return {
+    ringsA: makeGenerativeEngineState(),
+    ringsB: makeGenerativeEngineState(),
+    plaits: makeGenerativeEngineState(),
+    drums: makeGenerativeEngineState(), // never read (drums has no `generative` config), kept for uniform typing
+  };
 }
 
 export function useSequencer() {
@@ -122,6 +141,7 @@ export function useSequencer() {
   const [currentPagePlaying, setCurrentPagePlaying] = useState<Record<TrackId, number>>(initPlayingPages);
 
   const trackStepsRef = useRef(initTrackSteps());
+  const generativeStateRef = useRef(initGenerativeEngineStates());
 
   const tracksRef = useRef(tracks);
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
@@ -244,6 +264,14 @@ export function useSequencer() {
     });
   }, [activeTrack]);
 
+  // ── Generative alternate sequencing mode (melodic tracks only) ───────────
+  const setGenerativeConfig = useCallback((updates: Partial<GenerativeVoiceState>) => {
+    updateTrack(activeTrack, prev => ({
+      ...prev,
+      generative: { ...(prev.generative ?? defaultGenerativeVoiceState()), ...updates },
+    }));
+  }, [activeTrack]);
+
   // ── Scale / root — global, applied to every melodic track at once. Still
   // clears pages (rows would otherwise remap under already-placed notes) —
   // now across all three melodic tracks instead of just the active one.
@@ -348,7 +376,31 @@ export function useSequencer() {
         const col     = resolvedCol[id];
         if (pageIdx === -1 || col < 0) continue;
 
-        const t    = tracksRef.current[id];
+        const t   = tracksRef.current[id];
+        const gen = t.generative;
+        if (gen?.enabled) {
+          const result = tickGenerativeVoice(gen, t.rootNote, generativeStateRef.current[id]);
+          if (result.fire && result.midiNote !== undefined) {
+            const midiNote = result.midiNote;
+            Tone.getDraw().schedule(() => {
+              // Gate-length bias drives the SAME persistent worklet settings the
+              // instrument panel's Gate(ms)/Attack+Sustain sliders use — not a
+              // separate envelope system. Set BEFORE triggering, in this same
+              // scheduled closure: postMessage to a worklet port is FIFO, so this
+              // guarantees the gate/attack/sustain update lands before the trigger
+              // message that reads it.
+              if (id === 'plaits') {
+                setPlaitsEnvelopeAttackMs(gen.gateBias * 400);
+                setPlaitsEnvelopeSustain(gen.gateBias);
+              } else {
+                setExciterGateMs(id as RingsTrackId, 20 + gen.gateBias * 780);
+              }
+              triggerNote(id as 'ringsA' | 'ringsB' | 'plaits', midiNote);
+            }, time);
+          }
+          continue;
+        }
+
         const step = t.pages[pageIdx][col];
         if (!step) continue;
 
@@ -412,6 +464,8 @@ export function useSequencer() {
     lastStep: track.lastStep,
     enabledPages: track.enabledPages,
     currentPagePlaying,
+    generative: track.generative ?? defaultGenerativeVoiceState(),
+    setGenerativeConfig,
     toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps,
     loadTracks, clearCurrentPage,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,

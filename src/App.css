@@ -643,6 +643,14 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .page-buttons .page-btn:not(:first-child) { border-left: none; }
 
+.seq-mode-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.seq-mode-toggle .page-btn { width: auto; padding: 0 14px; }
+
 .clear-seq-btn {
   width: auto;
   padding: 0 8px;
@@ -1520,6 +1528,23 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   text-transform: uppercase;
   letter-spacing: 0.08em;
   flex-shrink: 0;
+}
+
+/* ── Generative sequencing controls ── */
+.gen-note-picker {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.gen-octave-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gen-octave-sep {
+  color: var(--text-secondary);
 }
 
 /* ── Mobile layout — below ~640px (phone-sized viewports), every structural

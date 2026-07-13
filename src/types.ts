@@ -1,4 +1,4 @@
-import type { ScaleType, StepValue, TrackId } from './hooks/useSequencer';
+import type { ScaleType, StepValue, TrackId, GenerativeVoiceState } from './hooks/useSequencer';
 import type { ExciterModel } from './audio/engine';
 export type { StepValue, TrackId };
 
@@ -43,6 +43,7 @@ export interface RingsTrackState extends BaseTrackState {
   position: number;
   lfo: LfoState[];
   exciter?: ExciterState; // optional -- old saves default to 'internal' (today's behavior), see App.tsx's loadSong
+  generative?: GenerativeVoiceState; // optional -- old saves default to disabled (today's piano-roll behavior), see App.tsx's loadSong
 }
 
 // Drives Plaits' real LEVEL input instead of its fixed pitch-tied "ping"
@@ -63,6 +64,7 @@ export interface PlaitsTrackState extends BaseTrackState {
   lpgColour: number; // no longer surfaced in the UI — always sent to the engine as 1.0 (see engine.ts)
   lfo: LfoState[];
   envelope?: PlaitsEnvelopeState; // optional -- old saves default to {0,0} (today's native envelope), see App.tsx's loadSong
+  generative?: GenerativeVoiceState; // optional -- old saves default to disabled (today's piano-roll behavior), see App.tsx's loadSong
 }
 
 export interface DrumTrackState extends BaseTrackState {

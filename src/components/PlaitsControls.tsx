@@ -54,9 +54,13 @@ export interface PlaitsControlsProps {
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
   onEnvelopeChange: (updates: Partial<PlaitsEnvelopeState>) => void;
+  // When Generative mode is on, its Gate Bias knob drives Attack+Sustain
+  // directly every fired note — disable these manual sliders so they don't
+  // fight that write and silently drift from the actual live value.
+  generativeEnabled?: boolean;
 }
 
-export function PlaitsControls({ engine, params, lfo, envelope, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange, onEnvelopeChange }: PlaitsControlsProps) {
+export function PlaitsControls({ engine, params, lfo, envelope, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange, onEnvelopeChange, generativeEnabled }: PlaitsControlsProps) {
   const engineLabels = ENGINE_PARAM_LABELS[engine] ?? FALLBACK_LABELS;
 
   function labelFor(i: number): string {
@@ -131,16 +135,24 @@ export function PlaitsControls({ engine, params, lfo, envelope, presets, onPrese
       <div className="section-divider" />
       <div className="panel-name">Envelope</div>
       <div className="knob-row">
-        <label title="Fades the note in instead of Plaits' fixed instant attack — 0 keeps today's original behavior">Attack</label>
+        <label title={generativeEnabled
+          ? 'Controlled by Generative mode\'s Gate Bias knob while it\'s on'
+          : 'Fades the note in instead of Plaits\' fixed instant attack — 0 keeps today\'s original behavior'}>
+          {generativeEnabled ? 'Attack*' : 'Attack'}
+        </label>
         <Slider
-          value={envelope.attackMs} min={0} max={3000}
+          value={envelope.attackMs} min={0} max={3000} disabled={generativeEnabled}
           onChange={v => { onEnvelopeChange({ attackMs: v }); setPlaitsEnvelopeAttackMs(v); }}
         />
       </div>
       <div className="knob-row">
-        <label title="Floor the note settles at instead of decaying to silence — Decay still controls how fast it gets there. At max, the note holds forever: a sustained drone">Sustain</label>
+        <label title={generativeEnabled
+          ? 'Controlled by Generative mode\'s Gate Bias knob while it\'s on'
+          : 'Floor the note settles at instead of decaying to silence — Decay still controls how fast it gets there. At max, the note holds forever: a sustained drone'}>
+          {generativeEnabled ? 'Sustain*' : 'Sustain'}
+        </label>
         <Slider
-          value={envelope.sustain} min={0} max={1}
+          value={envelope.sustain} min={0} max={1} disabled={generativeEnabled}
           onChange={v => { onEnvelopeChange({ sustain: v }); setPlaitsEnvelopeSustain(v); }}
         />
       </div>

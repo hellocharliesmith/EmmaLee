@@ -15,9 +15,11 @@ import { Dropdown } from './components/Dropdown';
 import { WaveformMeter } from './components/WaveformMeter';
 import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
+import { GenerativeControls } from './components/GenerativeControls';
 import { DrumControls, type DrumVoiceParams } from './components/DrumControls';
 import { GridsControls, type GridsUiState } from './components/GridsControls';
 import { generateGridsPattern, GRIDS_INSTRUMENT_BD, GRIDS_INSTRUMENT_SD, GRIDS_INSTRUMENT_HH } from './audio/grids';
+import { defaultGenerativeVoiceState } from './audio/generative';
 import { DelayControls } from './components/DelayControls';
 import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
@@ -180,6 +182,7 @@ export default function App() {
     setScale, setRootNote, scrollUp, scrollDown,
     switchToPage, togglePageEnabled,
     lastStep, setLastStep,
+    generative, setGenerativeConfig,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -192,6 +195,7 @@ export default function App() {
     return init;
   });
   const active = trackParams[activeTrack];
+  const showGenerative = activeTrack !== 'drums' && generative.enabled;
 
   function updateTrackParamsFor(id: TrackId, fn: (prev: AnyTrackParams) => AnyTrackParams) {
     setTrackParams(prev => ({ ...prev, [id]: fn(prev[id]) }));
@@ -322,6 +326,7 @@ export default function App() {
     const ringsA: RingsTrackState = {
       pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages, lastStep: tracks.ringsA.lastStep,
       scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
+      generative: tracks.ringsA.generative,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
       damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo, exciter: ringsAP.exciter,
       volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend, cloudsSend: ringsAP.cloudsSend,
@@ -329,6 +334,7 @@ export default function App() {
     const ringsB: RingsTrackState = {
       pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages, lastStep: tracks.ringsB.lastStep,
       scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
+      generative: tracks.ringsB.generative,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
       damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo, exciter: ringsBP.exciter,
       volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend, cloudsSend: ringsBP.cloudsSend,
@@ -336,6 +342,7 @@ export default function App() {
     const plaits: PlaitsTrackState = {
       pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages, lastStep: tracks.plaits.lastStep,
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
+      generative: tracks.plaits.generative,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4], lfo: plaitsP.lfo,
       envelope: plaitsP.envelope,
@@ -444,9 +451,9 @@ export default function App() {
     };
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, lastStep: state.tracks.ringsA.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow },
-      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow },
-      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow },
+      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, lastStep: state.tracks.ringsA.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsA.generative } },
+      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsB.generative } },
+      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.plaits.generative } },
       drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, lastStep: drumsState.lastStep ?? STEP_COUNT - 1, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
@@ -606,9 +613,9 @@ export default function App() {
     const emptyPages = () => Array.from({ length: PAGE_COUNT }, () => Array(STEP_COUNT).fill(null) as StepValue[]);
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
-      ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
-      plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12 },
+      ringsA: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
+      ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
+      plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
       drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
@@ -865,7 +872,20 @@ export default function App() {
             </button>
           </div>
 
-          {viewSection === 'track' && (
+          {viewSection === 'track' && activeTrack !== 'drums' && (
+            <div className="seq-mode-toggle">
+              <button
+                className={`page-btn${!generative.enabled ? ' viewing' : ''}`}
+                onClick={() => setGenerativeConfig({ enabled: false })}
+              >Piano Roll</button>
+              <button
+                className={`page-btn${generative.enabled ? ' viewing' : ''}`}
+                onClick={() => setGenerativeConfig({ enabled: true })}
+              >Generative</button>
+            </div>
+          )}
+
+          {viewSection === 'track' && !showGenerative && (
             <div className="page-buttons">
               {Array.from({ length: PAGE_COUNT }, (_, i) => {
                 const isPageViewing = currentPage === i;
@@ -893,20 +913,24 @@ export default function App() {
 
           {viewSection === 'track' ? (
             <>
-              <PianoRoll
-                steps={steps} visibleNotes={visibleNotes}
-                rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
-                currentStep={isPlaying && currentPagePlaying[activeTrack] === currentPage ? currentStep : -1}
-                lastStep={lastStep}
-                onSetLastStep={setLastStep}
-                rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
-                noStrum={activeTrack === 'drums'}
-                showVelocity={activeTrack === 'drums'}
-                onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
-                onSetProbability={setProbability}
-                onSetVelocity={setVelocity}
-                onScrollUp={scrollUp} onScrollDown={scrollDown}
-              />
+              {showGenerative ? (
+                <GenerativeControls config={generative} onChange={setGenerativeConfig} />
+              ) : (
+                <PianoRoll
+                  steps={steps} visibleNotes={visibleNotes}
+                  rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
+                  currentStep={isPlaying && currentPagePlaying[activeTrack] === currentPage ? currentStep : -1}
+                  lastStep={lastStep}
+                  onSetLastStep={setLastStep}
+                  rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
+                  noStrum={activeTrack === 'drums'}
+                  showVelocity={activeTrack === 'drums'}
+                  onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
+                  onSetProbability={setProbability}
+                  onSetVelocity={setVelocity}
+                  onScrollUp={scrollUp} onScrollDown={scrollDown}
+                />
+              )}
 
               <div className="track-controls-row">
                 <div className="track-controls-main">
@@ -926,6 +950,7 @@ export default function App() {
                         ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
                       onExciterChange={u => updateActiveParams(p => p.kind === 'rings'
                         ? ({ ...p, exciter: { ...p.exciter, ...u } }) : p)}
+                      generativeEnabled={generative.enabled}
                     />
                   )}
                   {active.kind === 'plaits' && (
@@ -943,6 +968,7 @@ export default function App() {
                         ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
                       onEnvelopeChange={u => updateActiveParams(p => p.kind === 'plaits'
                         ? ({ ...p, envelope: { ...p.envelope, ...u } }) : p)}
+                      generativeEnabled={generative.enabled}
                     />
                   )}
                   {active.kind === 'drums' && (
