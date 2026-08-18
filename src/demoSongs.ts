@@ -101,9 +101,9 @@ export const DEMO_SONGS: DemoSong[] = [
           rootNote: 0,
           scrollRow: 7,
           voices: {
-            drumHihat: { tone: 0.5, decay: 0.25, volume: 1 },
-            drumSnare:  { tone: 0.5, decay: 0.45, volume: 1 },
-            drumKick:   { tone: 0.5, decay: 0.5,  volume: 1 },
+            drumHihat: { tone: 0.5, decay: 0.25, volume: 1, character: 0.5, blend: 0 },
+            drumSnare:  { tone: 0.5, decay: 0.45, volume: 1, character: 0.5, blend: 0 },
+            drumKick:   { tone: 0.5, decay: 0.5,  volume: 1, character: 0.5, blend: 0 },
           },
           volume: 0.85,
           delaySend: 0.5,
@@ -1178,17 +1178,23 @@ export const DEMO_SONGS: DemoSong[] = [
             "drumHihat": {
               "tone": 0.22916666666666663,
               "decay": 0.0875,
-              "volume": 0.11249999999999996
+              "volume": 0.11249999999999996,
+              "character": 0.5,
+              "blend": 0
             },
             "drumSnare": {
               "tone": 0.5,
               "decay": 0.45,
-              "volume": 1
+              "volume": 1,
+              "character": 0.5,
+              "blend": 0
             },
             "drumKick": {
               "tone": 0.37083333333333335,
               "decay": 0.3416666666666667,
-              "volume": 0.5166666666666666
+              "volume": 0.5166666666666666,
+              "character": 0.5,
+              "blend": 0
             }
           },
           "volume": 0,

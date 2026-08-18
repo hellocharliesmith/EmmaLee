@@ -851,6 +851,230 @@ correctly restored a custom Density value and the `enabled` toggle itself —
 confirming the `TrackSeqState`-not-`trackParams` save-format wiring works
 end-to-end.
 
+## Plaits Filter + Cloud Atmosphere engine + Virtual Analog relabel (added 2026-08-17)
+
+Three related fixes to the Plaits voice, done as one pass since all three
+touch `voice.cc`/`voice.h` and share a single WASM recompile.
+
+**Virtual Analog "Cutoff" mislabel**: the 2nd param slider was labeled
+"Cutoff" but `virtual_analog_engine.cc` has no filter at all — that param
+actually drives oscillator hard-sync amount + pulse width. Relabeled to
+"Sync/Width" in `PlaitsControls.tsx`'s `ENGINE_PARAM_LABELS`. No DSP change.
+
+**Filter (the "VCF" half of VCO→VCF→VCA)**: a real `stmlib::Svf` low-pass
+(same class already vendored/used by `low_pass_gate.h` and Elements'
+`exciter.cc`), added as `out_filter_`/`aux_filter_` members on `Voice`
+(`voice.h`), applied to `out_buffer_`/`aux_buffer_` in-place right after the
+engine's `Render()` call and before the existing LPG/post-processor stage in
+`voice.cc`'s `Render()` — classic subtractive signal-chain order. New
+`Patch` fields `filter_enabled`/`filter_cutoff`/`filter_resonance`. New
+wrapper exports `plaits_set_filter_enabled/cutoff/resonance` (appended at
+the end of `plaits_wrapper.cpp`, after the envelope exports, to keep every
+prior export letter stable). Off by default (`enabled=false`) — reproduces
+original unfiltered behavior exactly for every existing save/preset. Larger
+`resonance` (a "true units" value fed to `set_f_q`) means peakier/more
+resonant, not more damped — see `stmlib::Svf`'s own convention. UI: new
+"Filter" section in `PlaitsControls.tsx` below the (now explicitly labeled)
+"Envelope (VCA)" section.
+
+**Cloud Atmosphere (new engine, id 24)**: an airy/breathy pad voice — the
+user wanted something like "a Korg M1 ethereal flute with lots of air
+noise." Forked from `AdditiveEngine` (best raw harmonic-partial control of
+the existing engines) rather than patched in place, since it's a genuinely
+new self-contained instrument, not a modification to a real Plaits engine —
+lives in `rings-dsp/atmosphere_engine.h/.cc` (the project's own directory,
+keeping vendored `rings-source/` otherwise pristine, same convention as the
+earlier Elements Exciter work). Adds a filtered-noise "air" layer blended
+with the harmonic tone; params exposed as Texture/Brightness/Focus (see
+`PlaitsControls.tsx`'s `ENGINE_PARAM_LABELS[24]`). Registered last in
+`voice.cc`'s `RegisterInstance` order (index 24) — **this required bumping
+`kMaxEngines` from 24 to 25 in `voice.h`**; `EngineRegistry::RegisterInstance`
+silently no-ops past capacity (no error, the engine just never plays), so
+always recheck this constant against the actual count of `RegisterInstance`
+calls before adding a 25th+ engine in the future. Curated into
+`PlaitsControls.tsx`'s `ENGINES` list as "Cloud Atmosphere" — a 7th engine
+choice on the existing Plaits track, not a separate track/tab (kept scope
+contained, per the plan).
+
+**Random/noise determinism note**: `stmlib::Random`'s LCG is never seeded
+anywhere in this codebase, so a fresh WASM instance's noise always starts
+from the same state — true for every Random-using engine (Noise/Particle/
+Swarm/Chiptune, and now Atmosphere), not a bug introduced here. Doesn't
+cause audible repetition in continuous playback since the LCG advances every
+sample; only matters if you're diffing two freshly-instantiated renders in a
+test harness (see the Node verification script's comment for how this was
+worked around).
+
+**Verified**: Node `vm` harness (`public/plaits-processor.js` + real compiled
+`plaits.wasm`) — Filter off is byte-unaffected; cutoff sweep on a broadband
+engine (Noise) shows low cutoff measurably quieter than high; resonance
+sweep 0→1.0 stays bounded (no runaway blowup); Atmosphere engine is
+non-silent/no-NaN with a confirmed real per-sample noise contribution
+(checked via non-repeating consecutive blocks within one continuous render,
+not a fresh-instance diff — see determinism note above); a spot-check of
+existing engines (8, 10, 19, 20, 2, 6) confirmed the `kMaxEngines` bump and
+new `Patch` fields didn't affect them. Also live-verified in the browser:
+engine picker lists "Cloud Atmosphere", Filter section renders and toggles,
+playback with Filter+Atmosphere active produces no console errors.
+
+## Octave shift, Note Wander, Plaits Tie (added 2026-08-17)
+
+Three per-track/per-step sequencing features, all implemented as pure
+runtime transforms applied at the `triggerNote()` call site inside
+`useSequencer.ts`'s shared `Tone.Loop` — stored step data and generative
+note-sets are never rewritten, same pattern as the existing Generative
+Sequencing overlay. All three live on `TrackSeqState`/`StepData`
+(`useSequencer.ts`'s domain), not the `AnyTrackParams` tree owned by
+`App.tsx` — matching the state-ownership boundary already established for
+`generative`.
+
+**Octave shift** (`TrackSeqState.octaveShift`, -2..+2, default 0): a small
++/- stepper next to the Piano Roll/Generative toggle, melodic tracks only
+(Rings A/B, Plaits — not Drums, since drum step `notes` are fixed voice
+indices, not pitches). Applied as `midi + octaveShift * 12` at trigger time,
+for both the piano-roll and generative-mode paths.
+
+**Note Wander** (`StepData.wander`, 0-5, default 0/undefined = today's exact
+behavior): a per-step "how far can this note randomly drift" control. At
+trigger time, rolls a random offset in `[-wander, +wander]` **scale-degree
+steps** (not semitones) using the same `buildNotes(root, scale)` reference
+array the piano roll itself uses for quantization, via a new `applyWander()`
+helper. UI: a new "Wander" meta-row in `PianoRoll.tsx` (same click-cycle
+pattern as the existing Strum/Prob/Velocity rows), shown for melodic tracks
+only. Explicitly a first pass, kept deliberately simple (uniform random
+within range, no weighting) — the user wants to hear it in practice before
+deciding whether it needs refinement.
+
+**Plaits Tie** (`StepData.tie`, boolean, Plaits-only): the "simplest UX
+choice" for a per-step gate — a tied step doesn't fire a new `triggerNote`,
+it extends the currently-sounding note by forcing the Plaits envelope's
+Sustain open (reusing the *existing* `setPlaitsEnvelopeSustain` setter from
+the envelope feature, **no new trigger() call**, no new WASM/wrapper code at
+all) through the tied step(s), releasing back to the panel's configured
+Sustain value only at the next non-tied step. Tracked with a
+`plaitsTieHeldRef` (checked before the general "no step" bail-out in the
+loop, since a tied step intentionally carries no note of its own). UI: a new
+"Tie" meta-row in `PianoRoll.tsx`, Plaits-track-only, toggle-per-column
+(supports toggling on an otherwise-empty step, unlike Strum/Prob/Wander).
+
+**Save format**: `octaveShift` is optional on `RingsTrackState`/
+`PlaitsTrackState` (old saves default to 0); `tie`/`wander` need no separate
+save-format entry since `StepData` is already part of the saved `pages`
+array.
+
+**Verified**: live in the browser — Octave control renders per-track
+(confirmed independent state across Rings A vs. Plaits), Wander cycles
+0→1→…→5→0 and only appears on melodic tracks, Tie toggles on Plaits only and
+correctly ties an empty step, a full save→reload→load round-trip preserved
+all three (octave `+1`, wander value, tied step) exactly, and playback with
+all three active simultaneously produced no console errors across several
+seconds.
+
+## Sequencer/save bug fixes (added 2026-08-17)
+
+Four independent fixes, delegated to a background agent working in an
+isolated git worktree (no overlap with the Octave/Wander/Tie work above at
+the time, though `App.tsx` and `useSequencer.ts` were later hand-merged
+since both streams touched them).
+
+**Page-graying bug**: `lastStep` is a single global value that only
+musically applies to whichever enabled page ends up LAST in the playback
+cycle (see the `Tone.Loop`'s `ei`/`lastEnabledPage` derivation), but
+`PianoRoll.tsx` was graying steps beyond it on whichever page was currently
+being *viewed*, regardless of whether that page was actually the last
+enabled one. Fixed in `App.tsx`: compute `isCurrentPageLastEnabled` (same
+`ei` logic) and only pass `lastStep` through to `<PianoRoll>` when the
+viewed page actually is the last enabled one — `PianoRoll`'s existing
+`lastStep ?? STEP_COUNT - 1` fallback already treats `undefined` as "nothing
+beyond, don't gray anything," so no changes were needed inside
+`PianoRoll.tsx` itself.
+
+**Scale-change wiping notes**: `setScale`/`setRootNote` used to
+`pages: makeEmptyPages()` — a full wipe — on every Key/Scale change. Now
+remaps: `snapNoteToScale()` (in `useSequencer.ts`) snaps each existing MIDI
+note to the nearest pitch class actually present in the new scale/root
+(shortest signed distance around the 12-tone circle, preserving octave
+register; unchanged if it already fits), and `remapPagesToScale()` applies
+that across every step of every page, preserving every other `StepData`
+field (`strumDown`/`prob`/`velocity`/`tie`/`wander`) by spreading the
+existing step and only replacing `notes`.
+
+**Sends not saving/loading on demo songs**: investigated live (not just
+re-read statically) — `captureVoice()` console helper confirmed per-track
+`delaySend`/`reverbSend`/`cloudsSend` in React state matched `demoSongs.ts`
+exactly, both on cold boot and when switching songs mid-playback. **No bug
+found** — `syncParamsToEngine` was already correct on paper and in practice.
+The Master tab's Delay/Reverb sections are a legitimately separate control
+(bus wet mix, not per-track sends), not a duplicate/conflicting UI.
+
+**Save always creating a new song**: `useSavedSongs.ts`'s `save()` had no
+update-in-place path. Added `update(id, state)` (same read-modify-write
+localStorage pattern as `remove()`); `save()` now also returns the new
+song's id. `App.tsx` tracks the loaded song's id (`currentSongId`, `null`
+for demo/new songs, or a saved song that somehow isn't actually in the
+`songs` list — e.g. a freshly-imported file — since `update()` would
+silently no-op on an id it can't find). `SaveLoad.tsx`'s plain "Save" button
+now updates in place immediately (no prompt) when the loaded song is a
+genuine saved entry; a new "Save As" button next to it keeps the original
+name-prompt-then-create flow for making an explicit new copy.
+
+**Verified**: live in the browser for all four — page-graying confirmed
+across a multi-page song with different lengths per page; scale-change
+confirmed via a full DOM scan across scroll rows (not just a screenshot) —
+exactly the notes that no longer fit snapped to the nearest tone, everything
+else stayed put; sends confirmed matching via `captureVoice()`; the full
+New → Save → edit → Save (updates in place) → Save As (new copy) → edit →
+Save (updates that copy in place) flow behaved exactly as specified.
+
+## Drum Character + analog/synthetic Blend (added 2026-08-17)
+
+Two "cheap win" additions to the 3 drum voices (Hi-Hat/Snare/Kick) — the 4th
+full percussion voice (clap / a Peaks `fm_drum` port) was deferred to
+BACKLOG.md per scope decision, not built this round.
+
+**Character knob** (param 0/harmonics — previously set once at creation and
+never exposed): Plaits' drum engines (`analog_bass_drum.h`/
+`analog_snare_drum.h`/`hi_hat.h`) all use this param as a real, distinct
+secondary character control — drive/self-FM for the kick, noise/body blend
+("snappy") for the snare, metallic-noise mix for the hi-hat. One knob,
+per-voice label (`CHARACTER_LABELS` in `DrumControls.tsx`: Kick→"Drive",
+Snare→"Snappy", Hi-Hat→"Noise") since it means something different per
+engine — same spirit as `PlaitsControls.tsx`'s `ENGINE_PARAM_LABELS`. Pure
+JS/UI change (`Engine.setDrumParam(vid, 0, v)`), no recompile.
+
+**Analog/synthetic Blend**: every Plaits drum engine's `Render()` already
+computes TWO independent models each block — an "analog" 808-style model
+(written to `out`) and a completely separate "synthetic" 909-ish model
+(written to `aux`), see `synthetic_bass_drum.h`/`synthetic_snare_drum.h`.
+`plaits-processor.js` normally just routes `out`→left/`aux`→right (a real
+stereo pair for the melodic Plaits track — must stay unchanged there). For
+drum voices, a new `drumBlend`/`drumBlendSet` pair of fields on the
+processor instead crossfades the two into one centered signal (0 = pure
+analog/today's sound, 1 = pure synthetic) — gated on `drumBlendSet` so
+melodic Plaits (which never receives the new `'set-drum-blend'` message)
+stays byte-identical to before. `engine.ts`'s `createDrumTrack` sends an
+explicit `blend: 0` at creation time (not just relying on the worklet's own
+default) specifically so this gate flips on for every drum voice, matching
+every other drum param already sent at creation. New `Engine.setDrumBlend()`
+export.
+
+**Save format**: both fields added to `DrumTrackState.voices`'s per-voice
+type in `types.ts`; `App.tsx`'s `loadSong` does a per-field merge (not a
+blind `??` on the whole voices object) so an old save that has the voice
+object but is missing just these two new keys still gets sane defaults
+(0.5/0) — same pattern already used for `volume`. Presets (`DrumVoicePreset`)
+still only carry tone/decay/volume, so `loadDrumPreset` and `handleNewSong`
+both merge per-voice-per-field onto the existing/default voice rather than
+replacing the whole voice object, so a track's Character/Blend survive
+loading a preset untouched.
+
+**Verified**: live in the browser — all 3 drum voices render exactly 5 knobs
+each with the correct per-voice Character label plus Blend; dragging updates
+live with no console errors or worklet crashes during playback; a full
+save → switch song → reload round trip exactly preserved custom per-voice
+values. `git diff --stat` confirmed scope discipline — no changes to
+`voice.cc`, `plaits_wrapper.cpp`, the `ENGINES` array, or `PlaitsControls.tsx`.
+
 ## Key decisions worth knowing before you change things
 
 - **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)

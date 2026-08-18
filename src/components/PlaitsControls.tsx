@@ -1,11 +1,12 @@
 import { setPlaitsParam, setPlaitsModel, setPlaitsLFOEnabled, setPlaitsLFOWave, setPlaitsLFORate, setPlaitsLFODepth,
-         setPlaitsEnvelopeAttackMs, setPlaitsEnvelopeSustain } from '../audio/engine';
+         setPlaitsEnvelopeAttackMs, setPlaitsEnvelopeSustain,
+         setPlaitsFilterEnabled, setPlaitsFilterCutoff, setPlaitsFilterResonance } from '../audio/engine';
 import { Knob } from './Knob';
 import { Slider } from './Slider';
 import { Dropdown } from './Dropdown';
 import { LfoScope } from './LfoScope';
 import { lfoIcon, nextLfoState } from './lfoCycle';
-import type { LfoState, PlaitsEnvelopeState } from '../types';
+import type { LfoState, PlaitsEnvelopeState, PlaitsFilterState } from '../types';
 import type { PlaitsPreset } from '../presets';
 
 // Engine indices match Plaits' actual hardware registration order (see voice.cc
@@ -21,6 +22,7 @@ const ENGINES = [
   { id: 20, label: 'Modal',          description: 'Modal resonator — bell/mallet-like' },
   { id: 2,  label: 'Six-Op',         description: '6-operator FM (DX7-style) — complex FM textures' },
   { id: 6,  label: 'String Machine', description: 'String-machine/organ pads — lush, sustained' },
+  { id: 24, label: 'Cloud Atmosphere', description: 'Airy, breathy pad — harmonic tone blended with pitch-tracking filtered noise. New instrument, not on real Plaits hardware.' },
 ];
 
 // Param 3 (Decay) is an engine-independent hardware global. Params 0-2 have
@@ -30,12 +32,17 @@ const ENGINES = [
 // full-lowpass-gate value in engine.ts instead.
 type ParamLabelRow = [string, string, string]; // [harmonics, timbre, morph]
 const ENGINE_PARAM_LABELS: Record<number, ParamLabelRow> = {
-  8:  ['Overtones',  'Cutoff',      'Shape'],      // Virtual Analog
+  8:  ['Overtones',  'Sync/Width',  'Shape'],      // Virtual Analog -- param 1 (timbre) actually
+                                                    // drives oscillator hard-sync amount + pulse
+                                                    // width (see virtual_analog_engine.cc), NOT any
+                                                    // filter cutoff -- there's no filter in this
+                                                    // engine at all. "Cutoff" was a mislabel.
   10: ['FM Ratio',   'Mod Depth',   'Feedback'],   // FM (2-op)
   19: ['Brightness', 'Damping',     'Structure'],  // String (Karplus-Strong)
   20: ['Material',   'Brightness',  'Damping'],    // Modal resonator
   2:  ['Algorithm',  'Mod Depth',   'Feedback'],   // Six-Op FM
   6:  ['Register',   'Tone',        'Ensemble'],   // String Machine
+  24: ['Texture',    'Brightness',  'Focus'],      // Cloud Atmosphere
 };
 const FALLBACK_LABELS: ParamLabelRow = ['Harmonics', 'Timbre', 'Morph'];
 const FIXED_LABEL = 'Decay';
@@ -48,19 +55,21 @@ export interface PlaitsControlsProps {
   params: [number, number, number, number, number];
   lfo: LfoState[];
   envelope: PlaitsEnvelopeState;
+  filter: PlaitsFilterState;
   presets: PlaitsPreset[];
   onPresetLoad: (p: PlaitsPreset) => void;
   onEngineChange: (e: number) => void;
   onParamChange: (i: number, v: number) => void;
   onLfoChange: (i: number, updates: Partial<LfoState>) => void;
   onEnvelopeChange: (updates: Partial<PlaitsEnvelopeState>) => void;
+  onFilterChange: (updates: Partial<PlaitsFilterState>) => void;
   // When Generative mode is on, its Gate Bias knob drives Attack+Sustain
   // directly every fired note — disable these manual sliders so they don't
   // fight that write and silently drift from the actual live value.
   generativeEnabled?: boolean;
 }
 
-export function PlaitsControls({ engine, params, lfo, envelope, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange, onEnvelopeChange, generativeEnabled }: PlaitsControlsProps) {
+export function PlaitsControls({ engine, params, lfo, envelope, filter, presets, onPresetLoad, onEngineChange, onParamChange, onLfoChange, onEnvelopeChange, onFilterChange, generativeEnabled }: PlaitsControlsProps) {
   const engineLabels = ENGINE_PARAM_LABELS[engine] ?? FALLBACK_LABELS;
 
   function labelFor(i: number): string {
@@ -133,7 +142,7 @@ export function PlaitsControls({ engine, params, lfo, envelope, presets, onPrese
       })}
 
       <div className="section-divider" />
-      <div className="panel-name">Envelope</div>
+      <div className="panel-name" title="This is the VCA — it controls loudness over time, driving Plaits' real amplitude/gain stage directly">Envelope (VCA)</div>
       <div className="knob-row">
         <label title={generativeEnabled
           ? 'Controlled by Generative mode\'s Gate Bias knob while it\'s on'
@@ -156,6 +165,34 @@ export function PlaitsControls({ engine, params, lfo, envelope, presets, onPrese
           onChange={v => { onEnvelopeChange({ sustain: v }); setPlaitsEnvelopeSustain(v); }}
         />
       </div>
+
+      <div className="section-divider" />
+      <div className="panel-name">Filter</div>
+      <div className="knob-row">
+        <label title="A real subtractive lowpass, independent of the Envelope above — off by default (the original, unfiltered sound)">On</label>
+        <button
+          className={`lfo-cycle-btn${filter.enabled ? ' on' : ''}`}
+          onClick={() => { const v = !filter.enabled; onFilterChange({ enabled: v }); setPlaitsFilterEnabled(v); }}
+        >{filter.enabled ? 'On' : 'Off'}</button>
+      </div>
+      {filter.enabled && (
+        <>
+          <div className="knob-row">
+            <label title="How bright the filtered sound is — low values darken/mute the tone, high values let everything through">Cutoff</label>
+            <Slider
+              value={filter.cutoff} min={0} max={1}
+              onChange={v => { onFilterChange({ cutoff: v }); setPlaitsFilterCutoff(v); }}
+            />
+          </div>
+          <div className="knob-row">
+            <label title="Emphasizes the frequencies right at the cutoff — higher values get peaky/resonant, near self-oscillation at max">Resonance</label>
+            <Slider
+              value={filter.resonance} min={0} max={1}
+              onChange={v => { onFilterChange({ resonance: v }); setPlaitsFilterResonance(v); }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

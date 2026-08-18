@@ -33,6 +33,9 @@ void plaits_init(float sample_rate) {
   patch.morph_modulation_amount = 0.0f;
   patch.decay = 0.5f;
   patch.lpg_colour = 0.5f;
+  patch.filter_enabled = false; // off = byte-identical to before this feature existed
+  patch.filter_cutoff = 1.0f;
+  patch.filter_resonance = 0.0f;
 
   modulations.engine = 0.0f;
   modulations.note = 0.0f;
@@ -112,6 +115,26 @@ void plaits_set_level(float level) {
 EMSCRIPTEN_KEEPALIVE
 void plaits_set_level_patched(int on) {
   modulations.level_patched = (on != 0);
+}
+
+// Filter (added 2026-08-17, see AGENTS.md "Plaits Filter") -- a real
+// subtractive lowpass in voice.cc, independent of the LPG's own
+// envelope-driven tone shaping. Disabled by default (plaits_init above) so
+// existing patches/presets are unaffected until a track explicitly turns
+// this on.
+EMSCRIPTEN_KEEPALIVE
+void plaits_set_filter_enabled(int on) {
+  patch.filter_enabled = (on != 0);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void plaits_set_filter_cutoff(float value) {
+  patch.filter_cutoff = value;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void plaits_set_filter_resonance(float value) {
+  patch.filter_resonance = value;
 }
 
 } // extern "C"

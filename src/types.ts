@@ -44,6 +44,7 @@ export interface RingsTrackState extends BaseTrackState {
   lfo: LfoState[];
   exciter?: ExciterState; // optional -- old saves default to 'internal' (today's behavior), see App.tsx's loadSong
   generative?: GenerativeVoiceState; // optional -- old saves default to disabled (today's piano-roll behavior), see App.tsx's loadSong
+  octaveShift?: number; // optional -- old saves default to 0 (today's pitch), see App.tsx's loadSong
 }
 
 // Drives Plaits' real LEVEL input instead of its fixed pitch-tied "ping"
@@ -55,6 +56,16 @@ export interface PlaitsEnvelopeState {
   sustain: number;  // 0-1, default 0 (decays to silence). 1 = holds forever (drone).
 }
 
+// A real subtractive lowpass — independent of the envelope above (which is
+// the VCA half) — see engine.ts's setPlaitsFilterEnabled/Cutoff/Resonance /
+// AGENTS.md "Plaits Filter". enabled=false (the default) reproduces Plaits'
+// original behavior exactly, no filtering at all.
+export interface PlaitsFilterState {
+  enabled: boolean;
+  cutoff: number;    // 0-1, default 1 (wide open)
+  resonance: number; // 0-1, default 0 (gentle)
+}
+
 export interface PlaitsTrackState extends BaseTrackState {
   engine: number;
   harmonics: number;
@@ -64,11 +75,21 @@ export interface PlaitsTrackState extends BaseTrackState {
   lpgColour: number; // no longer surfaced in the UI — always sent to the engine as 1.0 (see engine.ts)
   lfo: LfoState[];
   envelope?: PlaitsEnvelopeState; // optional -- old saves default to {0,0} (today's native envelope), see App.tsx's loadSong
+  filter?: PlaitsFilterState; // optional -- old saves default to disabled (today's unfiltered behavior), see App.tsx's loadSong
   generative?: GenerativeVoiceState; // optional -- old saves default to disabled (today's piano-roll behavior), see App.tsx's loadSong
+  octaveShift?: number; // optional -- old saves default to 0 (today's pitch), see App.tsx's loadSong
 }
 
 export interface DrumTrackState extends BaseTrackState {
-  voices: Record<'drumHihat' | 'drumSnare' | 'drumKick', { tone: number; decay: number; volume: number }>;
+  voices: Record<'drumHihat' | 'drumSnare' | 'drumKick', {
+    tone: number;
+    decay: number;
+    volume: number;
+    // Both added 2026-08-17 (see App.tsx's loadSong for the old-save fallback,
+    // same per-field-merge pattern already used for `volume` above).
+    character: number; // harmonics (param 0) -- drive/snappy/noisiness depending on voice, default 0.5
+    blend: number;      // 0-1, analog(out)<->synthetic(aux) mix, default 0 (pure analog, today's sound)
+  }>;
 }
 
 export interface SongState {

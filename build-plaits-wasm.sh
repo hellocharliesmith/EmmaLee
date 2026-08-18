@@ -46,11 +46,13 @@ emcc rings-dsp/plaits_wrapper.cpp \
   rings-source/stmlib/dsp/atan.cc \
   rings-source/stmlib/dsp/units.cc \
   rings-source/stmlib/utils/random.cc \
+  rings-dsp/atmosphere_engine.cc \
   -I rings-source/ \
+  -I . \
   -DTEST \
   -O3 \
   -s WASM=1 \
-  -s EXPORTED_FUNCTIONS='["_plaits_init","_plaits_set_param","_plaits_set_model","_plaits_set_note","_plaits_trigger","_plaits_process","_plaits_set_level","_plaits_set_level_patched","_malloc","_free"]' \
+  -s EXPORTED_FUNCTIONS='["_plaits_init","_plaits_set_param","_plaits_set_model","_plaits_set_note","_plaits_trigger","_plaits_process","_plaits_set_level","_plaits_set_level_patched","_plaits_set_filter_enabled","_plaits_set_filter_cutoff","_plaits_set_filter_resonance","_malloc","_free"]' \
   -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s MODULARIZE=1 \

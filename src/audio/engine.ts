@@ -245,16 +245,22 @@ async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmBytes: Ar
   // For Plaits' drum engines specifically (bass_drum/snare_drum/hi_hat), the
   // underlying DSP (analog_bass_drum.h, analog_snare_drum.h, hi_hat.h) all share
   // the same param mapping, confirmed directly in their Render() signatures:
-  //   param 0 (harmonics) = drive/snappy/noisiness (secondary character, not exposed)
+  //   param 0 (harmonics) = drive/snappy/noisiness (secondary character, "Character" knob)
   //   param 1 (timbre)    = "tone" — a bandpass/lowpass filter cutoff
   //   param 2 (morph)     = "decay" — the actual envelope decay time
   // patch.decay (param 3) does NOT affect these engines — Voice bypasses its own
   // envelope for "already_enveloped" engines (see voice.cc RegisterInstance calls).
-  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });        // harmonics (unexposed)
+  worklet.port.postMessage({ type: 'set-param', payload: { param: 0, value: 0.5 } });        // harmonics ("Character")
   worklet.port.postMessage({ type: 'set-param', payload: { param: 1, value: 0.5 } });        // timbre ("Tone")
   worklet.port.postMessage({ type: 'set-param', payload: { param: 2, value: cfg.decay } });  // morph ("Decay")
   worklet.port.postMessage({ type: 'set-model', payload: { model: cfg.engine } });
   worklet.port.postMessage({ type: 'set-note', payload: { note: cfg.note } });
+  // Analog/synthetic blend (see setDrumBlend below) — default 0 (pure analog,
+  // today's sound). Sent explicitly (not just relying on the worklet's own
+  // internal default) so `plaits-processor.js`'s "was a blend message ever
+  // received" gate flips on for every drum voice at creation time, same as
+  // every other drum param above.
+  worklet.port.postMessage({ type: 'set-drum-blend', payload: { value: 0 } });
 }
 
 // ── initAudio ─────────────────────────────────────────────────────────────
@@ -595,6 +601,31 @@ export function setPlaitsEnvelopeSustain(value: number): void {
   t.worklet.port.postMessage({ type: 'set-envelope-sustain', payload: { value } });
 }
 
+// Filter (added 2026-08-17, see AGENTS.md "Plaits Filter") — a real
+// subtractive lowpass, independent of the LPG's own envelope-driven tone
+// shaping (that's what the Attack/Sustain envelope above already controls —
+// the "VCA" half of a VCA+Filter ask). Disabled by default; enabling it is
+// what makes Cutoff/Resonance actually audible.
+export function setPlaitsFilterEnabled(enabled: boolean): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-filter-enabled', payload: { enabled } });
+}
+
+// 0-1, exponential ~20Hz-~20kHz mapping (see voice.cc).
+export function setPlaitsFilterCutoff(value: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-filter-cutoff', payload: { value } });
+}
+
+// 0-1, 0 = gentle/no resonance, 1 = near self-oscillating.
+export function setPlaitsFilterResonance(value: number): void {
+  const t = tracks.get(PLAITS_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-filter-resonance', payload: { value } });
+}
+
 // ── Drum voice controls ────────────────────────────────────────────────────
 // IMPORTANT: the param mapping here is DIFFERENT from melodic Plaits. For the
 // drum engines (bass_drum/snare_drum/hi_hat), patch.decay (param 3) is unused —
@@ -606,6 +637,22 @@ export function setDrumParam(voiceId: DrumVoiceId, param: number, value: number)
   const t = tracks.get(voiceId);
   if (!t || !isReady) return;
   t.worklet.port.postMessage({ type: 'set-param', payload: { param, value } });
+}
+
+// Analog/synthetic blend (added 2026-08-17) — Plaits' drum engines compute two
+// independent models per Render() call: an "analog" 808-style model (written
+// to `out`) and a "synthetic" 909-ish model (written to `aux`), see
+// synthetic_bass_drum.h/synthetic_snare_drum.h. plaits-processor.js normally
+// just routes out->left/aux->right (a hard-panned stereo pair, unchanged for
+// the melodic Plaits track); for drum voices this instead crossfades the two
+// into a single centered signal: 0 = pure analog (today's `out`, on both
+// channels), 1 = pure synthetic (`aux`, on both channels). Only ever called
+// for DrumVoiceId tracks — the melodic track never receives this message, so
+// its worklet instance keeps behaving byte-identically to before this existed.
+export function setDrumBlend(voiceId: DrumVoiceId, value: number): void {
+  const t = tracks.get(voiceId);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-drum-blend', payload: { value } });
 }
 
 // ── Master reverb ────────────────────────────────────────────────────────

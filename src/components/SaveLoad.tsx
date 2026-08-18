@@ -6,7 +6,9 @@ interface Props {
   songs: SavedSong[];
   currentSongName: string;
   currentSongKind: 'demo' | 'saved' | 'new';
-  onSave: (name: string) => void;
+  currentSongId: string | null;
+  onSave: (name: string) => void;       // name-prompt, always creates a new saved song
+  onSaveInPlace: () => void;             // updates currentSongId's saved song immediately, no prompt
   onLoad: (song: SavedSong) => void;
   onDelete: (id: string) => void;
   onNewSong: () => void;
@@ -18,7 +20,11 @@ const KIND_LABEL: Record<Props['currentSongKind'], string> = {
   demo: 'Example song', saved: 'Your song', new: 'New, unsaved song',
 };
 
-export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLoad, onDelete, onNewSong, onExport, onImport }: Props) {
+export function SaveLoad({ songs, currentSongName, currentSongKind, currentSongId, onSave, onSaveInPlace, onLoad, onDelete, onNewSong, onExport, onImport }: Props) {
+  // Editing an already-saved song — plain "Save" updates it in place. Demo/new
+  // songs (or a saved song that somehow has no id) fall back to the original
+  // name-prompt-and-create-new flow, same as "Save As" always does.
+  const canSaveInPlace = currentSongKind === 'saved' && !!currentSongId;
   const [showSave, setShowSave]           = useState(false);
   const [showExport, setShowExport]       = useState(false);
   const [showDropdown, setShowDropdown]   = useState(false);
@@ -38,6 +44,14 @@ export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLo
 
   function openSave()   { setName(''); setShowDropdown(false); setShowSave(true); }
   function openExport() { setName(''); setShowDropdown(false); setShowExport(true); }
+
+  // Plain "Save": updates the currently-loaded saved song in place when possible
+  // (no prompt — it already has a name), otherwise falls back to the name-prompt
+  // create-new flow (demo/new songs have no existing save to update).
+  function handleSaveClick() {
+    if (canSaveInPlace) { onSaveInPlace(); setShowDropdown(false); }
+    else openSave();
+  }
 
   function handleSave() {
     if (!name.trim()) return;
@@ -97,7 +111,8 @@ export function SaveLoad({ songs, currentSongName, currentSongKind, onSave, onLo
                 {/* ── Actions ── */}
                 <div className="sl-menu-actions">
                   <button className="sl-menu-action" onClick={() => { onNewSong(); setShowDropdown(false); }}>New</button>
-                  <button className="sl-menu-action" onClick={openSave}>Save</button>
+                  <button className="sl-menu-action" onClick={handleSaveClick}>Save</button>
+                  <button className="sl-menu-action" onClick={openSave}>Save As</button>
                   <button className="sl-menu-action" onClick={openExport}>Export</button>
                   <button className="sl-menu-action" onClick={() => { setShowDropdown(false); fileInputRef.current?.click(); }}>Import</button>
                 </div>

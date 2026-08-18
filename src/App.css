@@ -651,6 +651,24 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 }
 .seq-mode-toggle .page-btn { width: auto; padding: 0 14px; }
 
+.octave-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.octave-control label {
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+.octave-val {
+  min-width: 1.6em;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 .clear-seq-btn {
   width: auto;
   padding: 0 8px;
@@ -1011,6 +1029,72 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .pr-velocity-btn:hover        { border-color: #c4954a; color: #c4954a; }
 .pr-velocity-btn.active       { color: #c4954a; border-color: rgba(196,149,74,0.5); background: rgba(196,149,74,0.08); }
 .pr-velocity-btn.active:hover { background: rgba(196,149,74,0.15); }
+
+/* Wander row (melodic tracks) — teal accent, distinct from probability/velocity */
+.pr-wander-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 22px;
+}
+.pr-wander-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-wander-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--border-disabled);
+  font-size: 8px;
+  width: 25px;
+  height: 20px;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.pr-wander-btn:hover        { border-color: #4ac4a0; color: #4ac4a0; }
+.pr-wander-btn.active       { color: #4ac4a0; border-color: rgba(74,196,160,0.5); background: rgba(74,196,160,0.08); }
+.pr-wander-btn.active:hover { background: rgba(74,196,160,0.15); }
+
+/* Tie row (Plaits only) — violet accent, distinct from probability/velocity/wander */
+.pr-tie-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 22px;
+}
+.pr-tie-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-tie-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--border-disabled);
+  font-size: 8px;
+  width: 25px;
+  height: 20px;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.pr-tie-btn:hover        { border-color: #a478e0; color: #a478e0; }
+.pr-tie-btn.active       { color: #a478e0; border-color: rgba(164,120,224,0.5); background: rgba(164,120,224,0.08); }
+.pr-tie-btn.active:hover { background: rgba(164,120,224,0.15); }
 .pr-strum-cell {
   width: 26px;
   flex-shrink: 0;

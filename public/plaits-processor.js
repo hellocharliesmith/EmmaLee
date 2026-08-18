@@ -16,6 +16,18 @@
 // lowpass gate follow that CV directly instead of auto-triggering the ping
 // (voice.cc's ProcessLP vs ProcessPing). This drives that input with a real
 // Attack + Sustain envelope computed here, block-rate, same as the LFOs.
+//
+// Drum analog/synthetic blend (added 2026-08-17): every Plaits drum engine's
+// Render() computes TWO models each block — an "analog" 808-style model
+// written to `out`, and a completely separate "synthetic" 909-ish model
+// written to `aux` (see synthetic_bass_drum.h/synthetic_snare_drum.h). This
+// processor is shared by the melodic Plaits track (out->left, aux->right, a
+// real stereo pair — must never change) and the 3 drum voices, which never
+// used `aux` for anything before. `drumBlend`/`drumBlendSet` below let a drum
+// instance crossfade the two into a single centered (both channels equal)
+// signal instead of the old hard pan; melodic Plaits never receives the
+// 'set-drum-blend' message, so `drumBlendSet` stays false there forever and
+// its output path is untouched.
 
 class PlaitsProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -35,6 +47,9 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     this._process         = null;
     this._setLevel        = null;
     this._setLevelPatched = null;
+    this._setFilterEnabled   = null;
+    this._setFilterCutoff    = null;
+    this._setFilterResonance = null;
 
     this.pendingTrigger = false;
     this.pendingNote    = undefined;
@@ -53,6 +68,14 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     this.envState    = 'idle';  // 'idle' | 'attack' | 'hold'
     this.envLevel    = 0;       // current ramp position during 'attack', 0-1
     this.envIncrement = 0;      // per-block attack step, recomputed when envAttackMs changes
+
+    // ── Drum analog/synthetic blend (see file header) ──────────────────────
+    this.drumBlend    = 0;      // 0-1, 0 = pure analog (`out`), 1 = pure synthetic (`aux`)
+    this.drumBlendSet = false;  // true once a 'set-drum-blend' message ever arrives (drum
+                                 // voices only — see engine.ts's createDrumTrack). Stays
+                                 // false forever for the melodic track, which never gets
+                                 // this message, so its out->left/aux->right pass-through
+                                 // stays byte-identical to before this feature existed.
 
     // Four LFOs, one per modulatable param (same shape as rings-processor.js).
     this.lfos = [0, 1, 2, 3].map(paramIdx => ({
@@ -112,6 +135,23 @@ class PlaitsProcessor extends AudioWorkletProcessor {
           this.envSustain = payload.value;
           this.envActive = this.envAttackMs > 0 || this.envSustain > 0;
           break;
+
+        case 'set-filter-enabled':
+          this._setFilterEnabled?.(payload.enabled ? 1 : 0);
+          break;
+
+        case 'set-filter-cutoff':
+          this._setFilterCutoff?.(payload.value);
+          break;
+
+        case 'set-filter-resonance':
+          this._setFilterResonance?.(payload.value);
+          break;
+
+        case 'set-drum-blend':
+          this.drumBlend = payload.value;
+          this.drumBlendSet = true;
+          break;
       }
     };
   }
@@ -142,12 +182,14 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       memRef = instance.exports.b; // WebAssembly.Memory
 
       // d=init e=set_param f=set_model g=set_note h=trigger i=process
-      // j=set_level k=set_level_patched l=malloc m=free (letters follow
-      // declaration order in plaits_wrapper.cpp, NOT build-plaits-wasm.sh's
-      // EXPORTED_FUNCTIONS array order — re-derive with a throwaway -O1 build
-      // or by grepping public/plaits.js's assignWasmExports after any wrapper
-      // change, see that file's top-of-file note. Confirmed via plaits.js's
-      // own assignWasmExports function directly, 2026-07-12.)
+      // j=set_level k=set_level_patched l=set_filter_enabled
+      // m=set_filter_cutoff n=set_filter_resonance o=malloc p=free (letters
+      // follow declaration order in plaits_wrapper.cpp, NOT
+      // build-plaits-wasm.sh's EXPORTED_FUNCTIONS array order — re-derive
+      // with a throwaway -O1 build or by grepping public/plaits.js's
+      // assignWasmExports after any wrapper change, see that file's
+      // top-of-file note. Confirmed via plaits.js's own assignWasmExports
+      // function directly, 2026-08-17.)
       this._setParam = instance.exports.e;
       this._setModel = instance.exports.f;
       this._setNote  = instance.exports.g;
@@ -155,10 +197,13 @@ class PlaitsProcessor extends AudioWorkletProcessor {
       this._process  = instance.exports.i;
       this._setLevel        = instance.exports.j;
       this._setLevelPatched = instance.exports.k;
+      this._setFilterEnabled   = instance.exports.l;
+      this._setFilterCutoff    = instance.exports.m;
+      this._setFilterResonance = instance.exports.n;
 
       instance.exports.d(sampleRate); // plaits_init
 
-      this.outputPtr = instance.exports.l(128 * 2 * 4); // malloc
+      this.outputPtr = instance.exports.o(128 * 2 * 4); // malloc
       this.base      = this.outputPtr >> 2;
 
       this.heapF32 = new Float32Array(instance.exports.b.buffer);
@@ -235,9 +280,24 @@ class PlaitsProcessor extends AudioWorkletProcessor {
     const heap = this.heapF32;
     const base = this.base;
     const vel  = this.velocity;
-    for (let i = 0; i < left.length; i++) {
-      left[i]  = heap[base + i * 2] * vel;
-      right[i] = heap[base + i * 2 + 1] * vel;
+    if (this.drumBlendSet) {
+      // Drum voice: crossfade analog(`out`)/synthetic(`aux`) into one centered
+      // signal (both channels equal) instead of the old out->left/aux->right
+      // hard pan. blend=0 -> pure `out` (today's sound); blend=1 -> pure `aux`.
+      const blend = this.drumBlend;
+      const wetOut = 1 - blend;
+      for (let i = 0; i < left.length; i++) {
+        const mixed = heap[base + i * 2] * wetOut + heap[base + i * 2 + 1] * blend;
+        left[i]  = mixed * vel;
+        right[i] = mixed * vel;
+      }
+    } else {
+      // Melodic Plaits (or a drum voice before its first blend message) —
+      // untouched original behavior: `out` on left, `aux` on right.
+      for (let i = 0; i < left.length; i++) {
+        left[i]  = heap[base + i * 2] * vel;
+        right[i] = heap[base + i * 2 + 1] * vel;
+      }
     }
 
     return true;

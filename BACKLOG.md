@@ -65,6 +65,29 @@ against actual experience playing with Phase 1 before building any of these):
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-08-17** — Octave shift (-2..+2, all melodic tracks), Note Wander
+  (0-5 scale-degree drift per step, first pass — simple uniform random, meant
+  to be tried and revisited), and Plaits Tie (per-step gate extension reusing
+  the existing envelope Sustain mechanism, no new WASM). All pure runtime
+  transforms in `useSequencer.ts`'s `Tone.Loop` — stored step data untouched.
+  See AGENTS.md "Octave shift, Note Wander, Plaits Tie".
+- **2026-08-17** — Plaits Filter (real low-pass, cutoff+resonance, off by
+  default) and a new "Cloud Atmosphere" engine (airy/breathy pad — forked
+  from `AdditiveEngine` + a filtered-noise air layer, id 24 in the curated
+  engine picker). Also fixed the Virtual Analog "Cutoff" mislabel (it's
+  actually Sync/Width). One combined WASM recompile. See AGENTS.md "Plaits
+  Filter + Cloud Atmosphere engine + Virtual Analog relabel".
+- **2026-08-17** — 4 sequencer/save bug fixes: page-graying no longer leaks
+  across pages, changing Key/Scale now remaps existing notes to the nearest
+  fitting tone instead of wiping the piano roll, sends were investigated and
+  confirmed NOT actually broken (no bug found), and Save now updates the
+  currently-loaded song in place (a new "Save As" button makes an explicit
+  copy). See AGENTS.md "Sequencer/save bug fixes".
+- **2026-08-17** — Drum Character knob (param 0/harmonics, per-voice labeled
+  Drive/Snappy/Noise) and an analog/synthetic Blend knob (crossfades Plaits'
+  two independent drum models, `out`/`aux`) on all 3 drum voices. Pure JS +
+  one worklet change, no C++ recompile. See AGENTS.md "Drum Character +
+  analog/synthetic Blend".
 - **2026-07-12** — Generative sequencing, Phase 1: a "Piano Roll / Generative"
   toggle per melodic track (Rings A/B, Plaits). A hand-rolled 8-bit
   shift-register Turing machine generates notes (Mutation knob: 0 = locked
@@ -237,6 +260,34 @@ once this session) and the WASM export-letter discovery process for wrapper chan
 
 ### Decouple rhythm from pitch (V3)
 - Separate rhythm lane (on/off) from pitch lane (what note). Different lane lengths = polyrhythm. Like a real modular patch.
+
+### New sequencer type (raised 2026-08-16)
+- User wants to explore a genuinely different sequencer type once the current
+  laundry list (octave/wander/tie, Plaits Filter/Atmosphere, drum
+  Character/Blend, the save/scale/sends bug fixes) settles. No concrete shape
+  yet — just a placeholder so the idea doesn't get lost. Worth a real
+  brainstorming/planning pass (not a quick add) once picked up, given how
+  central `useSequencer.ts`'s `Tone.Loop`/`TrackSeqState` model is to
+  everything else in this codebase.
+
+---
+
+## Drums
+
+### 4th percussion voice — clap / Peaks `fm_drum` port (deferred 2026-08-17)
+- The user wants a 4th full percussion voice (clap) alongside the existing
+  Hi-Hat/Snare/Kick. Scoped out of the 2026-08-17 drum round on purpose — that
+  round only did the "cheap wins" (Character + Blend knobs on the existing 3
+  voices, see AGENTS.md), not a new voice. Two real approaches: (a) a genuine
+  clap DSP algorithm (noise burst + comb-filtered pseudo-random pulse train),
+  or (b) port Peaks' `fm_drum` model (Mutable Instruments' eurorack module,
+  a 2-op FM drum/clap generator) similar to how the Rings exciters were
+  ported from Elements. Either is a real, separately-sized effort — new
+  engine registration + a new drum voice slot in `App.tsx`/`DrumControls.tsx`
+  (today's drum voices are hardcoded to exactly 3), not a small addition.
+  Check `rings-source/` actually contains Peaks' source before committing to
+  option (b) — same caveat as the Beads entry below, don't reimplement from
+  scratch without real source.
 
 ---
 

@@ -25,7 +25,7 @@ import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
 import { VoiceTabViz } from './components/VoiceTabViz';
-import type { LfoState, ExciterState, PlaitsEnvelopeState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
+import type { LfoState, ExciterState, PlaitsEnvelopeState, PlaitsFilterState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -104,6 +104,7 @@ const DEFAULT_LFO: LfoState[] = [
 
 const DEFAULT_EXCITER: ExciterState = { model: 'internal', timbre: 0.6, parameter: 0.5, gateMs: 80, level: 1.0, attackMs: 0 };
 const DEFAULT_PLAITS_ENVELOPE: PlaitsEnvelopeState = { attackMs: 0, sustain: 0 };
+const DEFAULT_PLAITS_FILTER: PlaitsFilterState = { enabled: false, cutoff: 1, resonance: 0 };
 
 interface RingsParamsState {
   kind: 'rings';
@@ -123,6 +124,7 @@ interface PlaitsParamsState {
   params: [number, number, number, number, number]; // harmonics, timbre, morph, decay, lpgColour
   lfo: LfoState[];
   envelope: PlaitsEnvelopeState;
+  filter: PlaitsFilterState;
   volume: number;
   delaySend: number;
   reverbSend: number;
@@ -144,15 +146,15 @@ function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 function defaultPlaitsParams(): PlaitsParamsState {
-  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, envelope: DEFAULT_PLAITS_ENVELOPE, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
+  return { kind: 'plaits', engine: 8, params: [0.5, 0.5, 0.5, 0.5, 1], lfo: NO_LFO, envelope: DEFAULT_PLAITS_ENVELOPE, filter: DEFAULT_PLAITS_FILTER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
 // Decay defaults match engine.ts's DRUM_VOICE_CONFIG so the knobs reflect what's
 // actually set on the worklet at creation time.
 function defaultDrumVoices(): Record<DrumVoiceId, DrumVoiceParams> {
   return {
-    drumHihat: { tone: 0.5, decay: 0.25, volume: 1 },
-    drumSnare: { tone: 0.5, decay: 0.45, volume: 1 },
-    drumKick:  { tone: 0.5, decay: 0.5,  volume: 1 },
+    drumHihat: { tone: 0.5, decay: 0.25, volume: 1, character: 0.5, blend: 0 },
+    drumSnare: { tone: 0.5, decay: 0.45, volume: 1, character: 0.5, blend: 0 },
+    drumKick:  { tone: 0.5, decay: 0.5,  volume: 1, character: 0.5, blend: 0 },
   };
 }
 function defaultDrumParams(): DrumParamsState {
@@ -183,6 +185,7 @@ export default function App() {
     switchToPage, togglePageEnabled,
     lastStep, setLastStep,
     generative, setGenerativeConfig,
+    octaveShift, setOctaveShift, toggleTie, setWander,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -310,12 +313,16 @@ export default function App() {
   }, [cloudsUi]);
 
   // ── Save / load ───────────────────────────────────────────────────────
-  const { songs, save, remove } = useSavedSongs();
+  const { songs, save, update, remove } = useSavedSongs();
   // What's currently loaded — shown in the Songs menu so it's always clear
   // what you're looking at. 'demo' vs 'saved' is inferred from savedAt === 0,
   // the marker DEMO_SONGS entries are always spread with (see loadSong below).
   const [currentSongName, setCurrentSongName] = useState('Demo 1');
   const [currentSongKind, setCurrentSongKind] = useState<'demo' | 'saved' | 'new'>('demo');
+  // Which entry in `songs` (if any) is currently loaded — null for demos and
+  // brand-new songs. Lets a plain "Save" update that song in place instead of
+  // always minting a new copy (see SaveLoad.tsx's canSaveInPlace / "Save As").
+  const [currentSongId, setCurrentSongId] = useState<string | null>(null);
 
   function captureState(): SongState {
     const ringsAP = trackParams.ringsA as RingsParamsState;
@@ -327,6 +334,7 @@ export default function App() {
       pages: tracks.ringsA.pages, enabledPages: tracks.ringsA.enabledPages, lastStep: tracks.ringsA.lastStep,
       scale: tracks.ringsA.scale, rootNote: tracks.ringsA.rootNote, scrollRow: tracks.ringsA.scrollRow,
       generative: tracks.ringsA.generative,
+      octaveShift: tracks.ringsA.octaveShift ?? 0,
       model: ringsAP.model, structure: ringsAP.params[0], brightness: ringsAP.params[1],
       damping: ringsAP.params[2], position: ringsAP.params[3], lfo: ringsAP.lfo, exciter: ringsAP.exciter,
       volume: ringsAP.volume, delaySend: ringsAP.delaySend, reverbSend: ringsAP.reverbSend, cloudsSend: ringsAP.cloudsSend,
@@ -335,6 +343,7 @@ export default function App() {
       pages: tracks.ringsB.pages, enabledPages: tracks.ringsB.enabledPages, lastStep: tracks.ringsB.lastStep,
       scale: tracks.ringsB.scale, rootNote: tracks.ringsB.rootNote, scrollRow: tracks.ringsB.scrollRow,
       generative: tracks.ringsB.generative,
+      octaveShift: tracks.ringsB.octaveShift ?? 0,
       model: ringsBP.model, structure: ringsBP.params[0], brightness: ringsBP.params[1],
       damping: ringsBP.params[2], position: ringsBP.params[3], lfo: ringsBP.lfo, exciter: ringsBP.exciter,
       volume: ringsBP.volume, delaySend: ringsBP.delaySend, reverbSend: ringsBP.reverbSend, cloudsSend: ringsBP.cloudsSend,
@@ -343,9 +352,11 @@ export default function App() {
       pages: tracks.plaits.pages, enabledPages: tracks.plaits.enabledPages, lastStep: tracks.plaits.lastStep,
       scale: tracks.plaits.scale, rootNote: tracks.plaits.rootNote, scrollRow: tracks.plaits.scrollRow,
       generative: tracks.plaits.generative,
+      octaveShift: tracks.plaits.octaveShift ?? 0,
       engine: plaitsP.engine, harmonics: plaitsP.params[0], timbre: plaitsP.params[1],
       morph: plaitsP.params[2], decay: plaitsP.params[3], lpgColour: plaitsP.params[4], lfo: plaitsP.lfo,
       envelope: plaitsP.envelope,
+      filter: plaitsP.filter,
       volume: plaitsP.volume, delaySend: plaitsP.delaySend, reverbSend: plaitsP.reverbSend, cloudsSend: plaitsP.cloudsSend,
     };
     const drums: DrumTrackState = {
@@ -428,6 +439,12 @@ export default function App() {
   function loadSong(song: SavedSong) {
     setCurrentSongName(song.name);
     setCurrentSongKind(song.savedAt === 0 ? 'demo' : 'saved');
+    // Only track an id if it's a genuine entry in `songs` (the user's saved-song
+    // list) — a demo (savedAt === 0) or a freshly-imported file (has a real
+    // savedAt but was never added to `songs`) must NOT be treated as
+    // in-place-saveable, or a later plain Save would silently no-op (update()
+    // can't find an id that isn't actually in the list).
+    setCurrentSongId(song.savedAt !== 0 && songs.some(s => s.id === song.id) ? song.id : null);
     const raw = song.state;
     let state: SongState;
     if ('version' in raw && raw.version === 3) {
@@ -444,16 +461,20 @@ export default function App() {
       voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
     const rawVoices = drumsState.voices ?? defaultDrumVoices();
+    // Per-field merge (not a plain `??` on the whole voices object) since a
+    // save from before a given field existed can have a real per-voice object
+    // that's simply missing that one key — same pattern as `exciter`'s
+    // level/attackMs fallback, see AGENTS.md "Rings exciters" > Save format.
     const drumVoices = {
-      drumHihat: { ...rawVoices.drumHihat, volume: rawVoices.drumHihat.volume ?? 1 },
-      drumSnare: { ...rawVoices.drumSnare, volume: rawVoices.drumSnare.volume ?? 1 },
-      drumKick:  { ...rawVoices.drumKick,  volume: rawVoices.drumKick.volume  ?? 1 },
+      drumHihat: { ...rawVoices.drumHihat, volume: rawVoices.drumHihat.volume ?? 1, character: rawVoices.drumHihat.character ?? 0.5, blend: rawVoices.drumHihat.blend ?? 0 },
+      drumSnare: { ...rawVoices.drumSnare, volume: rawVoices.drumSnare.volume ?? 1, character: rawVoices.drumSnare.character ?? 0.5, blend: rawVoices.drumSnare.blend ?? 0 },
+      drumKick:  { ...rawVoices.drumKick,  volume: rawVoices.drumKick.volume  ?? 1, character: rawVoices.drumKick.character  ?? 0.5, blend: rawVoices.drumKick.blend  ?? 0 },
     };
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, lastStep: state.tracks.ringsA.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsA.generative } },
-      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsB.generative } },
-      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.plaits.generative } },
+      ringsA: { pages: state.tracks.ringsA.pages, enabledPages: state.tracks.ringsA.enabledPages, currentPage: 0, lastStep: state.tracks.ringsA.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsA.scale, rootNote: state.tracks.ringsA.rootNote, scrollRow: state.tracks.ringsA.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsA.generative }, octaveShift: state.tracks.ringsA.octaveShift ?? 0 },
+      ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsB.generative }, octaveShift: state.tracks.ringsB.octaveShift ?? 0 },
+      plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.plaits.generative }, octaveShift: state.tracks.plaits.octaveShift ?? 0 },
       drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, lastStep: drumsState.lastStep ?? STEP_COUNT - 1, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
@@ -476,6 +497,7 @@ export default function App() {
         params: [state.tracks.plaits.harmonics, state.tracks.plaits.timbre, state.tracks.plaits.morph, state.tracks.plaits.decay, state.tracks.plaits.lpgColour ?? 0.5],
         lfo: state.tracks.plaits.lfo ?? NO_LFO,
         envelope: { ...DEFAULT_PLAITS_ENVELOPE, ...state.tracks.plaits.envelope },
+        filter: { ...DEFAULT_PLAITS_FILTER, ...state.tracks.plaits.filter },
         volume: state.tracks.plaits.volume, delaySend: state.tracks.plaits.delaySend, reverbSend: state.tracks.plaits.reverbSend,
         cloudsSend: state.tracks.plaits.cloudsSend ?? 0.4,
       },
@@ -538,8 +560,15 @@ export default function App() {
   }
 
   function loadDrumPreset(preset: DrumPreset) {
+    // Presets (DrumVoicePreset) only carry tone/decay/volume — merge field-by-
+    // field per voice rather than replacing the whole voice object, so a
+    // track's Character/Blend knobs survive loading a preset untouched.
     updateTrackParamsFor('drums', p => p.kind === 'drums'
-      ? { ...p, voices: { ...p.voices, ...preset.voices } }
+      ? { ...p, voices: {
+          drumHihat: { ...p.voices.drumHihat, ...preset.voices.drumHihat },
+          drumSnare: { ...p.voices.drumSnare, ...preset.voices.drumSnare },
+          drumKick:  { ...p.voices.drumKick,  ...preset.voices.drumKick },
+        } }
       : p);
     if (!Engine.isAudioReady()) return;
     DRUM_VOICE_IDS.forEach(vid => {
@@ -603,6 +632,7 @@ export default function App() {
   function handleNewSong() {
     setCurrentSongName('New Song');
     setCurrentSongKind('new');
+    setCurrentSongId(null);
     function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
     const ringsAPreset = pick(RINGS_PRESETS);
@@ -613,16 +643,23 @@ export default function App() {
     const emptyPages = () => Array.from({ length: PAGE_COUNT }, () => Array(STEP_COUNT).fill(null) as StepValue[]);
 
     const nextTracks: Record<TrackId, TrackSeqState> = {
-      ringsA: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
-      ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
-      plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState() },
+      ringsA: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
+      ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
+      plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
       drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
       ringsB: { kind: 'rings', model: ringsBPreset.model, params: ringsBPreset.params, lfo: ringsBPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
-      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, envelope: DEFAULT_PLAITS_ENVELOPE, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
-      drums:  { kind: 'drums', voices: { ...drumPreset.voices }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      plaits: { kind: 'plaits', engine: plaitsPreset.engine, params: plaitsPreset.params, lfo: plaitsPreset.lfo, envelope: DEFAULT_PLAITS_ENVELOPE, filter: DEFAULT_PLAITS_FILTER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      // drumPreset.voices (DrumVoicePreset) only carries tone/decay/volume —
+      // merge onto fresh defaults so Character/Blend start at their sane
+      // defaults (0.5/0) instead of undefined.
+      drums:  { kind: 'drums', voices: {
+        drumHihat: { ...defaultDrumVoices().drumHihat, ...drumPreset.voices.drumHihat },
+        drumSnare: { ...defaultDrumVoices().drumSnare, ...drumPreset.voices.drumSnare },
+        drumKick:  { ...defaultDrumVoices().drumKick,  ...drumPreset.voices.drumKick },
+      }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
 
     loadTracks(nextTracks);
@@ -686,6 +723,8 @@ export default function App() {
       Engine.setTrackSend(vid, 'clouds', dp.cloudsSend);
       Engine.setDrumParam(vid, 1, dp.voices[vid].tone);
       Engine.setDrumParam(vid, 2, dp.voices[vid].decay);
+      Engine.setDrumParam(vid, 0, dp.voices[vid].character ?? 0.5);
+      Engine.setDrumBlend(vid, dp.voices[vid].blend ?? 0);
     });
 
     Engine.setDelayTime(divisionSeconds(delDiv, bpmVal));
@@ -727,6 +766,15 @@ export default function App() {
   }
 
   const kidsNotes = kidsMode ? visibleNotes.slice(0, KIDS_ROWS) : visibleNotes;
+
+  // `lastStep` only musically applies to whichever enabled page ends up LAST in
+  // the playback cycle (see useSequencer.ts's Tone.Loop — same ei/lastEnabledPage
+  // derivation). PianoRoll grays everything beyond `lastStep` unconditionally, so
+  // only pass it through when the page being VIEWED is actually that last enabled
+  // page — otherwise every other page would show the same graying by mistake.
+  const enabledPageIndices  = [0, 1, 2, 3].filter(i => enabledPages[i]);
+  const lastEnabledPageIdx  = enabledPageIndices[enabledPageIndices.length - 1];
+  const isCurrentPageLastEnabled = currentPage === lastEnabledPageIdx;
 
   // Per-track accent color (CSS vars set in App.css) — Kids Mode is always pinned
   // to ringsA so it just gets the default Rose, no class needed. Master isn't a
@@ -776,8 +824,12 @@ export default function App() {
             <div className="header-divider" />
             <div className="header-cluster">
               <SaveLoad songs={songs}
-                currentSongName={currentSongName} currentSongKind={currentSongKind}
-                onSave={name => { save(name, captureState()); setCurrentSongName(name); setCurrentSongKind('saved'); }}
+                currentSongName={currentSongName} currentSongKind={currentSongKind} currentSongId={currentSongId}
+                onSave={name => {
+                  const id = save(name, captureState());
+                  setCurrentSongName(name); setCurrentSongKind('saved'); setCurrentSongId(id);
+                }}
+                onSaveInPlace={() => { if (currentSongId) update(currentSongId, captureState()); }}
                 onLoad={loadSong} onDelete={remove} onNewSong={handleNewSong}
                 onExport={handleExport} onImport={loadSong} />
             </div>
@@ -882,6 +934,16 @@ export default function App() {
                 className={`page-btn${generative.enabled ? ' viewing' : ''}`}
                 onClick={() => setGenerativeConfig({ enabled: true })}
               >Generative</button>
+              <div className="octave-control" title="Shift this track's notes by whole octaves — doesn't change the stored notes, just where they play back">
+                <label>Octave</label>
+                <button className="page-btn" disabled={octaveShift <= -2}
+                  onClick={() => setOctaveShift(octaveShift - 1)}
+                >−</button>
+                <span className="octave-val">{octaveShift > 0 ? `+${octaveShift}` : octaveShift}</span>
+                <button className="page-btn" disabled={octaveShift >= 2}
+                  onClick={() => setOctaveShift(octaveShift + 1)}
+                >+</button>
+              </div>
             </div>
           )}
 
@@ -920,7 +982,7 @@ export default function App() {
                   steps={steps} visibleNotes={visibleNotes}
                   rootNote={rootNote} scroll={scroll} maxScroll={maxScroll}
                   currentStep={isPlaying && currentPagePlaying[activeTrack] === currentPage ? currentStep : -1}
-                  lastStep={lastStep}
+                  lastStep={isCurrentPageLastEnabled ? lastStep : undefined}
                   onSetLastStep={setLastStep}
                   rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
                   noStrum={activeTrack === 'drums'}
@@ -928,6 +990,8 @@ export default function App() {
                   onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
                   onSetProbability={setProbability}
                   onSetVelocity={setVelocity}
+                  onSetWander={activeTrack === 'drums' ? undefined : setWander}
+                  onToggleTie={activeTrack === 'plaits' ? toggleTie : undefined}
                   onScrollUp={scrollUp} onScrollDown={scrollDown}
                 />
               )}
@@ -956,6 +1020,7 @@ export default function App() {
                   {active.kind === 'plaits' && (
                     <PlaitsControls
                       engine={active.engine} params={active.params} lfo={active.lfo} envelope={active.envelope}
+                      filter={active.filter}
                       presets={PLAITS_PRESETS}
                       onPresetLoad={loadPlaitsPreset}
                       onEngineChange={eg => updateActiveParams(p => p.kind === 'plaits' ? ({ ...p, engine: eg }) : p)}
@@ -968,6 +1033,8 @@ export default function App() {
                         ? ({ ...p, lfo: p.lfo.map((l, idx) => idx === i ? { ...l, ...u } : l) }) : p)}
                       onEnvelopeChange={u => updateActiveParams(p => p.kind === 'plaits'
                         ? ({ ...p, envelope: { ...p.envelope, ...u } }) : p)}
+                      onFilterChange={u => updateActiveParams(p => p.kind === 'plaits'
+                        ? ({ ...p, filter: { ...p.filter, ...u } }) : p)}
                       generativeEnabled={generative.enabled}
                     />
                   )}

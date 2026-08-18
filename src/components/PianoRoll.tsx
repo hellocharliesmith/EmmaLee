@@ -8,6 +8,7 @@ const PROB_LABELS: Record<number, string> = {
 const VELOCITY_LABELS: Record<number, string> = {
   1: '', 0.75: '75', 0.5: '50', 0.25: '25',
 };
+const WANDER_OPTIONS = [0, 1, 2, 3, 4, 5] as const;
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
@@ -49,6 +50,8 @@ interface Props {
   onToggleStrumDir: (col: number) => void;
   onSetProbability: (col: number, prob: number) => void;
   onSetVelocity?: (col: number, velocity: number) => void;
+  onSetWander?: (col: number, wander: number) => void;
+  onToggleTie?: (col: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
 }
@@ -57,7 +60,8 @@ export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
   currentStep, lastStep, onSetLastStep,
   kidsMode, rowLabels, noStrum, showVelocity,
-  onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onScrollUp, onScrollDown,
+  onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onSetWander, onToggleTie,
+  onScrollUp, onScrollDown,
 }: Props) {
   const effectiveLastStep = lastStep ?? STEP_COUNT - 1;
 
@@ -249,6 +253,61 @@ export function PianoRoll({
                       title={`Probability: ${Math.round(prob * 100)}% — click to change`}
                     >
                       {prob < 1 ? label : '·'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Wander row with label (melodic tracks only — first pass, see AGENTS.md "Note Wander") */}
+        {!kidsMode && !noStrum && onSetWander && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Wander</div>
+            <div className="pr-wander-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                if (!step || step.notes.length === 0) return <div key={i} className="pr-wander-cell" />;
+                const wander = step.wander ?? 0;
+                const idx  = WANDER_OPTIONS.indexOf(wander as typeof WANDER_OPTIONS[number]);
+                const next = WANDER_OPTIONS[(idx === -1 ? 0 : (idx + 1) % WANDER_OPTIONS.length)];
+                return (
+                  <div key={i} className="pr-wander-cell">
+                    <button
+                      className={`pr-wander-btn${wander > 0 ? ' active' : ''}`}
+                      onClick={() => onSetWander(i, next)}
+                      title={wander > 0
+                        ? `Wander: up to ${wander} scale step${wander > 1 ? 's' : ''} up or down each time — click to change`
+                        : 'Wander: off — click to randomize this note within nearby scale steps'}
+                    >
+                      {wander > 0 ? wander : '·'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Tie row with label (Plaits only — extends the held note instead of retriggering) */}
+        {!kidsMode && onToggleTie && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Tie</div>
+            <div className="pr-tie-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                const tied = !!step?.tie;
+                return (
+                  <div key={i} className="pr-tie-cell">
+                    <button
+                      className={`pr-tie-btn${tied ? ' active' : ''}`}
+                      onClick={() => onToggleTie(i)}
+                      title={tied
+                        ? 'Tied — holds the previous note through this step instead of retriggering. Click to un-tie'
+                        : 'Click to tie — holds the previous note through this step instead of retriggering'}
+                    >
+                      {tied ? '—' : '·'}
                     </button>
                   </div>
                 );
