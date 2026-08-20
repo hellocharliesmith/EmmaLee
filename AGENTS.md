@@ -1075,17 +1075,196 @@ save → switch song → reload round trip exactly preserved custom per-voice
 values. `git diff --stat` confirmed scope discipline — no changes to
 `voice.cc`, `plaits_wrapper.cpp`, the `ENGINES` array, or `PlaitsControls.tsx`.
 
+## Juno-60 track (added 2026-08-19)
+
+A 5th, genuinely new track (not a mode-swap on an existing one) — polyphonic,
+real gate-length control, in the character of the Roland Juno-60/106. Runs
+alongside Rings A/B, Plaits, and Drums, sharing the global Key/Scale.
+
+**Engine**: vendored from [JunoX](https://github.com/pendragon-andyh/junox)
+(pendragon-andyh, GPL-3.0-or-later) — a from-scratch Web Audio `AudioWorklet`
+emulation modeled directly off the Juno-60 service manual (the source code's
+own comments cite page/section numbers). Unlike Rings/Plaits/Clouds, **no
+WASM at all** — pure JS DSP, no Emscripten build step. `public/juno-processor.js`
+is JunoX's ~13 source files (`dco.js`, `chorus.js`, `ladderFilter.js`,
+`juno60Envelope.js`, `abstractEnvelope.js`, `lfo.js`, `lfoWithEnvelope.js`,
+`noise.js`, `ringBuffer.js`, `simpleSinglePoleFilter.js`, `smoothMoves.js`,
+`utils.mjs`, `voice.js`, `junox.js`) flattened into one file (`import`/`export`
+stripped, GPL header + per-file section comments kept) — matching how every
+other `public/*-processor.js` here is a single self-contained file (no ES
+imports between public files; JunoX's own esbuild step does this exact
+flattening for its own distribution, so this isn't inventing a new
+convention). A thin wrapper at the end (`JunoProcessor`, not part of
+upstream) adapts JunoX's native message shape to this app's `{type,
+payload}` convention and calls `registerProcessor('juno-processor', ...)`.
+
+**Real polyphony + real gate, unlike everything else in this app**: `Junox`
+takes a `polyphony` voice count (8 here — see `JUNO_POLYPHONY` in
+`juno-processor.js`) and spins up an internal `Voice` per note, stealing the
+oldest when full. It has genuine `noteOn(note, velocity)`/`noteOff(note)` —
+not the fire-and-forget trigger+decay every other track uses. `engine.ts`
+exposes this directly: `junoNoteOn`/`junoNoteOff`/`junoAllNotesOff`, parallel
+to but distinct from the generic `triggerNote`. `createTrackWorklet`'s
+`wasmBytes` param is now optional specifically for this — no WASM to load,
+so `juno-processor.js` posts `{type:'ready'}` synchronously from its own
+constructor instead of waiting on a `'load-wasm'` round trip.
+
+**Gate length — a new sequencer primitive**: `StepData.gateSteps` (1-16,
+default `DEFAULT_GATE_STEPS = 4`, options `GATE_OPTIONS =
+[1,2,3,4,6,8,12,16]`) — how many 16th-note ticks a step's note(s) stay held
+before a real `junoNoteOff` fires. Implemented in `useSequencer.ts`'s
+`Tone.Loop` via a `junoActiveNotesRef` (`{note, remaining}[]`): every tick,
+existing held notes decrement and release at 0 *before* the current step's
+new notes are processed (so this runs even if Juno's own page cycling
+lapses); new notes push a fresh countdown entry, replacing any existing
+entry for the same pitch so a re-trigger resets rather than duplicates.
+`stop()` clears the ref and calls `junoAllNotesOff()` so nothing is left
+stuck holding. UI: a new "Gate" meta-row in `PianoRoll.tsx`, Juno-only,
+click-cycles `GATE_OPTIONS`, always shows the live value (unlike Wander/Prob,
+gate is never really "off" — it's a duration).
+
+**True polyphony, no strum**: a step's whole chord fires as genuinely
+simultaneous `junoNoteOn` calls (transformed by the same octave-shift/Wander
+logic every melodic track already uses), not Rings/Plaits' one-voice-strums-
+the-chord emulation. `noStrum` is now true for both Drums and Juno — but
+Wander's own render gate in `PianoRoll.tsx` had to be decoupled from
+`noStrum` (it used to piggyback on that flag as a "melodic tracks only"
+proxy back when Drums was the only `noStrum` track) since Juno wants
+Wander but not Strum; Wander now gates purely on the `onSetWander` prop.
+
+**60/106 switch — two real factory banks, one engine**: Juno-60 and
+Juno-106 share the same DCO/VCF/chorus circuit, so there's one DSP engine
+and a Bank toggle (`JunoControls.tsx`) that just switches which preset list
+the dropdown shows:
+- `JUNO60_PRESETS` (56 patches) — ported verbatim from JunoX's own
+  `src/patches.js` (`Juno60FactoryPatchesA`), with the unused `vcf.type`
+  field stripped (confirmed via grep that nothing in the DSP ever reads it).
+- `JUNO106_PRESETS` (128 patches) — converted from `patches/Juno106.xlsx`, a
+  file JunoX's own repo ships but never wires into any code path. Unzipped
+  (`xlsx` is a zip of XML) and parsed directly this session — it's a real
+  hardware SysEx patch-memory dump (raw `Bit0`-`Bit6` columns confirm this),
+  not a guess: 166 rows total, 38 of them genuinely blank (trailing
+  formatted-but-empty rows), leaving 128 real, distinct, authentically-named
+  patches ("Meow Bass", "Forbidden Planet", "Dust Storm", "Owgan", etc.).
+  Column mapping: most continuous params (`VCF Freq/Res/Env`, `VCA Level`,
+  `ENV A/D/S/R`, `LFO Rate/Delay`, `DCO Noise/PWM`) are raw 0-127 hardware
+  values, divided by 127 to match JunoX's 0-1 slider convention (confirmed
+  this is how the 60 bank's own patches already store these — no
+  curve-table math needed at the JSON level). `HPF` (raw 0-3) divides by 4,
+  not 3 — `curveFromHpfSliderToFreq` in `junox.js` has exactly 4 entries and
+  `interpolatedLookup(slider * 4, table)`, so `slider = raw/4` is the value
+  that lands exactly on `table[raw]` with zero interpolation error (raw/3
+  would overshoot/interpolate for the middle two positions). `4'`/`8'`/`16'`
+  one-hot columns map to Junox's `dco.range` multiplier (16'→0.5, 8'→1
+  (implicit default), 4'→2 — standard footage-to-octave convention). One
+  honest simplification: `dco.pwmMod` is defaulted to `'l'` (LFO) for every
+  106 patch — a second "DCO PWM" boolean column's exact semantics weren't
+  confirmed, and `'l'` is the overwhelmingly common real-hardware default
+  seen across the 60 bank, so this doesn't produce obviously-wrong-sounding
+  patches even where it's not byte-exact. Conversion script wasn't kept —
+  the output is committed as a static array, same as every other preset bank
+  here, not a runtime xlsx parse. See BACKLOG.md for the full 38-instrument
+  Bristol catalog surveyed alongside this (not used — Bristol has Juno-60
+  but not Juno-106 or D-50) and the D-50 research (no usable open-source
+  engine exists — see below).
+
+**Curated controls, not everything**: `JunoControls.tsx` exposes a Bank
+toggle + Preset dropdown, plus 11 live knobs — Cutoff, Resonance, Attack,
+Release, LFO Rate/Delay/DCO Depth/VCF Depth, Chorus (0/1/2/3 cycle button),
+**Noise**, and **HPF** (both explicitly requested — key to airy/cloudy
+textures, same spirit as Plaits' Cloud Atmosphere engine; LFO controls added
+right after shipping, also explicitly requested). Real hardware has ~20
+physical controls; this is a curated subset, same scope philosophy as
+Plaits (4 knobs) / Rings (4 knobs), just wider since several of the 11 were
+specific asks. Each knob updates local patch state AND calls
+`Engine.setJunoParam(path, value)` directly, reusing JunoX's own dot-path
+convention (`'vcf.frequency'`, `'env.attack'`, `'dco.noise'`, `'hpf'`,
+`'chorus'`, `'lfo.frequency'`, `'lfo.delay'`, `'dco.lfo'`, `'vcf.lfoMod'`)
+with zero translation layer.
+
+**LFO — one LFO, multiple destinations, not a per-parameter pool**: unlike
+Rings/Plaits' 4 independent per-parameter LFOs, Junox has a single hardware-
+accurate LFO (`patch.lfo: {autoTrigger, frequency, delay}`) that can modulate
+several destinations at once, each at its own depth: DCO pitch (`dco.lfo` —
+vibrato) and VCF cutoff (`vcf.lfoMod` — filter wah/sweep). The 4 exposed
+controls (Rate, Delay, DCO Depth, VCF Depth) map directly to these fields —
+no new architecture, `patch.lfo`/`dco.lfo`/`vcf.lfoMod` already existed in
+every preset, this just makes them live-adjustable. `autoTrigger` (whether
+the LFO's phase resets on every note-on vs. free-running) is left at
+whatever each preset already sets — not surfaced as a control, a smaller
+detail than Rate/Delay/Depth.
+
+**Save format — version 4**: `JunoTrackState` (`types.ts`) stores the whole
+current `patch` object as one JSON blob (matches how JunoX's own
+`setPatch`/`setValue` API naturally works — avoids decomposing a deeply
+nested object into a long flat field list) plus `bank: '60'|'106'`
+(UI-only, doesn't affect the loaded patch itself). `SongState.version` bumped
+3→4; old saves migrate through a new `withDefaultJuno()` step (applied
+uniformly across the v1→v3, v2→v3, and genuine-v3 load paths) that adds a
+fresh default Juno track — same "missing track gets sane defaults" pattern
+already used for Drums' own backward-compatible fallback.
+
+**License note**: JunoX is GPL-3.0-or-later. The vendored code in
+`public/juno-processor.js` keeps its GPL header/attribution. Worth knowing
+since this app doesn't otherwise ship a LICENSE file — flagged to the user
+at build time, not a blocker for a personal instrument that isn't being
+redistributed as a package.
+
+**D-50 (deferred, not built)**: the user also wants a D-50/LA-synthesis
+character, ideally switchable with Juno. No usable open-source D-50 engine
+exists — researched thoroughly (Bristol doesn't have one; DSynkant is a
+real but non-functional reverse-engineering scaffold, its own README says
+"no GUI, no presets, and no sound"). D-50's PCM attack-transient layer is
+actual copyrighted Roland ROM data (not legally redistributable); its
+synthesized layer is itself Juno-shaped subtractive synthesis. If picked up
+later: don't keep searching for a pre-built engine, reuse this same
+DCO/VCF/VCA as the synthesized layer and add a short *synthesized* (not
+sampled) transient on top — same layering trick as Cloud Atmosphere. See
+BACKLOG.md.
+
+**Verified**: Node `vm` harness (same technique as every other worklet here,
+adapted for a no-WASM processor) confirmed: `ready` posts synchronously, a
+single note is non-silent with no NaN through its full release tail, a
+3-note chord measurably louder than one note (genuine simultaneous
+polyphony, not a coincidence — same instance, same params), note-off +
+release tail genuinely decays toward silence (not just a ratio threshold —
+verified against a ~1s window comfortably past the longest release-curve
+entry), `set-patch` preset loading changes the sound, `hpf`/`dco.noise` are
+live-reachable via `set-param`, and `all-notes-off` genuinely silences a
+3-note chord (verified past the chorus ring-buffer's ~6ms natural decay
+tail). Also live in the browser: new Juno tab renders with its own amber
+accent; Bank toggle correctly swaps the Preset dropdown's content (56 vs.
+128, confirmed by actual patch names including 106-bank-only "Brass Swell",
+"Meow Bass," etc.); loading a 106 preset audibly moves the Cutoff/Resonance/
+Attack/Release sliders to that patch's real values; a 3-note chord plays as
+true simultaneous polyphony with the Gate row showing/cycling correctly;
+Noise/HPF sliders are draggable live during playback with no errors; an
+extended Play session (chord + manual Noise/HPF drags) produced zero
+console errors; a full save → reload → load round-trip preserved the loaded
+patch (including manual Noise/HPF tweaks on top of a loaded preset), the
+Bank selection, and the Gate value exactly. LFO section (added same day,
+right after shipping) re-verified the same way: all 4 controls render with
+correct labels, and dragging DCO Depth + VCF Depth live during an active
+Play session (note held via the Gate mechanism) produced zero console
+errors.
+
 ## Key decisions worth knowing before you change things
 
-- **Color system (added 2026-06-21)**: CSS custom properties in `:root` (App.css)
-  define the raw palette (rose/teal/sage/slate/neutral-dark — Butter and Neutral
-  Sand exist in the source palette but are intentionally not wired in). Per-track
-  accent is `--accent`/`--accent-dark`/`--accent-light`, switched via a
-  `.app.track-rings-b` / `.track-plaits` / `.track-drums` / `.track-master`
-  modifier class set in App.tsx based on `activeTrack`/`viewSection` — default
-  (no class) is Rose for Rings A. **If you add a new track type, add its accent
-  override here and a corresponding class branch in App.tsx**, following the same
-  pattern. Two places can't read CSS vars directly and need special handling:
+- **Color system (added 2026-06-21, corrected 2026-08-19)**: CSS custom properties
+  in `:root` (App.css) define the raw palette — rose/teal/sage/slate/neutral-dark,
+  plus amber (added with the Juno track). Correction: an earlier version of this
+  note claimed "Butter and Neutral Sand exist in the source palette but are
+  intentionally not wired in" — checked directly while picking Juno's color and
+  that's not accurate; `DESIGN_BRIEF.md`'s own "exact tokens already in use" table
+  lists only the 5 original hues, no unused spares. Every hue was already claimed
+  by an existing track, so amber is a genuinely new 6th family, not a rediscovered
+  one. Per-track accent is `--accent`/`--accent-dark`/`--accent-light`, switched
+  via a `.app.track-rings-b` / `.track-plaits` / `.track-drums` / `.track-juno` /
+  `.track-master` modifier class set in App.tsx based on `activeTrack`/
+  `viewSection` — default (no class) is Rose for Rings A. **If you add a new track
+  type, add its accent override here and a corresponding class branch in
+  App.tsx**, following the same pattern. Two places can't read CSS vars directly
+  and need special handling:
   `Knob.tsx`'s SVG (`style={{ stroke: 'var(--accent)' }}` works; the bare SVG
   `stroke="..."` attribute form does NOT reliably read custom properties) and
   `WaveformMeter.tsx`'s canvas drawing (resolves `--accent` via `getComputedStyle`

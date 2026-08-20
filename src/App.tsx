@@ -7,7 +7,8 @@ import { useSequencer, TRACK_IDS, TRACK_LABELS, DRUM_ROW_LABELS, PAGE_COUNT, STE
          type ScaleType, type StepValue, type TrackId, type TrackSeqState } from './hooks/useSequencer';
 import { useSavedSongs } from './hooks/useSavedSongs';
 import { DEMO_SONGS } from './demoSongs';
-import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, NO_LFO, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
+import { generateSongName } from './songNames';
+import { RINGS_PRESETS, PLAITS_PRESETS, DRUM_PRESETS, TEXTURE_PRESETS, JUNO60_PRESETS, JUNO106_PRESETS, NO_LFO, type RingsPreset, type PlaitsPreset, type DrumPreset, type TexturePreset } from './presets';
 import { PianoRoll } from './components/PianoRoll';
 import { Knob } from './components/Knob';
 import { Slider } from './components/Slider';
@@ -17,6 +18,7 @@ import { RingsControls } from './components/RingsControls';
 import { PlaitsControls } from './components/PlaitsControls';
 import { GenerativeControls } from './components/GenerativeControls';
 import { DrumControls, type DrumVoiceParams } from './components/DrumControls';
+import { JunoControls } from './components/JunoControls';
 import { GridsControls, type GridsUiState } from './components/GridsControls';
 import { generateGridsPattern, GRIDS_INSTRUMENT_BD, GRIDS_INSTRUMENT_SD, GRIDS_INSTRUMENT_HH } from './audio/grids';
 import { defaultGenerativeVoiceState } from './audio/generative';
@@ -25,7 +27,7 @@ import { ReverbControls } from './components/ReverbControls';
 import { CloudsControls, type CloudsUiState } from './components/CloudsControls';
 import { SaveLoad } from './components/SaveLoad';
 import { VoiceTabViz } from './components/VoiceTabViz';
-import type { LfoState, ExciterState, PlaitsEnvelopeState, PlaitsFilterState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, LegacySongStateV1, LegacySongStateV2 } from './types';
+import type { LfoState, ExciterState, PlaitsEnvelopeState, PlaitsFilterState, SavedSong, SongState, RingsTrackState, PlaitsTrackState, DrumTrackState, JunoTrackState, JunoPatch, LegacySongStateV1, LegacySongStateV2, LegacySongStateV3 } from './types';
 import './App.css';
 
 const ROOT_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
@@ -40,6 +42,7 @@ const TRACK_FADER_COLORS: Record<TrackId, [string, string]> = {
   ringsB: ['var(--teal-400)',   'var(--teal-500)'],
   plaits: ['var(--sage-400)',   'var(--sage-500)'],
   drums:  ['var(--slate-400)',  'var(--slate-500)'],
+  juno:   ['var(--amber-400)',  'var(--amber-500)'],
 };
 const MASTER_VOICE_COLOR = 'var(--neutral-dark-300)';
 
@@ -51,6 +54,7 @@ const VOICE_TRACKS_FOR_TAB: Record<TrackId, EngineTrackId[]> = {
   ringsB: ['ringsB'],
   plaits: ['plaits'],
   drums:  DRUM_VOICE_IDS,
+  juno:   ['juno'],
 };
 
 // One small abstract glyph per tab, inherits the tab's own text color
@@ -67,6 +71,11 @@ const TRACK_ICONS: Record<TrackId, ReactNode> = {
   ),
   drums: (
     <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="4" cy="10.5" r="1.6" fill="currentColor" /><circle cx="8" cy="5.5" r="2.1" fill="currentColor" /><circle cx="12" cy="10.5" r="1.6" fill="currentColor" /></svg>
+  ),
+  // A few piano keys — the classic polyphonic-keyboard-synth shape, distinct
+  // from every other tab's glyph.
+  juno: (
+    <svg width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="2" width="3" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" /><rect x="6.5" y="2" width="3" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" /><rect x="11" y="2" width="3" height="8" fill="currentColor" /></svg>
   ),
 };
 const MASTER_ICON: ReactNode = (
@@ -140,7 +149,17 @@ interface DrumParamsState {
   cloudsSend: number;
 }
 
-type AnyTrackParams = RingsParamsState | PlaitsParamsState | DrumParamsState;
+interface JunoParamsState {
+  kind: 'juno';
+  patch: JunoPatch;
+  bank: '60' | '106';
+  volume: number;
+  delaySend: number;
+  reverbSend: number;
+  cloudsSend: number;
+}
+
+type AnyTrackParams = RingsParamsState | PlaitsParamsState | DrumParamsState | JunoParamsState;
 
 function defaultRingsParams(): RingsParamsState {
   return { kind: 'rings', model: 1, params: [0.11, 0.24, 0.44, 0.25], lfo: DEFAULT_LFO, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
@@ -160,9 +179,13 @@ function defaultDrumVoices(): Record<DrumVoiceId, DrumVoiceParams> {
 function defaultDrumParams(): DrumParamsState {
   return { kind: 'drums', voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
 }
+function defaultJunoParams(): JunoParamsState {
+  return { kind: 'juno', patch: JUNO60_PRESETS[0], bank: '60', volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 };
+}
 function defaultParamsFor(id: TrackId): AnyTrackParams {
   if (id === 'plaits') return defaultPlaitsParams();
   if (id === 'drums') return defaultDrumParams();
+  if (id === 'juno') return defaultJunoParams();
   return defaultRingsParams();
 }
 
@@ -185,7 +208,7 @@ export default function App() {
     switchToPage, togglePageEnabled,
     lastStep, setLastStep,
     generative, setGenerativeConfig,
-    octaveShift, setOctaveShift, toggleTie, setWander,
+    octaveShift, setOctaveShift, toggleTie, setWander, setGate,
     start, stop, updateBpm,
   } = useSequencer();
 
@@ -364,9 +387,18 @@ export default function App() {
       scale: tracks.drums.scale, rootNote: tracks.drums.rootNote, scrollRow: tracks.drums.scrollRow,
       voices: drumsP.voices, volume: drumsP.volume, delaySend: drumsP.delaySend, reverbSend: drumsP.reverbSend, cloudsSend: drumsP.cloudsSend,
     };
+    const junoP = trackParams.juno as JunoParamsState;
+    const juno: JunoTrackState = {
+      pages: tracks.juno.pages, enabledPages: tracks.juno.enabledPages, lastStep: tracks.juno.lastStep,
+      scale: tracks.juno.scale, rootNote: tracks.juno.rootNote, scrollRow: tracks.juno.scrollRow,
+      generative: tracks.juno.generative,
+      octaveShift: tracks.juno.octaveShift ?? 0,
+      patch: junoP.patch, bank: junoP.bank,
+      volume: junoP.volume, delaySend: junoP.delaySend, reverbSend: junoP.reverbSend, cloudsSend: junoP.cloudsSend,
+    };
 
     return {
-      version: 3, bpm, tracks: { ringsA, ringsB, plaits, drums },
+      version: 4, bpm, tracks: { ringsA, ringsB, plaits, drums, juno },
       delayDivision, delayMix, delayFeedback, delayFilter,
       reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbTone,
     };
@@ -377,7 +409,22 @@ export default function App() {
     return { pages, enabledPages: [true, false, false, false] };
   }
 
-  function migrateLegacy(old: LegacySongStateV1): SongState {
+  function defaultJunoTrackState(): JunoTrackState {
+    return {
+      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
+      patch: JUNO60_PRESETS[0], bank: '60',
+      volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
+    };
+  }
+  // Every pre-Juno save (a genuine v3 file, or one just migrated up from v1/v2)
+  // gets a fresh default Juno track — same "missing track gets a default"
+  // pattern as drumsState's own fallback below, just applied uniformly here
+  // instead of duplicating it in migrateLegacy/migrateV2toV3.
+  function withDefaultJuno(v3: LegacySongStateV3): SongState {
+    return { ...v3, version: 4, tracks: { ...v3.tracks, juno: defaultJunoTrackState() } };
+  }
+
+  function migrateLegacy(old: LegacySongStateV1): LegacySongStateV3 {
     const oldSteps: StepValue[] = Array.isArray(old.steps[0]) || (old.steps as StepValue[]).length > 32
       ? (old.steps as unknown as StepValue[][])[0]
       : (old.steps as StepValue[]);
@@ -411,7 +458,7 @@ export default function App() {
     };
   }
 
-  function migrateV2toV3(v2: LegacySongStateV2): SongState {
+  function migrateV2toV3(v2: LegacySongStateV2): LegacySongStateV3 {
     const emptyDrumsV3: DrumTrackState = {
       ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
       voices: defaultDrumVoices(), volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
@@ -447,12 +494,14 @@ export default function App() {
     setCurrentSongId(song.savedAt !== 0 && songs.some(s => s.id === song.id) ? song.id : null);
     const raw = song.state;
     let state: SongState;
-    if ('version' in raw && raw.version === 3) {
+    if ('version' in raw && raw.version === 4) {
       state = raw as SongState;
+    } else if ('version' in raw && raw.version === 3) {
+      state = withDefaultJuno(raw as LegacySongStateV3);
     } else if ('version' in raw && raw.version === 2) {
-      state = migrateV2toV3(raw as LegacySongStateV2);
+      state = withDefaultJuno(migrateV2toV3(raw as LegacySongStateV2));
     } else {
-      state = migrateLegacy(raw as LegacySongStateV1);
+      state = withDefaultJuno(migrateLegacy(raw as LegacySongStateV1));
     }
 
     // Saves missing the drums track entirely get a fresh default.
@@ -476,6 +525,7 @@ export default function App() {
       ringsB: { pages: state.tracks.ringsB.pages, enabledPages: state.tracks.ringsB.enabledPages, currentPage: 0, lastStep: state.tracks.ringsB.lastStep ?? STEP_COUNT - 1, scale: state.tracks.ringsB.scale, rootNote: state.tracks.ringsB.rootNote, scrollRow: state.tracks.ringsB.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.ringsB.generative }, octaveShift: state.tracks.ringsB.octaveShift ?? 0 },
       plaits: { pages: state.tracks.plaits.pages, enabledPages: state.tracks.plaits.enabledPages, currentPage: 0, lastStep: state.tracks.plaits.lastStep ?? STEP_COUNT - 1, scale: state.tracks.plaits.scale, rootNote: state.tracks.plaits.rootNote, scrollRow: state.tracks.plaits.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.plaits.generative }, octaveShift: state.tracks.plaits.octaveShift ?? 0 },
       drums:  { pages: drumsState.pages, enabledPages: drumsState.enabledPages, currentPage: 0, lastStep: drumsState.lastStep ?? STEP_COUNT - 1, scale: drumsState.scale, rootNote: drumsState.rootNote, scrollRow: drumsState.scrollRow },
+      juno: { pages: state.tracks.juno.pages, enabledPages: state.tracks.juno.enabledPages, currentPage: 0, lastStep: state.tracks.juno.lastStep ?? STEP_COUNT - 1, scale: state.tracks.juno.scale, rootNote: state.tracks.juno.rootNote, scrollRow: state.tracks.juno.scrollRow, generative: { ...defaultGenerativeVoiceState(), ...state.tracks.juno.generative }, octaveShift: state.tracks.juno.octaveShift ?? 0 },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: {
@@ -505,6 +555,11 @@ export default function App() {
         kind: 'drums', voices: drumVoices, volume: drumsState.volume,
         delaySend: drumsState.delaySend, reverbSend: drumsState.reverbSend,
         cloudsSend: drumsState.cloudsSend ?? 0.4,
+      },
+      juno: {
+        kind: 'juno', patch: state.tracks.juno.patch, bank: state.tracks.juno.bank,
+        volume: state.tracks.juno.volume, delaySend: state.tracks.juno.delaySend, reverbSend: state.tracks.juno.reverbSend,
+        cloudsSend: state.tracks.juno.cloudsSend ?? 0.4,
       },
     };
 
@@ -630,7 +685,7 @@ export default function App() {
   }
 
   function handleNewSong() {
-    setCurrentSongName('New Song');
+    setCurrentSongName(generateSongName());
     setCurrentSongKind('new');
     setCurrentSongId(null);
     function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -639,6 +694,8 @@ export default function App() {
     const ringsBPreset = pick(RINGS_PRESETS);
     const plaitsPreset = pick(PLAITS_PRESETS);
     const drumPreset   = pick(DRUM_PRESETS);
+    const junoBank: '60' | '106' = Math.random() < 0.5 ? '60' : '106';
+    const junoPreset = pick(junoBank === '60' ? JUNO60_PRESETS : JUNO106_PRESETS);
 
     const emptyPages = () => Array.from({ length: PAGE_COUNT }, () => Array(STEP_COUNT).fill(null) as StepValue[]);
 
@@ -647,6 +704,7 @@ export default function App() {
       ringsB: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
       plaits: { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
       drums:  { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'chromatic', rootNote: 0, scrollRow: 0  },
+      juno:   { pages: emptyPages(), enabledPages: [true,false,false,false], currentPage: 0, lastStep: STEP_COUNT - 1, scale: 'major', rootNote: 0, scrollRow: 12, generative: defaultGenerativeVoiceState(), octaveShift: 0 },
     };
     const nextParams: Record<TrackId, AnyTrackParams> = {
       ringsA: { kind: 'rings', model: ringsAPreset.model, params: ringsAPreset.params, lfo: ringsAPreset.lfo, exciter: DEFAULT_EXCITER, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
@@ -660,6 +718,7 @@ export default function App() {
         drumSnare: { ...defaultDrumVoices().drumSnare, ...drumPreset.voices.drumSnare },
         drumKick:  { ...defaultDrumVoices().drumKick,  ...drumPreset.voices.drumKick },
       }, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
+      juno: { kind: 'juno', patch: junoPreset, bank: junoBank, volume: 0.85, delaySend: 0.5, reverbSend: 0.5, cloudsSend: 0.4 },
     };
 
     loadTracks(nextTracks);
@@ -727,6 +786,13 @@ export default function App() {
       Engine.setDrumBlend(vid, dp.voices[vid].blend ?? 0);
     });
 
+    const jp = params.juno as JunoParamsState;
+    Engine.setJunoPatch(jp.patch);
+    Engine.setTrackVolume('juno', jp.volume);
+    Engine.setTrackSend('juno', 'delay', jp.delaySend);
+    Engine.setTrackSend('juno', 'reverb', jp.reverbSend);
+    Engine.setTrackSend('juno', 'clouds', jp.cloudsSend);
+
     Engine.setDelayTime(divisionSeconds(delDiv, bpmVal));
     Engine.setDelayMix(dMix);
     Engine.setDelayFeedback(dFb);
@@ -783,6 +849,7 @@ export default function App() {
     : activeTrack === 'ringsB' ? ' track-rings-b'
     : activeTrack === 'plaits' ? ' track-plaits'
     : activeTrack === 'drums'  ? ' track-drums'
+    : activeTrack === 'juno'   ? ' track-juno'
     : '';
 
   return (
@@ -985,13 +1052,14 @@ export default function App() {
                   lastStep={isCurrentPageLastEnabled ? lastStep : undefined}
                   onSetLastStep={setLastStep}
                   rowLabels={activeTrack === 'drums' ? DRUM_ROW_LABELS : undefined}
-                  noStrum={activeTrack === 'drums'}
+                  noStrum={activeTrack === 'drums' || activeTrack === 'juno'}
                   showVelocity={activeTrack === 'drums'}
                   onToggleNote={toggleNote} onToggleStrumDir={toggleStrumDir}
                   onSetProbability={setProbability}
                   onSetVelocity={setVelocity}
                   onSetWander={activeTrack === 'drums' ? undefined : setWander}
                   onToggleTie={activeTrack === 'plaits' ? toggleTie : undefined}
+                  onSetGate={activeTrack === 'juno' ? setGate : undefined}
                   onScrollUp={scrollUp} onScrollDown={scrollDown}
                 />
               )}
@@ -1036,6 +1104,14 @@ export default function App() {
                       onFilterChange={u => updateActiveParams(p => p.kind === 'plaits'
                         ? ({ ...p, filter: { ...p.filter, ...u } }) : p)}
                       generativeEnabled={generative.enabled}
+                    />
+                  )}
+                  {active.kind === 'juno' && (
+                    <JunoControls
+                      patch={active.patch} bank={active.bank}
+                      presets60={JUNO60_PRESETS} presets106={JUNO106_PRESETS}
+                      onPatchChange={patch => updateActiveParams(p => p.kind === 'juno' ? ({ ...p, patch }) : p)}
+                      onBankChange={bank => updateActiveParams(p => p.kind === 'juno' ? ({ ...p, bank }) : p)}
                     />
                   )}
                   {active.kind === 'drums' && (

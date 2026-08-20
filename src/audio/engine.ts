@@ -5,12 +5,14 @@ export type PlaitsTrackId = 'plaits';
 // 21/22/23 in hardware registration order, see voice.cc) via 3 independent worklets
 // so they can overlap on the same step, unlike the monophonic melodic tracks.
 export type DrumVoiceId = 'drumHihat' | 'drumSnare' | 'drumKick';
-export type TrackId = RingsTrackId | PlaitsTrackId | DrumVoiceId;
+export type JunoTrackId = 'juno';
+export type TrackId = RingsTrackId | PlaitsTrackId | DrumVoiceId | JunoTrackId;
 export const RINGS_TRACK_IDS: RingsTrackId[] = ['ringsA', 'ringsB'];
 export const PLAITS_TRACK_ID: PlaitsTrackId = 'plaits';
 // Order matches the drum grid's row order (top to bottom) — row index === StepData note value.
 export const DRUM_VOICE_IDS: DrumVoiceId[] = ['drumHihat', 'drumSnare', 'drumKick'];
-export const ALL_TRACK_IDS: TrackId[] = [...RINGS_TRACK_IDS, PLAITS_TRACK_ID, ...DRUM_VOICE_IDS];
+export const JUNO_TRACK_ID: JunoTrackId = 'juno';
+export const ALL_TRACK_IDS: TrackId[] = [...RINGS_TRACK_IDS, PLAITS_TRACK_ID, ...DRUM_VOICE_IDS, JUNO_TRACK_ID];
 
 let audioCtx: AudioContext | null = null;
 let isReady = false;
@@ -145,12 +147,15 @@ const tracks = new Map<TrackId, TrackNodes>();
 // cloudsSend into the shared master bus. Caller is responsible for instrument-specific
 // defaults. Takes raw WASM bytes (not a compiled Module) and compiles inside the worklet —
 // Chrome silently hangs instantiating a Module across the postMessage boundary.
-async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmBytes: ArrayBuffer): Promise<AudioWorkletNode> {
+// wasmBytes is omitted for pure-JS processors (currently just juno-processor.js) — those
+// have nothing to load asynchronously, so they post 'ready' synchronously from their own
+// constructor instead of waiting for a 'load-wasm' message.
+async function createTrackWorklet(ctx: AudioContext, id: TrackId, processorName: string, wasmBytes?: ArrayBuffer): Promise<AudioWorkletNode> {
   const worklet = new AudioWorkletNode(ctx, processorName, {
     numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
   });
 
-  worklet.port.postMessage({ type: 'load-wasm', payload: { wasmBytes } });
+  if (wasmBytes) worklet.port.postMessage({ type: 'load-wasm', payload: { wasmBytes } });
   await new Promise<void>((resolve, reject) => {
     worklet.port.onmessage = (e) => {
       if (e.data.type === 'ready') resolve();
@@ -263,6 +268,40 @@ async function createDrumTrack(ctx: AudioContext, id: DrumVoiceId, wasmBytes: Ar
   worklet.port.postMessage({ type: 'set-drum-blend', payload: { value: 0 } });
 }
 
+// Shape of a Junox patch — matches junox.js's `patch` object exactly (see
+// public/juno-processor.js) so `setJunoParam`'s dot-paths and `setJunoPatch`'s
+// whole-object replace both go straight through with zero translation layer.
+export interface JunoPatch {
+  name: string;
+  vca: number;
+  vcaType: 'env' | 'gate';
+  lfo: { autoTrigger: boolean; frequency: number; delay: number };
+  dco: { range: number; saw: boolean; pulse: boolean; sub: boolean; subAmount: number; noise: number; pwm: number; pwmMod: 'l' | 'e' | 'm'; lfo: number };
+  hpf: number;
+  vcf: { frequency: number; resonance: number; modPositive: boolean; envMod: number; lfoMod: number; keyMod: number };
+  env: { attack: number; decay: number; sustain: number; release: number };
+  chorus: number;
+}
+
+// Matches JUNO60_PRESETS[0] ("Strings 1") in presets.ts — see that file's
+// comment for why this is duplicated rather than imported (same convention
+// as createPlaitsTrack/createDrumTrack's own inline defaults).
+const DEFAULT_JUNO_PATCH: JunoPatch = {
+  name: 'Strings 1', vca: 0.5, vcaType: 'env',
+  lfo: { autoTrigger: true, frequency: 0.6, delay: 0 },
+  dco: { range: 1, saw: true, pulse: false, sub: false, subAmount: 0, noise: 0, pwm: 0, pwmMod: 'l', lfo: 0 },
+  hpf: 0,
+  vcf: { frequency: 0.7, resonance: 0, modPositive: true, envMod: 0, lfoMod: 0, keyMod: 1 },
+  env: { attack: 0.4, decay: 0, sustain: 1, release: 0.45 },
+  chorus: 1,
+};
+
+async function createJunoTrack(ctx: AudioContext, patch: JunoPatch = DEFAULT_JUNO_PATCH): Promise<void> {
+  // No WASM — see createTrackWorklet's wasmBytes comment.
+  const worklet = await createTrackWorklet(ctx, JUNO_TRACK_ID, 'juno-processor');
+  worklet.port.postMessage({ type: 'set-patch', payload: { patch } });
+}
+
 // ── initAudio ─────────────────────────────────────────────────────────────
 export async function initAudio(ctx: AudioContext): Promise<void> {
   audioCtx = ctx;
@@ -271,6 +310,7 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
   await audioCtx.audioWorklet.addModule('/rings-processor.js');
   await audioCtx.audioWorklet.addModule('/plaits-processor.js');
   await audioCtx.audioWorklet.addModule('/clouds-processor.js');
+  await audioCtx.audioWorklet.addModule('/juno-processor.js');
 
   // Master bus
   masterGain = audioCtx.createGain();
@@ -415,6 +455,9 @@ export async function initAudio(ctx: AudioContext): Promise<void> {
     await createDrumTrack(audioCtx, id, plaitsBytes);
   }
 
+  // Juno track — no WASM to fetch, see createJunoTrack.
+  await createJunoTrack(audioCtx);
+
   isReady = true;
 }
 
@@ -443,6 +486,42 @@ export function triggerNote(trackId: TrackId, midiNote?: number, velocity?: numb
   const pitch = midiNote ?? (DRUM_VOICE_CONFIG as Record<string, { note: number }>)[trackId]?.note ?? 60;
   const event: VoiceEvent = { trackId, pitch, velocity: velocity ?? 1 };
   for (const cb of voiceListeners) cb(event);
+}
+
+// ── Juno track controls — real note-on/note-off (unlike triggerNote's
+// fire-and-forget one-shot), since Junox is genuinely polyphonic with its
+// own gate/envelope release. See useSequencer.ts's Tone.Loop for how the
+// sequencer schedules the matching junoNoteOff after a note's gate length.
+export function junoNoteOn(midiNote: number, velocity?: number): void {
+  const t = tracks.get(JUNO_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'note-on', payload: { note: midiNote, velocity } });
+
+  const event: VoiceEvent = { trackId: JUNO_TRACK_ID, pitch: midiNote, velocity: velocity ?? 1 };
+  for (const cb of voiceListeners) cb(event);
+}
+export function junoNoteOff(midiNote: number): void {
+  const t = tracks.get(JUNO_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'note-off', payload: { note: midiNote } });
+}
+export function junoAllNotesOff(): void {
+  const t = tracks.get(JUNO_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'all-notes-off' });
+}
+export function setJunoPatch(patch: JunoPatch): void {
+  const t = tracks.get(JUNO_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-patch', payload: { patch } });
+}
+// path is one of Junox's own dot-paths into its patch object (e.g.
+// 'vcf.frequency', 'env.attack', 'dco.noise', 'hpf', 'chorus') — forwarded
+// as-is, see junox.js's setValue().
+export function setJunoParam(path: string, value: number): void {
+  const t = tracks.get(JUNO_TRACK_ID);
+  if (!t || !isReady) return;
+  t.worklet.port.postMessage({ type: 'set-param', payload: { path, value } });
 }
 
 export function setTrackSend(trackId: TrackId, kind: 'delay' | 'reverb' | 'clouds', value: number): void {

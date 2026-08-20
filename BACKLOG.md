@@ -65,6 +65,20 @@ against actual experience playing with Phase 1 before building any of these):
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-08-19** — Juno-60 track: a genuinely new 5th track (not a mode-swap),
+  polyphonic, real gate-length control (a new `StepData.gateSteps`
+  sequencer primitive — Junox has actual note-on/note-off, unlike every
+  other track here). Vendored from JunoX (GPL-3.0), pure JS/AudioWorklet, no
+  WASM. A Bank toggle switches between two real factory patch banks — 56
+  Juno-60 presets ported from JunoX's own source, and 128 Juno-106 presets
+  converted from an xlsx JunoX ships but never wires in (a real hardware
+  patch dump, unzipped and parsed this session). 11 curated knobs including
+  Noise + HPF (key to airy/cloudy textures) and a real LFO section (Rate/
+  Delay/DCO Depth/VCF Depth — one LFO with multiple destinations, matching
+  real hardware, not a per-parameter LFO pool like Rings/Plaits) — all
+  explicitly requested. D-50
+  character remains deferred — see the "no usable open-source engine" entry
+  below. See AGENTS.md "Juno-60 track" for the full writeup.
 - **2026-08-17** — Octave shift (-2..+2, all melodic tracks), Note Wander
   (0-5 scale-degree drift per step, first pass — simple uniform random, meant
   to be tried and revisited), and Plaits Tie (per-step gate extension reusing
@@ -344,6 +358,56 @@ once this session) and the WASM export-letter discovery process for wrapper chan
   resampler. Adequate for a granular texture effect but introduces some aliasing.
   Worth revisiting with a proper resampler if the wet signal sounds gritty even at
   low density/texture.
+
+### Bristol — catalog of open-source vintage synth emulations for future track ideas (researched 2026-08-19)
+- While researching an engine for the new Juno track (see "Juno-60/106 polyphonic
+  track" below), surveyed [Bristol](https://sourceforge.net/projects/bristol/), a
+  mature 20+ year old GPL Linux synth emulator (engine + a GUI called "brighton").
+  It emulates 38 instruments total — full list, by family:
+  - **Moog**: Mini, Voyager, Voyager Electric Blue, Memorymoog, Sonic Six, MG-1
+    Concertmate
+  - **Sequential Circuits**: Prophet-5, Prophet-5/FX, Prophet-10, Pro-One
+  - **Oberheim**: OB-X, OB-Xa
+  - **ARP**: Axxe, Odyssey, 2600, Solina String Ensemble
+  - **Korg**: Polysix, Poly-800, Mono/Poly, MS-20 (unfinished)
+  - **Roland**: Juno-60, Jupiter-8 (no D-50, no Juno-106 — confirmed, see below)
+  - **Yamaha**: DX-7, CS-80 (unfinished)
+  - **Fender/Crumar**: Rhodes Mark-I Stage 73, Rhodes Bass Piano, Roadrunner,
+    Bit-01, Bit-99, Bit+Mods, Stratus, Trilogy
+  - **Hammond**: B3 (default engine)
+  - **Other**: Vox Continental, Vox Continental Super/300/II, Baumann BME-700,
+    Commodore 64 SID chip synth ("Sidney"), SID polysynth ("Melbourne",
+    unfinished), EMS Synthi-A ("aks", unfinished), a granular synth (unfinished),
+    a 16-track mixer (test-only), its own "Bassmaker" step sequencer
+  - Source: [Bristol manpage](https://manpages.ubuntu.com/manpages/bionic/man1/bristol.1.html)
+- **Important caveat before picking any of these for a future track**: Bristol is
+  architected as a standalone JACK/ALSA app — its own C engine process talks to the
+  "brighton" GUI over a custom socket/IPC protocol. Extracting just the per-voice
+  DSP from any one of these would be a real, nontrivial port (unlike JunoX below,
+  which is already a clean, drop-in-shaped Web Audio library). Don't assume "it's
+  on the list" means "it's easy to add" — budget real porting time.
+- Logged here purely as a reference list for when the next track/engine idea comes
+  up — not scoped or prioritized, just don't lose track of what's out there.
+
+### Roland D-50 / LA synthesis — no usable open-source engine exists (researched 2026-08-19)
+- Looked for an engine to pair with the new Juno track (user wanted D-50 and/or
+  Juno character, switchable). Bristol doesn't have D-50 (see above).
+  [DSynkant](https://github.com/ngeiswei/dsynkant) is the one real attempt — GPL,
+  has recent commits (Jan 2026, adding CPU/service-manual reverse-engineering
+  notes) — but its own README says plainly: "no GUI, no presets, and no sound."
+  It's a reverse-engineering scaffold, not a working synth. Nothing to port.
+- Why this niche is empty: D-50's sound is a short PCM "attack transient" sample
+  (bell/pluck/breath — actual copyrighted Roland ROM data, not legally
+  redistributable) layered onto a synthesized "LA" tone that's itself just
+  subtractive synthesis (DCO + resonant low-pass filter) — structurally close to
+  a Juno voice. That's likely why Juno clones exist and D-50 clones don't: half of
+  D-50 is Juno-shaped and buildable, the other half depends on samples nobody can
+  legally ship.
+- If D-50 character is wanted later: don't keep searching for a pre-built engine —
+  there isn't one. Instead, reuse the Juno track's own DCO/VCF/VCA as the
+  synthesized layer and add a short *synthesized* (not sampled) transient on top —
+  same layering trick already used for Plaits' Cloud Atmosphere engine (harmonic
+  tone + filtered noise layer). That's a build, not a find.
 
 ### Beads (Mutable Instruments' newer granular/resonator module) — needs firmware source
 - Checked 2026-07-01: `rings-source/` (the `pichenettes/eurorack` clone in this repo)

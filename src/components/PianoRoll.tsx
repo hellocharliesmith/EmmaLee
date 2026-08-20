@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { noteName, STEP_COUNT, PROB_OPTIONS, VELOCITY_OPTIONS,
+import { noteName, STEP_COUNT, PROB_OPTIONS, VELOCITY_OPTIONS, GATE_OPTIONS, DEFAULT_GATE_STEPS,
          type StepValue } from '../hooks/useSequencer';
 
 const PROB_LABELS: Record<number, string> = {
@@ -52,6 +52,7 @@ interface Props {
   onSetVelocity?: (col: number, velocity: number) => void;
   onSetWander?: (col: number, wander: number) => void;
   onToggleTie?: (col: number) => void;
+  onSetGate?: (col: number, gateSteps: number) => void;
   onScrollUp: () => void;
   onScrollDown: () => void;
 }
@@ -60,7 +61,7 @@ export function PianoRoll({
   steps, visibleNotes, rootNote, scroll, maxScroll,
   currentStep, lastStep, onSetLastStep,
   kidsMode, rowLabels, noStrum, showVelocity,
-  onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onSetWander, onToggleTie,
+  onToggleNote, onToggleStrumDir, onSetProbability, onSetVelocity, onSetWander, onToggleTie, onSetGate,
   onScrollUp, onScrollDown,
 }: Props) {
   const effectiveLastStep = lastStep ?? STEP_COUNT - 1;
@@ -261,8 +262,10 @@ export function PianoRoll({
           </div>
         )}
 
-        {/* Wander row with label (melodic tracks only — first pass, see AGENTS.md "Note Wander") */}
-        {!kidsMode && !noStrum && onSetWander && (
+        {/* Wander row with label (melodic tracks only — first pass, see AGENTS.md "Note Wander").
+            Gated purely on onSetWander (not noStrum) -- noStrum is also true for Juno now
+            (real polyphony needs no strum), but Juno still wants Wander. */}
+        {!kidsMode && onSetWander && (
           <div className="pr-meta-row">
             <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Wander</div>
             <div className="pr-wander-row">
@@ -308,6 +311,33 @@ export function PianoRoll({
                         : 'Click to tie — holds the previous note through this step instead of retriggering'}
                     >
                       {tied ? '—' : '·'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Gate row with label (Juno only — real note-off after this many steps, see AGENTS.md "Juno-60 track") */}
+        {!kidsMode && onSetGate && (
+          <div className="pr-meta-row">
+            <div className="pr-meta-lbl" style={{ width: metaLblWidth }}>Gate</div>
+            <div className="pr-gate-row">
+              {Array.from({ length: STEP_COUNT }, (_, i) => {
+                const step = steps[i];
+                if (!step || step.notes.length === 0) return <div key={i} className="pr-gate-cell" />;
+                const gateSteps = step.gateSteps ?? DEFAULT_GATE_STEPS;
+                const idx  = GATE_OPTIONS.indexOf(gateSteps as typeof GATE_OPTIONS[number]);
+                const next = GATE_OPTIONS[(idx === -1 ? 0 : (idx + 1) % GATE_OPTIONS.length)];
+                return (
+                  <div key={i} className="pr-gate-cell">
+                    <button
+                      className={`pr-gate-btn${gateSteps !== DEFAULT_GATE_STEPS ? ' active' : ''}`}
+                      onClick={() => onSetGate(i, next)}
+                      title={`Held for ${gateSteps} step${gateSteps > 1 ? 's' : ''} before releasing — click to change`}
+                    >
+                      {gateSteps}
                     </button>
                   </div>
                 );

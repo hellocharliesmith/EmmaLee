@@ -1,5 +1,21 @@
 import type { SongState } from './types';
-import { NO_LFO } from './presets';
+import { NO_LFO, JUNO60_PRESETS } from './presets';
+
+// Both demos predate the Juno track (added 2026-08-19) — same empty-pages
+// default `makeDefaultTrackState` gives a fresh Juno track, loaded with the
+// first factory patch ("Strings 1").
+const DEMO_JUNO_TRACK = {
+  pages: [Array(32).fill(null), Array(32).fill(null), Array(32).fill(null), Array(32).fill(null)],
+  enabledPages: [true, false, false, false],
+  scale: 'major' as const,
+  rootNote: 0,
+  scrollRow: 7,
+  volume: 0.85,
+  delaySend: 0.5,
+  reverbSend: 0.5,
+  patch: JUNO60_PRESETS[0],
+  bank: '60' as const,
+};
 
 export interface DemoSong {
   id: string;
@@ -12,7 +28,7 @@ export const DEMO_SONGS: DemoSong[] = [
     id: 'demo-1',
     name: 'Demo 1',
     state: {
-      version: 3,
+      version: 4,
       bpm: 72,
       tracks: {
         ringsA: {
@@ -109,6 +125,7 @@ export const DEMO_SONGS: DemoSong[] = [
           delaySend: 0.5,
           reverbSend: 0.5,
         },
+        juno: DEMO_JUNO_TRACK,
       },
       delayDivision: '1/8',
       delayMix: 0.24,
@@ -125,7 +142,7 @@ export const DEMO_SONGS: DemoSong[] = [
     id: 'demo-2',
     name: 'Phased and Bent',
     state: {
-      "version": 3,
+      "version": 4,
       "bpm": 88,
       "tracks": {
         "ringsA": {
@@ -1201,7 +1218,8 @@ export const DEMO_SONGS: DemoSong[] = [
           "delaySend": 0.6583333333333333,
           "reverbSend": 0.27499999999999997,
           "cloudsSend": 0.4
-        }
+        },
+        "juno": DEMO_JUNO_TRACK
       },
       "delayDivision": "1/8",
       "delayMix": 0.24,

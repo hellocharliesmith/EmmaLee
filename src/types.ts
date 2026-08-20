@@ -1,6 +1,7 @@
 import type { ScaleType, StepValue, TrackId, GenerativeVoiceState } from './hooks/useSequencer';
-import type { ExciterModel } from './audio/engine';
+import type { ExciterModel, JunoPatch } from './audio/engine';
 export type { StepValue, TrackId };
+export type { JunoPatch };
 
 export interface LfoState {
   on: boolean;
@@ -92,14 +93,25 @@ export interface DrumTrackState extends BaseTrackState {
   }>;
 }
 
+// Juno track (added 2026-08-19, see AGENTS.md "Juno-60 track") — genuinely
+// polyphonic, real note-on/note-off gate semantics via the vendored JunoX
+// engine (public/juno-processor.js), unlike every other track here.
+export interface JunoTrackState extends BaseTrackState {
+  patch: JunoPatch; // the whole current patch, saved as one blob -- matches Junox's own setPatch/setValue API
+  bank: '60' | '106'; // which factory preset list the dropdown shows -- UI-only, doesn't affect `patch` itself
+  generative?: GenerativeVoiceState; // same optional field every other melodic track has, see App.tsx's loadSong
+  octaveShift?: number; // optional -- old saves default to 0, see App.tsx's loadSong
+}
+
 export interface SongState {
-  version: 3;
+  version: 4;
   bpm: number;
   tracks: {
     ringsA: RingsTrackState;
     ringsB: RingsTrackState;
     plaits: PlaitsTrackState;
     drums: DrumTrackState;
+    juno: JunoTrackState;
   };
   // Master
   delayDivision: string;
@@ -114,6 +126,29 @@ export interface SongState {
 }
 
 // ── Legacy formats (kept only so old saves still load) ────────────────────────
+
+// Pre-Juno-track save format (version 3) — identical to today's SongState
+// minus tracks.juno. See App.tsx's loadSong for the fallback that supplies
+// a default Juno track state when loading one of these.
+export interface LegacySongStateV3 {
+  version: 3;
+  bpm: number;
+  tracks: {
+    ringsA: RingsTrackState;
+    ringsB: RingsTrackState;
+    plaits: PlaitsTrackState;
+    drums: DrumTrackState;
+  };
+  delayDivision: string;
+  delayMix: number;
+  delayFeedback: number;
+  delayFilter: number;
+  reverbType: string;
+  reverbMix: number;
+  reverbDecay: number;
+  reverbPreDelay: number;
+  reverbTone: number;
+}
 
 interface LegacyBaseTrackV2 {
   steps: StepValue[];
@@ -175,5 +210,5 @@ export interface SavedSong {
   id: string;
   name: string;
   savedAt: number;
-  state: SongState | LegacySongStateV2 | LegacySongStateV1;
+  state: SongState | LegacySongStateV3 | LegacySongStateV2 | LegacySongStateV1;
 }

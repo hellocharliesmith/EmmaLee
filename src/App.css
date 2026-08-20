@@ -1,8 +1,15 @@
 :root {
-  /* ── Raw palette tokens (rose / teal / sage / slate / neutral-dark only) ── */
+  /* ── Raw palette tokens (rose / teal / sage / slate / neutral-dark / amber) ──
+     amber added 2026-08-19 for the Juno track — every prior hue was already
+     claimed by an existing track (see AGENTS.md "Color system"), so this is a
+     genuinely new 6th family, not a previously-unused spare. */
   --rose-50: #f6f3f4;  --rose-100: #eae1e3; --rose-200: #d4c4c7; --rose-300: #baa1a5;
   --rose-400: #a07d83; --rose-500: #76565b; --rose-600: #5e4549; --rose-700: #4a3639;
   --rose-800: #352729; --rose-900: #231a1b; --rose-950: #150f10;
+
+  --amber-50: #f6f4f0;  --amber-100: #e9e2d3; --amber-200: #d4c7a8; --amber-300: #bcac82;
+  --amber-400: #a3915f; --amber-500: #786a45; --amber-600: #605939; --amber-700: #4b462d;
+  --amber-800: #363320; --amber-900: #232116; --amber-950: #16140d;
 
   --teal-50: #f3f6f6;  --teal-100: #e1eae9; --teal-200: #c4d4d3; --teal-300: #a1bab9;
   --teal-400: #7da09e; --teal-500: #567674; --teal-600: #455e5d; --teal-700: #364a48;
@@ -47,6 +54,7 @@
 .app.track-rings-b { --accent: var(--teal-400);  --accent-dark: var(--teal-500);  --accent-light: var(--teal-300); }
 .app.track-plaits  { --accent: var(--sage-400);  --accent-dark: var(--sage-500);  --accent-light: var(--sage-300); }
 .app.track-drums   { --accent: var(--slate-400); --accent-dark: var(--slate-500); --accent-light: var(--slate-300); }
+.app.track-juno    { --accent: var(--amber-400); --accent-dark: var(--amber-500); --accent-light: var(--amber-300); }
 .app.track-master  { --accent: var(--neutral-dark-300); --accent-dark: var(--neutral-dark-400); --accent-light: var(--neutral-dark-200); }
 
 /* Content sits directly on the page background, edge-to-edge — no bordered
@@ -1095,6 +1103,39 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
 .pr-tie-btn:hover        { border-color: #a478e0; color: #a478e0; }
 .pr-tie-btn.active       { color: #a478e0; border-color: rgba(164,120,224,0.5); background: rgba(164,120,224,0.08); }
 .pr-tie-btn.active:hover { background: rgba(164,120,224,0.15); }
+
+/* Gate row (Juno only) — amber accent, matches the Juno track's own color */
+.pr-gate-row {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  height: 22px;
+}
+.pr-gate-cell {
+  width: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pr-gate-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--border-disabled);
+  font-size: 8px;
+  width: 25px;
+  height: 20px;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.pr-gate-btn:hover        { border-color: #a3915f; color: #a3915f; }
+.pr-gate-btn.active       { color: #a3915f; border-color: rgba(163,145,95,0.5); background: rgba(163,145,95,0.08); }
+.pr-gate-btn.active:hover { background: rgba(163,145,95,0.15); }
 .pr-strum-cell {
   width: 26px;
   flex-shrink: 0;

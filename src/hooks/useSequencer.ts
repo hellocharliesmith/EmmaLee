@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import * as Tone from 'tone';
 import { triggerNote, setExciterGateMs, setPlaitsEnvelopeAttackMs, setPlaitsEnvelopeSustain,
+         junoNoteOn, junoNoteOff, junoAllNotesOff,
          DRUM_VOICE_IDS, type RingsTrackId } from '../audio/engine';
 import { tickGenerativeVoice, makeGenerativeEngineState, defaultGenerativeVoiceState,
          type GenerativeVoiceState, type GenerativeEngineState } from '../audio/generative';
@@ -10,7 +11,7 @@ export type ScaleType = 'major' | 'melodic-minor' | 'chromatic';
 // UI/tab-level track id — distinct from engine.ts's TrackId (which addresses 6
 // individual worklets). The Drums tab is ONE tab/grid here but maps to 3 separate
 // engine.ts tracks (drumHihat/drumSnare/drumKick) — see the playback loop below.
-export type TrackId = 'ringsA' | 'ringsB' | 'plaits' | 'drums';
+export type TrackId = 'ringsA' | 'ringsB' | 'plaits' | 'drums' | 'juno';
 export const DRUM_ROW_LABELS = ['Hi-Hat', 'Snare', 'Kick']; // top to bottom, matches DRUM_VOICE_IDS order
 
 export interface StepData {
@@ -29,6 +30,10 @@ export interface StepData {
   // SCALE-DEGREE steps (not semitones) up or down, independently re-rolled
   // every time this step plays. See AGENTS.md "Note Wander".
   wander?: number;
+  // Juno-only: how many steps this step's note(s) stay held before a real
+  // note-off fires (Junox has genuine gate semantics, unlike every other
+  // engine here) — default DEFAULT_GATE_STEPS. See AGENTS.md "Juno-60 track".
+  gateSteps?: number;
 }
 export type StepValue = StepData | null;
 export const MAX_NOTES_PER_STEP = 4;
@@ -37,13 +42,15 @@ export const PAGE_COUNT   = 4;
 export const VISIBLE_ROWS = 12;
 export const PROB_OPTIONS     = [1, 0.75, 0.66, 0.5, 0.33, 0.25] as const;
 export const VELOCITY_OPTIONS = [1, 0.75, 0.5, 0.25] as const;
+export const GATE_OPTIONS     = [1, 2, 3, 4, 6, 8, 12, 16] as const;
+export const DEFAULT_GATE_STEPS = 4;
 
-export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'drums'];
-export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits', drums: 'Drums' };
+export const TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'drums', 'juno'];
+export const TRACK_LABELS: Record<TrackId, string> = { ringsA: 'Rings A', ringsB: 'Rings B', plaits: 'Plaits', drums: 'Drums', juno: 'Juno' };
 // Key (scale/root) is a global setting, not per-track — these are the tracks it
 // actually applies to. Drums keeps its own fixed chromatic/0 (it addresses rows
 // by voice, not pitch) and is deliberately left out of the global key changes.
-const MELODIC_TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits'];
+const MELODIC_TRACK_IDS: TrackId[] = ['ringsA', 'ringsB', 'plaits', 'juno'];
 
 const SCALE_INTERVALS: Record<ScaleType, number[]> = {
   'major':         [0, 2, 4, 5, 7, 9, 11],
@@ -177,15 +184,15 @@ function makeDefaultTrackState(id: TrackId): TrackSeqState {
 }
 
 function initPlayingPages(): Record<TrackId, number> {
-  return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0 };
+  return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0, juno: 0 };
 }
 
 function initTrackSteps(): Record<TrackId, number> {
-  return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0 };
+  return { ringsA: 0, ringsB: 0, plaits: 0, drums: 0, juno: 0 };
 }
 
 function initCurrentSteps(): Record<TrackId, number> {
-  return { ringsA: -1, ringsB: -1, plaits: -1, drums: -1 };
+  return { ringsA: -1, ringsB: -1, plaits: -1, drums: -1, juno: -1 };
 }
 
 function initGenerativeEngineStates(): Record<TrackId, GenerativeEngineState> {
@@ -193,6 +200,7 @@ function initGenerativeEngineStates(): Record<TrackId, GenerativeEngineState> {
     ringsA: makeGenerativeEngineState(),
     ringsB: makeGenerativeEngineState(),
     plaits: makeGenerativeEngineState(),
+    juno: makeGenerativeEngineState(),
     drums: makeGenerativeEngineState(), // never read (drums has no `generative` config), kept for uniform typing
   };
 }
@@ -213,6 +221,11 @@ export function useSequencer() {
   const trackStepsRef = useRef(initTrackSteps());
   const generativeStateRef = useRef(initGenerativeEngineStates());
   const plaitsTieHeldRef = useRef(false); // true while a tie-chain is currently holding the envelope open
+  // Juno-only: notes currently held open, counting down to their real
+  // note-off. `remaining` decrements once per Tone.Loop tick (one 16th-note
+  // step); reaching 0 fires junoNoteOff and drops the entry. See "Juno gate
+  // length" in the Tone.Loop below.
+  const junoActiveNotesRef = useRef<{ note: number; remaining: number }[]>([]);
 
   const tracksRef = useRef(tracks);
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
@@ -357,6 +370,20 @@ export function useSequencer() {
     });
   }, [activeTrack]);
 
+  // Juno gate length — 0-op on an empty step (same convention as setWander/
+  // setProbability), only meaningful on a step that already has a note.
+  const setGate = useCallback((col: number, gateSteps: number) => {
+    updateTrack(activeTrack, prev => {
+      const p = prev.currentPage;
+      const step = prev.pages[p][col];
+      if (!step) return prev;
+      const newPageSteps = [...prev.pages[p]];
+      newPageSteps[col] = { ...step, gateSteps };
+      const newPages = prev.pages.map((pg, i) => i === p ? newPageSteps : pg);
+      return { ...prev, pages: newPages };
+    });
+  }, [activeTrack]);
+
   // Bulk-write the active track's currentPage in one shot (32 StepValues) — used
   // by the Grids pattern generator (App.tsx) to fill a whole drum page from a
   // single "Generate" click, instead of 32 individual toggleNote calls.
@@ -487,6 +514,23 @@ export function useSequencer() {
       }, time);
 
       for (const id of TRACK_IDS) {
+        // Juno gate length — decrement every currently-held note's remaining
+        // step count and release (real note-off) any that reach 0. Runs every
+        // tick regardless of this track's own page/column resolution below,
+        // so a held note always gets released even if its page cycling lapses.
+        if (id === 'juno') {
+          const stillHeld: { note: number; remaining: number }[] = [];
+          for (const held of junoActiveNotesRef.current) {
+            const remaining = held.remaining - 1;
+            if (remaining <= 0) {
+              Tone.getDraw().schedule(() => junoNoteOff(held.note), time);
+            } else {
+              stillHeld.push({ note: held.note, remaining });
+            }
+          }
+          junoActiveNotesRef.current = stillHeld;
+        }
+
         const pageIdx = resolvedPage[id];
         const col     = resolvedCol[id];
         if (pageIdx === -1 || col < 0) continue;
@@ -558,6 +602,23 @@ export function useSequencer() {
           continue;
         }
 
+        // Juno — real polyphony, no strum (all notes in the chord fire
+        // simultaneously) and a real note-off scheduled `gateSteps` ticks from
+        // now instead of Rings/Plaits' fire-and-forget trigger+decay.
+        if (id === 'juno') {
+          const gateSteps = step.gateSteps ?? DEFAULT_GATE_STEPS;
+          const velocity = step.velocity ?? 1;
+          for (const rawNote of step.notes) {
+            const midi = applyWander(rawNote, step.wander ?? 0, t.rootNote, t.scale) + octaveShift * 12;
+            Tone.getDraw().schedule(() => junoNoteOn(midi, velocity), time);
+            junoActiveNotesRef.current = [
+              ...junoActiveNotesRef.current.filter(h => h.note !== midi),
+              { note: midi, remaining: gateSteps },
+            ];
+          }
+          continue;
+        }
+
         const wanderRange = step.wander ?? 0;
         const transform = (n: number) => applyWander(n, wanderRange, t.rootNote, t.scale) + octaveShift * 12;
         const ordered = (step.strumDown ? [...step.notes].reverse() : [...step.notes]).map(transform);
@@ -586,6 +647,10 @@ export function useSequencer() {
     setCurrentSteps(initCurrentSteps());
     setCurrentPagePlaying(initPlayingPages());
     setIsPlaying(false);
+    // Release any Juno notes still held open — otherwise a note whose gate
+    // hadn't elapsed yet would keep sounding forever after Stop.
+    junoActiveNotesRef.current = [];
+    junoAllNotesOff();
   }, []);
 
   const updateBpm = useCallback((value: number) => {
@@ -612,7 +677,7 @@ export function useSequencer() {
     setGenerativeConfig,
     octaveShift: track.octaveShift ?? 0,
     setOctaveShift,
-    toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps, toggleTie, setWander,
+    toggleNote, toggleStrumDir, setProbability, setVelocity, setPageSteps, toggleTie, setWander, setGate,
     loadTracks, clearCurrentPage,
     setScale, setRootNote, scrollUp, scrollDown, setScrollRowDirect,
     switchToPage, setCurrentPage, togglePageEnabled,
