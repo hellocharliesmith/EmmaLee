@@ -230,15 +230,37 @@ export default function App() {
     updateTrackParamsFor(activeTrack, fn);
   }
 
+  // ── Mute (Master mixer) ──────────────────────────────────────────────
+  // Session-only, like kidsMode/cloudsUi below — not part of the save
+  // format. Mute never touches the stored `volume` — it just zeroes the
+  // actual engine output on top of it, so unmuting restores exactly the
+  // fader position it was at.
+  const [mutedTracks, setMutedTracks] = useState<Record<TrackId, boolean>>(() => {
+    const init = {} as Record<TrackId, boolean>;
+    for (const id of TRACK_IDS) init[id] = false;
+    return init;
+  });
+
   // Drums is one UI tab but 3 separate engine.ts tracks — volume/sends broadcast to all 3.
-  function setVolumeFor(id: TrackId, v: number) {
-    updateTrackParamsFor(id, p => ({ ...p, volume: v }));
+  function applyVolumeToEngine(id: TrackId, v: number, muted: boolean) {
+    const effective = muted ? 0 : v;
     if (id === 'drums') {
       const voices = (trackParams.drums as DrumParamsState).voices;
-      DRUM_VOICE_IDS.forEach(vid => Engine.setTrackVolume(vid, (voices[vid].volume ?? 1) * v));
+      DRUM_VOICE_IDS.forEach(vid => Engine.setTrackVolume(vid, (voices[vid].volume ?? 1) * effective));
     } else {
-      Engine.setTrackVolume(id, v);
+      Engine.setTrackVolume(id, effective);
     }
+  }
+  function setVolumeFor(id: TrackId, v: number) {
+    updateTrackParamsFor(id, p => ({ ...p, volume: v }));
+    applyVolumeToEngine(id, v, mutedTracks[id]);
+  }
+  function toggleMute(id: TrackId) {
+    setMutedTracks(prev => {
+      const nextMuted = !prev[id];
+      applyVolumeToEngine(id, trackParams[id].volume, nextMuted);
+      return { ...prev, [id]: nextMuted };
+    });
   }
   function setSendFor(id: TrackId, kind: 'delay' | 'reverb' | 'clouds', v: number) {
     const field = kind === 'delay' ? 'delaySend' : kind === 'reverb' ? 'reverbSend' : 'cloudsSend';
@@ -492,6 +514,15 @@ export default function App() {
     // in-place-saveable, or a later plain Save would silently no-op (update()
     // can't find an id that isn't actually in the list).
     setCurrentSongId(song.savedAt !== 0 && songs.some(s => s.id === song.id) ? song.id : null);
+    // Mute is session-only (see its own state above) — a freshly-loaded song
+    // should start with nothing muted, and this also keeps mutedTracks from
+    // going stale against the fresh syncParamsToEngine call below (which sets
+    // raw, unmuted volume for every track regardless of prior mute state).
+    setMutedTracks(prev => {
+      const next = { ...prev };
+      for (const id of TRACK_IDS) next[id] = false;
+      return next;
+    });
     const raw = song.state;
     let state: SongState;
     if ('version' in raw && raw.version === 4) {
@@ -688,6 +719,12 @@ export default function App() {
     setCurrentSongName(generateSongName());
     setCurrentSongKind('new');
     setCurrentSongId(null);
+    // Same reasoning as loadSong's reset — see its comment.
+    setMutedTracks(prev => {
+      const next = { ...prev };
+      for (const id of TRACK_IDS) next[id] = false;
+      return next;
+    });
     function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
     const ringsAPreset = pick(RINGS_PRESETS);
@@ -749,7 +786,7 @@ export default function App() {
         Engine.setLFODepth(id, i, l.depth);
         Engine.setLFOEnabled(id, i, l.on);
       });
-      Engine.setTrackVolume(id, p.volume);
+      applyVolumeToEngine(id, p.volume, mutedTracks[id]);
       Engine.setTrackSend(id, 'delay', p.delaySend);
       Engine.setTrackSend(id, 'reverb', p.reverbSend);
       Engine.setTrackSend(id, 'clouds', p.cloudsSend);
@@ -769,14 +806,14 @@ export default function App() {
       Engine.setPlaitsLFODepth(i, l.depth);
       Engine.setPlaitsLFOEnabled(i, l.on);
     });
-    Engine.setTrackVolume('plaits', pp.volume);
+    applyVolumeToEngine('plaits', pp.volume, mutedTracks.plaits);
     Engine.setTrackSend('plaits', 'delay', pp.delaySend);
     Engine.setTrackSend('plaits', 'reverb', pp.reverbSend);
     Engine.setTrackSend('plaits', 'clouds', pp.cloudsSend);
 
     const dp = params.drums as DrumParamsState;
+    applyVolumeToEngine('drums', dp.volume, mutedTracks.drums);
     DRUM_VOICE_IDS.forEach(vid => {
-      Engine.setTrackVolume(vid, (dp.voices[vid].volume ?? 1) * dp.volume);
       Engine.setTrackSend(vid, 'delay', dp.delaySend);
       Engine.setTrackSend(vid, 'reverb', dp.reverbSend);
       Engine.setTrackSend(vid, 'clouds', dp.cloudsSend);
@@ -788,7 +825,7 @@ export default function App() {
 
     const jp = params.juno as JunoParamsState;
     Engine.setJunoPatch(jp.patch);
-    Engine.setTrackVolume('juno', jp.volume);
+    applyVolumeToEngine('juno', jp.volume, mutedTracks.juno);
     Engine.setTrackSend('juno', 'delay', jp.delaySend);
     Engine.setTrackSend('juno', 'reverb', jp.reverbSend);
     Engine.setTrackSend('juno', 'clouds', jp.cloudsSend);
@@ -1208,6 +1245,11 @@ export default function App() {
                           value={trackParams[id].volume}
                           onChange={v => setVolumeFor(id, v)}
                         />
+                        <button
+                          className={`mixer-mute-btn${mutedTracks[id] ? ' muted' : ''}`}
+                          onClick={() => toggleMute(id)}
+                          title={mutedTracks[id] ? `Unmute ${TRACK_LABELS[id]}` : `Mute ${TRACK_LABELS[id]}`}
+                        >M</button>
                         <div className="mixer-fader-label" style={{ color: TRACK_FADER_COLORS[id][0] }}>
                           {TRACK_LABELS[id]}
                         </div>

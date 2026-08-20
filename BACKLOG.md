@@ -65,6 +65,9 @@ against actual experience playing with Phase 1 before building any of these):
 
 ## Recently shipped (remove from here once stale)
 
+- **2026-08-20** — Mute buttons on the Master mixer's per-track faders (not
+  Master itself). Session-only, doesn't touch the stored volume — resets to
+  unmuted on song load/new song. See AGENTS.md "Mixer mute buttons".
 - **2026-08-19** — Juno-60 track: a genuinely new 5th track (not a mode-swap),
   polyphonic, real gate-length control (a new `StepData.gateSteps`
   sequencer primitive — Junox has actual note-on/note-off, unlike every

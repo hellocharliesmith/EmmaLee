@@ -1450,6 +1450,29 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
    for Master. Per-track faders get their tint via Slider's `accent` prop. */
 .dv-slider.v-fader-master { width: 26px; height: 140px; border-color: var(--border-disabled); }
 
+/* Mute button — sits between the fader and its label. Always the same red
+   regardless of the track's own accent color (universal mute convention,
+   same red used by .audio-banner.error). */
+.mixer-mute-btn {
+  width: 24px;
+  height: 18px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--border-disabled);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-family: ui-monospace, monospace;
+  transition: all 0.1s;
+}
+.mixer-mute-btn:hover        { border-color: var(--border-hover); color: var(--text-tertiary); }
+.mixer-mute-btn.muted        { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+.mixer-mute-btn.muted:hover  { background: rgba(239,68,68,0.24); }
+
 /* ── Waveform meter ── */
 .waveform-wrap {
   flex: 1;

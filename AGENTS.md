@@ -1248,6 +1248,25 @@ correct labels, and dragging DCO Depth + VCF Depth live during an active
 Play session (note held via the Gate mechanism) produced zero console
 errors.
 
+## Mixer mute buttons (added 2026-08-20)
+
+A small "M" button per track on the Master tab's mixer strip (not on
+Master itself — muting the whole mix is what Stop is for). Session-only,
+like `kidsMode`/`cloudsUi`/`gridsUi` — not part of the save format, and
+deliberately reset to all-unmuted on `loadSong`/`handleNewSong` so it can
+never end up stale against those functions' own `syncParamsToEngine` call
+(which sets each track's raw, unmuted volume from the loaded song — without
+the reset, a muted track's UI state and actual audio would disagree).
+
+Mute never touches the stored `volume` value — it's purely an audio-side
+cut layered on top, via a new `applyVolumeToEngine(id, v, muted)` helper in
+`App.tsx` that all three call sites needing to push a track's volume to the
+engine now go through (`setVolumeFor`, and the two `Engine.setTrackVolume`
+call sites inside `syncParamsToEngine` that used to call it directly) —
+so unmuting always restores exactly the fader position it was at, and there
+was only one place to add mute-awareness rather than three. Drums keeps its
+existing special case (per-voice volume multiply) inside that same helper.
+
 ## Key decisions worth knowing before you change things
 
 - **Color system (added 2026-06-21, corrected 2026-08-19)**: CSS custom properties
