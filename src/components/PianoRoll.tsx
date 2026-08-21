@@ -208,6 +208,17 @@ export function PianoRoll({
 
         </div>{/* end pr-row */}
 
+        {/* Scroll down — sits right below the grid instead of after the extra
+            parameter rows. Sticky-pinned to the scroll viewport's left edge so
+            it stays put during horizontal scroll (mobile), matching how it
+            behaved as a sibling outside piano-roll-scroll before this moved. */}
+        {!rowLabels && (
+          <div className="pr-scroll-row pr-scroll-row--bottom">
+            <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
+              onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
+          </div>
+        )}
+
         {/* Strum direction row with label */}
         {!kidsMode && !noStrum && (
           <div className="pr-meta-row">
@@ -375,14 +386,6 @@ export function PianoRoll({
         )}
 
       </div>{/* end piano-roll-scroll */}
-
-      {/* Scroll down */}
-      {!rowLabels && (
-        <div className="pr-scroll-row">
-          <button className={`pr-scroll-btn${kidsMode ? ' kids-scroll-btn' : ''}`}
-            onClick={onScrollDown} disabled={scroll >= maxScroll}>▼</button>
-        </div>
-      )}
 
     </div>
   );

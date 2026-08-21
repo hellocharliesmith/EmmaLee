@@ -813,6 +813,15 @@ body { display: flex; justify-content: center; padding: 40px 20px; min-height: 1
   display: flex;
 }
 
+/* Bottom scroll button now lives inside piano-roll-scroll (between the grid
+   and the extra parameter rows) instead of as an outside sibling — sticky
+   keeps it pinned to the scroll viewport's left edge during horizontal
+   scroll (mobile) instead of drifting off with the rest of the row content. */
+.pr-scroll-row--bottom {
+  position: sticky;
+  left: 0;
+}
+
 /* Main row: piano | labels | grid */
 .pr-row {
   display: flex;
