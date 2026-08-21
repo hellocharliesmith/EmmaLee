@@ -13,5 +13,13 @@ button { font-family: inherit; }
 /* #root is body's actual flex item (App.css's body{display:flex} centers it) —
    without min-width:0 here, its default min-width:auto means any wide-enough
    descendant (an unwrapped button row, etc.) forces this — and so the whole
-   page — wider than the viewport instead of wrapping or scrolling internally. */
-#root { min-width: 0; }
+   page — wider than the viewport instead of wrapping or scrolling internally.
+   width:100% is just as load-bearing: without it, a block-level flex item
+   with no explicit width shrinks to fit its content's natural size instead of
+   filling the available row. Normal mode's content (fixed-width piano-roll
+   columns, full track-tab row) happens to be wide enough that this went
+   unnoticed; Kids Mode's grid is deliberately fluid (minmax(0, 1fr) columns,
+   see PianoRoll.tsx) with a tiny natural width, so #root collapsed down to
+   match it and took .app's own width:100% down with it — the whole page
+   rendered at a few hundred px instead of filling the viewport. */
+#root { min-width: 0; width: 100%; }
