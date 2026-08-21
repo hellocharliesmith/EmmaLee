@@ -72,10 +72,11 @@ const TRACK_ICONS: Record<TrackId, ReactNode> = {
   drums: (
     <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="4" cy="10.5" r="1.6" fill="currentColor" /><circle cx="8" cy="5.5" r="2.1" fill="currentColor" /><circle cx="12" cy="10.5" r="1.6" fill="currentColor" /></svg>
   ),
-  // A few piano keys — the classic polyphonic-keyboard-synth shape, distinct
-  // from every other tab's glyph.
+  // A sawtooth wave — the DCO's signature oscillator shape, distinct from
+  // Plaits' smooth sine-like curve. (Previously 3 outline rectangles meant
+  // to read as piano keys — too fussy at 14px, read as blurry bars instead.)
   juno: (
-    <svg width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="2" width="3" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" /><rect x="6.5" y="2" width="3" height="12" fill="none" stroke="currentColor" strokeWidth="1.4" /><rect x="11" y="2" width="3" height="8" fill="currentColor" /></svg>
+    <svg width="14" height="14" viewBox="0 0 16 16"><path d="M1,12 L5,4 L5,12 L9,4 L9,12 L13,4 L13,12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
   ),
 };
 const MASTER_ICON: ReactNode = (
