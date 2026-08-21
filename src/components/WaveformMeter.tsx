@@ -98,10 +98,12 @@ export function WaveformMeter() {
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(0, hh); ctx.lineTo(cw, hh); ctx.stroke();
 
-      // dB guide lines (L channel — top half)
+      const qh = hh / 2; // each channel's own half-height (its lane's amplitude scale)
+
+      // dB guide lines (L channel — top half, relative to L's own zero-line at qh)
       [-6, -12].forEach(db => {
         const amp = Math.pow(10, db / 20);
-        const y   = hh - amp * hh;
+        const y   = qh - amp * qh;
         ctx.strokeStyle = 'rgba(255,255,255,0.08)';
         ctx.setLineDash([3, 5]);
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
@@ -145,17 +147,20 @@ export function WaveformMeter() {
         c.stroke();
       }
 
-      // L channel — top half (high amplitude = toward top = y small)
+      // L channel — top half, own zero-line at qh (its lane's own center), scaled
+      // by qh (not hh) so a full-scale ±1 signal fills exactly this lane instead
+      // of bleeding across the divider into R's lane (the bug being fixed here).
       drawChannel(
-        f => hh - f.maxL * hh,   // top of L fill
-        f => hh - f.minL * hh,   // bottom of L fill
+        f => qh - f.maxL * qh,   // top of L fill
+        f => qh - f.minL * qh,   // bottom of L fill
         0
       );
 
-      // R channel — bottom half (high amplitude = toward bottom = y large)
+      // R channel — bottom half, same shape as L (not mirrored), just shifted
+      // down by hh so its own zero-line sits at hh + qh.
       drawChannel(
-        f => f.minR * hh,         // top of R fill (minR is negative → negative offset from hh)
-        f => f.maxR * hh,         // bottom of R fill
+        f => qh - f.maxR * qh,   // top of R fill
+        f => qh - f.minR * qh,   // bottom of R fill
         hh
       );
 
