@@ -431,9 +431,9 @@ export default function App() {
     return { pages, enabledPages: [true, false, false, false] };
   }
 
-  function defaultJunoTrackState(): JunoTrackState {
+  function defaultJunoTrackState(scale: ScaleType = 'major', rootNote = 0): JunoTrackState {
     return {
-      ...stepsToPages(Array(32).fill(null)), scale: 'major', rootNote: 0, scrollRow: 7,
+      ...stepsToPages(Array(32).fill(null)), scale, rootNote, scrollRow: 7,
       patch: JUNO60_PRESETS[0], bank: '60',
       volume: 0.85, delaySend: 0.5, reverbSend: 0.5,
     };
@@ -441,9 +441,15 @@ export default function App() {
   // Every pre-Juno save (a genuine v3 file, or one just migrated up from v1/v2)
   // gets a fresh default Juno track — same "missing track gets a default"
   // pattern as drumsState's own fallback below, just applied uniformly here
-  // instead of duplicating it in migrateLegacy/migrateV2toV3.
+  // instead of duplicating it in migrateLegacy/migrateV2toV3. Scale/rootNote
+  // are inherited from ringsA (the same canonical "global key" source
+  // useSequencer.ts's globalScale/globalRootNote already reads from) rather
+  // than defaulting to Major/C — otherwise a saved song in any other key
+  // loads with Juno silently out of key with every other track (bug, found
+  // 2026-08-20).
   function withDefaultJuno(v3: LegacySongStateV3): SongState {
-    return { ...v3, version: 4, tracks: { ...v3.tracks, juno: defaultJunoTrackState() } };
+    const juno = defaultJunoTrackState(v3.tracks.ringsA.scale, v3.tracks.ringsA.rootNote);
+    return { ...v3, version: 4, tracks: { ...v3.tracks, juno } };
   }
 
   function migrateLegacy(old: LegacySongStateV1): LegacySongStateV3 {

@@ -1204,6 +1204,23 @@ uniformly across the v1→v3, v2→v3, and genuine-v3 load paths) that adds a
 fresh default Juno track — same "missing track gets sane defaults" pattern
 already used for Drums' own backward-compatible fallback.
 
+**Bug, fixed 2026-08-20 — Juno loaded out of key on old saves**:
+`withDefaultJuno()`'s default Juno track originally hardcoded
+`scale: 'major', rootNote: 0` regardless of what key the rest of the loaded
+song was actually in — any pre-Juno save in a different key loaded with
+Juno silently out of sync with every other track (found via a user report;
+confirmed live using "Phased and Bent", which plays in rootNote 8 — its
+`DEMO_JUNO_TRACK`-equivalent default had the same bug, baked into
+`demoSongs.ts` since the Juno track shipped). Fixed by reading
+`v3.tracks.ringsA.scale`/`rootNote` — the same canonical "global key" source
+`useSequencer.ts`'s `globalScale`/`globalRootNote` already reads from — into
+`defaultJunoTrackState()` instead of hardcoding Major/C. `demoSongs.ts`'s
+`makeDemoJunoTrack(rootNote)` (was a fixed `DEMO_JUNO_TRACK` constant) got
+the matching fix for the two bundled demos. Verified live: injected a fake
+pre-Juno v3 save at rootNote 5/Melodic Minor via localStorage and confirmed
+Juno's piano roll now shows the correct root/scale on load, and re-verified
+"Phased and Bent" (rootNote 8) the same way.
+
 **License note**: JunoX is GPL-3.0-or-later. The vendored code in
 `public/juno-processor.js` keeps its GPL header/attribution. Worth knowing
 since this app doesn't otherwise ship a LICENSE file — flagged to the user
@@ -1319,6 +1336,19 @@ existing special case (per-voice volume multiply) inside that same helper.
   `PROB_OPTIONS = [1, 0.75, 0.66, 0.5, 0.33, 0.25]`. The actual gate is a
   `Math.random() > prob` check in the `Tone.Loop` callback in `useSequencer.ts`,
   immediately before deciding whether to trigger notes.
+- **Demo songs (renamed/expanded 2026-08-20)**: `DEMO_SONGS` in `demoSongs.ts` now
+  has 5 entries — "Simple Song" (was "Demo 1"), "The Bends" (was "Phased and
+  Bent"), and 3 new ones added from real user-exported song JSON: "Reflective
+  Sparkle", "Peaceful Highlife", "Anderson Spike". The first two new ones were
+  already v4 (saved after the Juno track shipped) and were pasted in verbatim;
+  "Anderson Spike" was exported as v3 (pre-Juno) and had to be manually bumped
+  to v4 — `version: 4` plus `tracks.juno: makeDemoJunoTrack(0)`, using its
+  actual `ringsA.rootNote` (0) rather than guessing, same fix as the
+  out-of-key bug above. Also had to add `character`/`blend` defaults to its
+  drum voices (saved before that feature existed) since `DemoSong.state` is
+  typed as the strict current `SongState`, not the legacy-save union
+  `SavedSong.state` uses — every demo has to be fully current-shape, there's
+  no migration path for the bundled demos the way there is for user saves.
 
 ## Recompiling the WASM (rarely needed)
 
